@@ -148,3 +148,6 @@ app.listen(PORT, () => {
   console.log(`Auth server running on http://localhost:${PORT}`);
   ensureInitialAdmin();
 });
+app.get("/", (req, res) => {
+    res.send("Sunucu çalışıyor.");
+});
