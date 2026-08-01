@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1785591303844,
+    "name": "kayra kayra",
+    "email": "bkdmtd@gmail.com",
+    "password": "$2b$10$O8D8DcoTFLPy.xv7C98YberSTFFQMXbR8F1hgdAUrRjO05CsU9Y8C",
+    "phone": "0510364486",
+    "isAdmin": false
+  },
+  {
+    "id": 1785596099641,
+    "name": "miraç miraç",
+    "email": "divrik.g@gmail.com",
+    "password": "$2b$10$bHxLXfDNaMUpmv2xbYwxlOp4m.pgRXhJ3ZQPLhRmzD0N5cywPe6iy",
+    "phone": "5540367786",
+    "isAdmin": false
+  }
+]
