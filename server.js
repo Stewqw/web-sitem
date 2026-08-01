@@ -35,7 +35,7 @@ app.post('/api/register', async (req, res) => {
   if (users.find(u => u.email === email)) return res.status(409).json({ error: 'E-posta zaten kayıtlı' });
 
   try {
-    const hash = await bcrypt.hash(password, 10);
+    const hash = await bcryptjs.hash(password, 10);
     const user = { id: Date.now(), name, email, password: hash, phone, isAdmin: false };
     users.push(user);
     writeUsers(users);
@@ -55,7 +55,7 @@ app.post('/api/login', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Kullanıcı bulunamadı' });
 
   try {
-    const ok = await bcrypt.compare(password, user.password);
+    const ok = await bcryptjs.compare(password, user.password);
     if (!ok) return res.status(401).json({ error: 'Hatalı şifre' });
 
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
@@ -90,7 +90,7 @@ function ensureInitialAdmin() {
   const adminEmail = process.env.ADMIN_EMAIL;
   const adminPass = process.env.ADMIN_PASS;
   if (adminEmail && adminPass) {
-    bcrypt.hash(adminPass, 10).then(hash => {
+    bcryptjs.hash(adminPass, 10).then(hash => {
       const admin = { id: Date.now(), name: 'Admin', email: adminEmail, password: hash, phone: '', isAdmin: true };
       users.push(admin);
       writeUsers(users);
