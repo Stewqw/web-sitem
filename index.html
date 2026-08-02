@@ -270,6 +270,56 @@
       font-size: 0.86rem;
       font-weight: 600;
     }
+    .veli-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+    }
+    .veli-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    .veli-profile { display: flex; align-items: center; gap: 12px; }
+    .veli-avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #c7d2fe 0%, #a5b4fc 100%);
+      color: #1e3a8a;
+      font-weight: 900;
+      font-size: 1.05rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #bfdbfe;
+    }
+    .veli-name { font-size: 1.1rem; font-weight: 800; color: #102040; }
+    .veli-role { color: #64748b; font-size: 0.82rem; margin-top: 2px; }
+    .veli-info-grid { display: grid; gap: 10px; }
+    .veli-info-row {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .veli-info-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      border: 1px solid #dbe4ef;
+      background: #ffffff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #64748b;
+      font-size: 0.9rem;
+      font-weight: 800;
+    }
+    .veli-info-label { font-size: 0.74rem; color: #64748b; }
+    .veli-info-value { font-size: 0.9rem; color: #0f172a; font-weight: 700; }
+    .veli-empty-value { color: #94a3b8; font-weight: 600; }
     .exam-history-wrap { margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 18px; }
     .exam-history-title { font-size: 1rem; font-weight: 800; color: var(--color-dark-teal); margin-bottom: 10px; }
     .exam-history-list { display: grid; gap: 10px; }
@@ -1134,28 +1184,110 @@
           <div class="card-panel">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
               <div>
-                <h2 style="margin:0; font-size:1.25rem; color: var(--color-dark-teal);">Veli Bilgisi</h2>
-                <p style="margin:8px 0 0; color:#64748b; font-size:0.9rem;">Seçili öğrenciye ait veli iletişim alanı.</p>
+                <h2 style="margin:0; font-size:1.25rem; color: var(--color-dark-teal);">Veli Bilgileri</h2>
+                <p style="margin:8px 0 0; color:#64748b; font-size:0.9rem;">Seçili öğrenciye ait veli iletişim kartı.</p>
               </div>
             </div>
 
-            <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:16px;">
+            <div id="veliInfoView1" class="veli-card">
+              <div class="veli-header">
+                <div class="veli-profile">
+                  <div id="veliAvatar1" class="veli-avatar">V1</div>
+                  <div>
+                    <div id="veliViewName1" class="veli-name">Veli 1 adı girilmedi</div>
+                    <div class="veli-role">Öğrenci Velisi 1</div>
+                  </div>
+                </div>
+                <button class="btn-nav-outline" type="button" onclick="openVeliEditMode(1)">Düzenle</button>
+              </div>
+
+              <div class="veli-info-grid">
+                <div class="veli-info-row">
+                  <div class="veli-info-icon">@</div>
+                  <div>
+                    <div class="veli-info-label">E-posta Adresi</div>
+                    <div id="veliViewEmail1" class="veli-info-value veli-empty-value">Bilgi girilmedi</div>
+                  </div>
+                </div>
+                <div class="veli-info-row">
+                  <div class="veli-info-icon">T</div>
+                  <div>
+                    <div class="veli-info-label">Telefon Numarası</div>
+                    <div id="veliViewPhone1" class="veli-info-value veli-empty-value">Bilgi girilmedi</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="veliInfoEdit1" class="veli-card" style="display:none; margin-top:12px;">
               <div class="form-row" style="margin-bottom:10px;">
                 <div class="form-group" style="margin-bottom:0;">
-                  <label class="form-label">Veli Adı Soyadı</label>
-                  <input id="veliNameInput" type="text" class="input-field" placeholder="Örn: Ayşe Yılmaz" style="margin-bottom:0;">
+                  <label class="form-label">Veli 1 Adı Soyadı</label>
+                  <input id="veliNameInput1" type="text" class="input-field" placeholder="Örn: Ayşe Yılmaz" style="margin-bottom:0;">
                 </div>
                 <div class="form-group" style="margin-bottom:0;">
-                  <label class="form-label">Veli Telefonu</label>
-                  <input id="veliPhoneInput" type="tel" class="input-field" placeholder="05XXXXXXXXX" style="margin-bottom:0;">
+                  <label class="form-label">Veli 1 Telefonu</label>
+                  <input id="veliPhoneInput1" type="tel" class="input-field" placeholder="05XXXXXXXXX" style="margin-bottom:0;">
                 </div>
               </div>
               <div class="form-group" style="margin-bottom:0;">
-                <label class="form-label">Veli E-Posta</label>
-                <input id="veliEmailInput" type="email" class="input-field" placeholder="veli@mail.com" style="margin-bottom:0;">
+                <label class="form-label">Veli 1 E-Posta</label>
+                <input id="veliEmailInput1" type="email" class="input-field" placeholder="veli@mail.com" style="margin-bottom:0;">
               </div>
-              <div style="display:flex; justify-content:flex-end; margin-top:14px;">
-                <button class="btn-action btn-coral" type="button" style="padding:10px 18px;" onclick="saveStudentParentInfo()">Kaydet</button>
+              <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                <button class="btn-nav-outline" type="button" onclick="closeVeliEditMode(1)">Vazgeç</button>
+                <button class="btn-action btn-coral" type="button" style="padding:10px 18px;" onclick="saveStudentParentInfo(1)">Kaydet</button>
+              </div>
+            </div>
+
+            <div id="veliInfoView2" class="veli-card" style="margin-top:12px;">
+              <div class="veli-header">
+                <div class="veli-profile">
+                  <div id="veliAvatar2" class="veli-avatar">V2</div>
+                  <div>
+                    <div id="veliViewName2" class="veli-name">Veli 2 adı girilmedi</div>
+                    <div class="veli-role">Öğrenci Velisi 2</div>
+                  </div>
+                </div>
+                <button class="btn-nav-outline" type="button" onclick="openVeliEditMode(2)">Düzenle</button>
+              </div>
+
+              <div class="veli-info-grid">
+                <div class="veli-info-row">
+                  <div class="veli-info-icon">@</div>
+                  <div>
+                    <div class="veli-info-label">E-posta Adresi</div>
+                    <div id="veliViewEmail2" class="veli-info-value veli-empty-value">Bilgi girilmedi</div>
+                  </div>
+                </div>
+                <div class="veli-info-row">
+                  <div class="veli-info-icon">T</div>
+                  <div>
+                    <div class="veli-info-label">Telefon Numarası</div>
+                    <div id="veliViewPhone2" class="veli-info-value veli-empty-value">Bilgi girilmedi</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="veliInfoEdit2" class="veli-card" style="display:none; margin-top:12px;">
+              <div class="form-row" style="margin-bottom:10px;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Veli 2 Adı Soyadı</label>
+                  <input id="veliNameInput2" type="text" class="input-field" placeholder="Örn: Mehmet Yılmaz" style="margin-bottom:0;">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Veli 2 Telefonu</label>
+                  <input id="veliPhoneInput2" type="tel" class="input-field" placeholder="05XXXXXXXXX" style="margin-bottom:0;">
+                </div>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Veli 2 E-Posta</label>
+                <input id="veliEmailInput2" type="email" class="input-field" placeholder="veli@mail.com" style="margin-bottom:0;">
+              </div>
+              <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                <button class="btn-nav-outline" type="button" onclick="closeVeliEditMode(2)">Vazgeç</button>
+                <button class="btn-action btn-coral" type="button" style="padding:10px 18px;" onclick="saveStudentParentInfo(2)">Kaydet</button>
               </div>
             </div>
           </div>

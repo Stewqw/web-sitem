@@ -2011,16 +2011,99 @@ function openStudentVeliPage() {
   }
 
   setStudentDetailSection('veli');
-  const parent = student.parentInfo || {};
-  const nameEl = document.getElementById('veliNameInput');
-  const phoneEl = document.getElementById('veliPhoneInput');
-  const emailEl = document.getElementById('veliEmailInput');
-  if (nameEl) nameEl.value = parent.name || '';
-  if (phoneEl) phoneEl.value = parent.phone || '';
-  if (emailEl) emailEl.value = parent.email || '';
+  renderStudentParentInfo(student, 1);
+  renderStudentParentInfo(student, 2);
+  closeVeliEditMode(1);
+  closeVeliEditMode(2);
 }
 
-function saveStudentParentInfo() {
+function getStudentParentList(student) {
+  if (Array.isArray(student.parentInfos)) {
+    const cloned = student.parentInfos.map((item) => ({
+      name: item?.name || '',
+      phone: item?.phone || '',
+      email: item?.email || ''
+    }));
+    while (cloned.length < 2) cloned.push({ name: '', phone: '', email: '' });
+    return cloned.slice(0, 2);
+  }
+
+  if (student.parentInfo && typeof student.parentInfo === 'object') {
+    return [
+      {
+        name: student.parentInfo.name || '',
+        phone: student.parentInfo.phone || '',
+        email: student.parentInfo.email || ''
+      },
+      { name: '', phone: '', email: '' }
+    ];
+  }
+
+  return [
+    { name: '', phone: '', email: '' },
+    { name: '', phone: '', email: '' }
+  ];
+}
+
+function renderStudentParentInfo(student, slot = 1) {
+  const safeSlot = slot === 2 ? 2 : 1;
+  const parentList = getStudentParentList(student);
+  const parent = parentList[safeSlot - 1] || {};
+  const name = (parent.name || '').trim();
+  const phone = (parent.phone || '').trim();
+  const email = (parent.email || '').trim();
+
+  const viewNameEl = document.getElementById(`veliViewName${safeSlot}`);
+  const viewPhoneEl = document.getElementById(`veliViewPhone${safeSlot}`);
+  const viewEmailEl = document.getElementById(`veliViewEmail${safeSlot}`);
+  const avatarEl = document.getElementById(`veliAvatar${safeSlot}`);
+  const nameEl = document.getElementById(`veliNameInput${safeSlot}`);
+  const phoneEl = document.getElementById(`veliPhoneInput${safeSlot}`);
+  const emailEl = document.getElementById(`veliEmailInput${safeSlot}`);
+
+  if (viewNameEl) viewNameEl.textContent = name || `Veli ${safeSlot} adı girilmedi`;
+  if (viewPhoneEl) {
+    viewPhoneEl.textContent = phone || 'Bilgi girilmedi';
+    viewPhoneEl.classList.toggle('veli-empty-value', !phone);
+  }
+  if (viewEmailEl) {
+    viewEmailEl.textContent = email || 'Bilgi girilmedi';
+    viewEmailEl.classList.toggle('veli-empty-value', !email);
+  }
+
+  if (avatarEl) {
+    const initials = (name || 'Veli')
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join('');
+    avatarEl.textContent = initials || `V${safeSlot}`;
+  }
+
+  if (nameEl) nameEl.value = name;
+  if (phoneEl) phoneEl.value = phone;
+  if (emailEl) emailEl.value = email;
+}
+
+function openVeliEditMode(slot = 1) {
+  const safeSlot = slot === 2 ? 2 : 1;
+  const viewEl = document.getElementById(`veliInfoView${safeSlot}`);
+  const editEl = document.getElementById(`veliInfoEdit${safeSlot}`);
+  if (viewEl) viewEl.style.display = 'none';
+  if (editEl) editEl.style.display = 'block';
+}
+
+function closeVeliEditMode(slot = 1) {
+  const safeSlot = slot === 2 ? 2 : 1;
+  const viewEl = document.getElementById(`veliInfoView${safeSlot}`);
+  const editEl = document.getElementById(`veliInfoEdit${safeSlot}`);
+  if (viewEl) viewEl.style.display = 'block';
+  if (editEl) editEl.style.display = 'none';
+}
+
+function saveStudentParentInfo(slot = 1) {
+  const safeSlot = slot === 2 ? 2 : 1;
   if (!activeStudentId) {
     alert('Önce bir öğrenci seçin.');
     return;
@@ -2033,18 +2116,19 @@ function saveStudentParentInfo() {
     return;
   }
 
-  const name = (document.getElementById('veliNameInput')?.value || '').trim();
-  const phone = (document.getElementById('veliPhoneInput')?.value || '').trim();
-  const email = (document.getElementById('veliEmailInput')?.value || '').trim();
+  const name = (document.getElementById(`veliNameInput${safeSlot}`)?.value || '').trim();
+  const phone = (document.getElementById(`veliPhoneInput${safeSlot}`)?.value || '').trim();
+  const email = (document.getElementById(`veliEmailInput${safeSlot}`)?.value || '').trim();
 
-  student.parentInfo = {
-    name,
-    phone,
-    email
-  };
+  const parentList = getStudentParentList(student);
+  parentList[safeSlot - 1] = { name, phone, email };
+  student.parentInfos = parentList;
+  student.parentInfo = parentList[0];
 
   setStoredOgrenciler(students);
-  alert('Veli bilgisi kaydedildi.');
+  renderStudentParentInfo(student, safeSlot);
+  closeVeliEditMode(safeSlot);
+  alert(`Veli ${safeSlot} bilgisi kaydedildi.`);
 }
 
 function ogrenciProgramunaGit(card) {
