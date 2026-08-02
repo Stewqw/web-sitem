@@ -191,6 +191,7 @@
     .live-clock-box { background: rgba(255,255,255,0.15); padding: 10px 18px; border-radius: 14px; font-weight: 800; font-size: 1.2rem; color: #fff; border: 1px solid rgba(255,255,255,0.2); }
 
     .grid-dashboard { display: grid; grid-template-columns: 1fr; gap: 20px; }
+    .kokpit-layout { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); align-items: start; }
     .card-panel { background: #ffffff; border-radius: var(--radius-rounded); padding: 20px; border: 1.5px solid #e2e8f0; margin-bottom: 20px; }
     .panel-title { font-size: 1rem; font-weight: 800; color: var(--color-dark-teal); margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
 
@@ -236,7 +237,7 @@
       border: 1.5px solid #c8d8ee;
       border-radius: 20px;
       padding: 18px;
-      min-height: 420px;
+      min-height: 340px;
       box-shadow: 0 18px 36px rgba(16, 32, 64, 0.12);
       display: flex;
       flex-direction: column;
@@ -337,7 +338,7 @@
     .todo-notebook-textarea {
       width: 100%;
       height: 100%;
-      min-height: 300px;
+      min-height: 220px;
       resize: vertical;
       border: none;
       outline: none;
@@ -350,6 +351,189 @@
     .todo-notebook-textarea::placeholder {
       color: #6f86a8;
     }
+
+    .kokpit-agenda-card {
+      background: linear-gradient(180deg, #f6fbff 0%, #eaf2fb 100%);
+      border: 1.5px solid #c8d8ee;
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: 0 18px 36px rgba(16, 32, 64, 0.12);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 720px;
+    }
+    .kokpit-agenda-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .kokpit-agenda-subtitle {
+      font-size: 0.82rem;
+      color: #64748b;
+      margin-top: 4px;
+    }
+    .kokpit-agenda-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .kokpit-agenda-week-label {
+      font-size: 0.8rem;
+      font-weight: 800;
+      color: #102040;
+      background: #dfe9f7;
+      border: 1px solid #c8d8ee;
+      border-radius: 999px;
+      padding: 8px 12px;
+    }
+    .kokpit-agenda-summary {
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: #1f3b6d;
+      background: #edf4fd;
+      border: 1px solid #d6e2f0;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .kokpit-agenda-grid-wrap {
+      border: 1px solid #d6e2f0;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.75);
+      overflow: auto;
+      max-height: 820px;
+    }
+    .kokpit-agenda-grid {
+      display: grid;
+      grid-template-columns: 66px repeat(7, minmax(120px, 1fr));
+      gap: 8px;
+      min-width: 960px;
+      padding: 12px;
+    }
+    .agenda-head-cell,
+    .agenda-hour-cell,
+    .agenda-slot {
+      border-radius: 12px;
+      border: 1px solid #d6e2f0;
+      background: #f8fbff;
+      min-height: 52px;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+    .agenda-head-cell {
+      background: #dfe9f7;
+      color: #102040;
+      font-size: 0.76rem;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .agenda-hour-cell {
+      color: #64748b;
+      font-size: 0.78rem;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #eef4fb;
+    }
+    .agenda-slot {
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+      text-align: left;
+      transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+      background: #ffffff;
+    }
+    .agenda-slot:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
+      border-color: #a7c0e2;
+    }
+    .agenda-slot.empty {
+      background: linear-gradient(180deg, #fbfdff 0%, #f1f6fc 100%);
+    }
+    .agenda-slot.has-event {
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 14px 24px rgba(15, 23, 42, 0.12);
+    }
+    .agenda-slot.has-event .agenda-slot-time,
+    .agenda-slot.has-event .agenda-slot-title,
+    .agenda-slot.has-event .agenda-slot-meta {
+      color: #fff;
+    }
+    .agenda-slot-time {
+      font-size: 0.72rem;
+      font-weight: 900;
+      color: #64748b;
+    }
+    .agenda-slot-title {
+      font-size: 0.8rem;
+      font-weight: 900;
+      color: #102040;
+      line-height: 1.2;
+      word-break: break-word;
+    }
+    .agenda-slot-meta {
+      font-size: 0.7rem;
+      color: #64748b;
+      line-height: 1.2;
+      word-break: break-word;
+    }
+    .agenda-slot.empty .agenda-slot-time {
+      color: #94a3b8;
+    }
+    .agenda-slot.empty .agenda-slot-title {
+      color: #cbd5e1;
+    }
+    .agenda-slot.empty .agenda-slot-meta {
+      display: none;
+    }
+    .agenda-slot-empty-mark {
+      font-size: 1rem;
+      font-weight: 900;
+      color: #cbd5e1;
+      line-height: 1;
+    }
+    .agenda-slot.type-ev.has-event { background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%); }
+    .agenda-slot.type-okul.has-event { background: linear-gradient(180deg, #14b8a6 0%, #0f766e 100%); }
+    .agenda-slot.type-ozel-ders.has-event { background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%); }
+    .agenda-slot.type-kocluk-seansi.has-event { background: linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%); }
+    .agenda-slot.type-saglik.has-event { background: linear-gradient(180deg, #10b981 0%, #059669 100%); }
+    .agenda-slot.type-toplanti.has-event { background: linear-gradient(180deg, #1d4ed8 0%, #1e3a8a 100%); }
+    .agenda-slot.type-seyahat.has-event { background: linear-gradient(180deg, #475569 0%, #334155 100%); }
+    .agenda-slot.type-diger.has-event { background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); }
+
+    .modal-card.kokpit-agenda-modal { max-width: 480px; padding: 24px; }
+    .agenda-modal-meta {
+      font-size: 0.82rem;
+      color: #64748b;
+      font-weight: 700;
+      margin-bottom: 14px;
+      background: #edf4fd;
+      border: 1px solid #d6e2f0;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .agenda-modal-actions { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-top: 6px; }
+    .agenda-modal-actions .left-actions { display:flex; gap:10px; }
+    .agenda-modal-delete { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+    .agenda-modal-delete:hover { background: #fecaca; }
+    .agenda-all-day-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding: 10px 12px; border-radius: 12px; border:1px solid #d6e2f0; background:#f8fbff; }
+    .agenda-all-day-row label { font-size:0.82rem; font-weight:800; color:#475569; }
+    .agenda-switch { width: 52px; height: 30px; appearance: none; background: #cbd5e1; border-radius: 999px; position: relative; cursor: pointer; outline: none; border: 1px solid #cbd5e1; }
+    .agenda-switch:checked { background: #22c55e; border-color: #22c55e; }
+    .agenda-switch::after { content:''; position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:#fff; transition: transform 0.16s ease; box-shadow: 0 2px 6px rgba(15,23,42,0.16); }
+    .agenda-switch:checked::after { transform: translateX(22px); }
 
     .student-card-box { background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 16px; width: 100%; max-width: 280px; position: relative; margin-top: 16px; overflow: hidden; box-shadow: 0 18px 28px rgba(15, 23, 42, 0.08); transition: transform 0.2s ease, box-shadow 0.2s ease; }
     .student-card-box:hover { transform: translateY(-2px); box-shadow: 0 22px 36px rgba(15, 23, 42, 0.12); }
@@ -984,7 +1168,7 @@
 
         <!-- 1. ANA SAYFA KOKPİT -->
         <div id="tabKokpit">
-          <div class="grid-dashboard">
+          <div class="grid-dashboard kokpit-layout">
             <div class="todo-notebook-card">
               <div class="todo-notebook-head">
                 <div class="todo-notebook-nav">
@@ -996,6 +1180,24 @@
 
               <div class="todo-list-wrap">
                 <textarea id="kokpitNotebookText" class="todo-notebook-textarea" oninput="onKokpitNotebookInput()" placeholder="Bugünün notlarını yaz..."></textarea>
+              </div>
+            </div>
+
+            <div class="kokpit-agenda-card">
+              <div class="kokpit-agenda-head">
+                <div>
+                  <div class="panel-title" style="margin-bottom:6px;">Saatlik Ajanda</div>
+                  <div class="kokpit-agenda-subtitle">Kutulardan birine tıklayarak o saate ait olay panelini açın.</div>
+                </div>
+                <div class="kokpit-agenda-nav">
+                  <button type="button" class="btn-nav-outline" style="padding:8px 12px;" onclick="changeKokpitAgendaWeek(-1)">←</button>
+                  <div id="kokpitAgendaWeekLabel" class="kokpit-agenda-week-label">Bu hafta</div>
+                  <button type="button" class="btn-nav-outline" style="padding:8px 12px;" onclick="changeKokpitAgendaWeek(1)">→</button>
+                </div>
+              </div>
+              <div id="kokpitAgendaSummary" class="kokpit-agenda-summary">Henüz planlanmış olay yok.</div>
+              <div class="kokpit-agenda-grid-wrap">
+                <div id="kokpitAgendaGrid" class="kokpit-agenda-grid"></div>
               </div>
             </div>
           </div>
@@ -1940,6 +2142,58 @@
         <div style="display: flex; justify-content: flex-end; gap: 10px;">
           <button class="btn-nav-outline" onclick="modalKapat('taskAddModal')">İptal</button>
           <button class="btn-action btn-coral" onclick="saveTaskFromModal()">Kaydet</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="kokpitAgendaModal">
+    <div class="modal-card kokpit-agenda-modal">
+      <button class="modal-close" onclick="modalKapat('kokpitAgendaModal')">✕</button>
+      <h3 style="margin-bottom: 12px; color: var(--color-dark-teal);">Olay ekle</h3>
+      <div id="kokpitAgendaModalSlot" class="agenda-modal-meta">Tarih ve saat</div>
+      <div style="display: grid; gap: 12px;">
+        <div class="form-group">
+          <label class="form-label">Tarih ve saat</label>
+          <input id="kokpitAgendaDateTime" type="text" class="input-field" readonly style="background:#f8fbff; font-weight:800; color:#102040;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Olay türü</label>
+          <select id="kokpitAgendaType" class="input-field">
+            <option value="" disabled selected>Olay türü seçin</option>
+            <option value="Ev">Ev</option>
+            <option value="Okul">Okul</option>
+            <option value="Özel Ders">Özel Ders</option>
+            <option value="Koçluk Seansı">Koçluk Seansı</option>
+            <option value="Sağlık">Sağlık</option>
+            <option value="Toplantı">Toplantı</option>
+            <option value="Seyahat">Seyahat</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Başlık</label>
+          <input id="kokpitAgendaTitle" type="text" class="input-field" placeholder="Örn: Matematik çalışması">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Konum</label>
+          <input id="kokpitAgendaLocation" type="text" class="input-field" placeholder="Örn: Ev / Okul / Online">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Not</label>
+          <textarea id="kokpitAgendaNote" class="input-field" rows="3" style="resize: vertical; min-height: 90px;" placeholder="Kısa açıklama yazın"></textarea>
+        </div>
+        <div class="agenda-all-day-row">
+          <label for="kokpitAgendaAllDay">Tüm gün</label>
+          <input id="kokpitAgendaAllDay" type="checkbox" class="agenda-switch">
+        </div>
+        <div class="agenda-modal-actions">
+          <div class="left-actions">
+            <button id="kokpitAgendaDeleteBtn" type="button" class="btn-nav-outline agenda-modal-delete" onclick="deleteKokpitAgendaEvent()" style="display:none;">Sil</button>
+          </div>
+          <div style="display:flex; gap:10px; margin-left:auto;">
+            <button type="button" class="btn-nav-outline" onclick="modalKapat('kokpitAgendaModal')">İptal</button>
+            <button type="button" class="btn-action btn-coral" onclick="saveKokpitAgendaEventFromModal()">Kaydet</button>
+          </div>
         </div>
       </div>
     </div>

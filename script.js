@@ -1160,6 +1160,10 @@ function renderKokpitUserCard() {
   nameEl.textContent = name;
   emailEl.textContent = email;
   branchEl.textContent = branch;
+  loadKokpitNotebookNotes();
+  renderKokpitTodoDate();
+  loadKokpitAgendaEvents();
+  renderKokpitAgenda();
 }
 
 function createResourceCard(name, level, url, lesson) {
@@ -1619,6 +1623,9 @@ function updateClockAndDate() {
 
 let kokpitTodoDateOffset = 0;
 let kokpitNotebookNotes = {};
+let kokpitAgendaWeekOffset = 0;
+let kokpitAgendaEvents = {};
+let kokpitAgendaActiveSlotKey = null;
 
 function getKokpitNotebookStorageKey() {
   const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
@@ -1694,6 +1701,228 @@ function onKokpitNotebookInput() {
   }
 
   saveKokpitNotebookNotes();
+}
+
+function getKokpitAgendaStorageKey() {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  return `kokpit_agenda_${email}`;
+}
+
+function loadKokpitAgendaEvents() {
+  const raw = localStorage.getItem(getKokpitAgendaStorageKey());
+  try {
+    const parsed = raw ? JSON.parse(raw) : {};
+    kokpitAgendaEvents = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (e) {
+    kokpitAgendaEvents = {};
+  }
+}
+
+function saveKokpitAgendaEvents() {
+  localStorage.setItem(getKokpitAgendaStorageKey(), JSON.stringify(kokpitAgendaEvents));
+}
+
+function getKokpitAgendaWeekStart(offset = kokpitAgendaWeekOffset) {
+  const base = new Date();
+  base.setHours(0, 0, 0, 0);
+  const mondayOffset = (base.getDay() + 6) % 7;
+  base.setDate(base.getDate() - mondayOffset + ((Number(offset) || 0) * 7));
+  return base;
+}
+
+function getKokpitAgendaWeekDates(offset = kokpitAgendaWeekOffset) {
+  const start = getKokpitAgendaWeekStart(offset);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return date;
+  });
+}
+
+function getKokpitAgendaSlotKey(dateKey, hour) {
+  return `${dateKey}_${String(hour).padStart(2, '0')}`;
+}
+
+function getKokpitAgendaTypeSlug(type) {
+  const normalized = String(type || 'Diger')
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ş/g, 's')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/[^a-z0-9]+/g, '-');
+  return normalized.replace(/^-+|-+$/g, '') || 'diger';
+}
+
+function getKokpitAgendaTypeClass(type) {
+  return `type-${getKokpitAgendaTypeSlug(type)}`;
+}
+
+function formatKokpitAgendaWeekLabel(startDate) {
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + 6);
+  const startText = startDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+  const endText = endDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
+  return `${startText} - ${endText}`.replace(/\./g, '');
+}
+
+function formatKokpitAgendaDateTime(dateObj, hour, allDay = false) {
+  const dateText = dateObj.toLocaleDateString('tr-TR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    weekday: 'long'
+  }).replace(/(^|\s)\S/g, (t) => t.toUpperCase());
+  const hourText = `${String(hour).padStart(2, '0')}:00`;
+  return allDay ? `${dateText} • Tüm gün` : `${dateText} • ${hourText}`;
+}
+
+function formatKokpitAgendaSlotKeyLabel(dateKey, hour) {
+  const parts = String(dateKey || '').split('-').map(Number);
+  if (parts.length !== 3 || parts.some(Number.isNaN)) return `${dateKey} ${String(hour).padStart(2, '0')}:00`;
+  const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+  return formatKokpitAgendaDateTime(dateObj, hour, false);
+}
+
+function renderKokpitAgenda() {
+  const gridEl = document.getElementById('kokpitAgendaGrid');
+  const summaryEl = document.getElementById('kokpitAgendaSummary');
+  const labelEl = document.getElementById('kokpitAgendaWeekLabel');
+  if (!gridEl || !summaryEl || !labelEl) return;
+
+  const weekDates = getKokpitAgendaWeekDates();
+  const weekStart = weekDates[0];
+  labelEl.textContent = formatKokpitAgendaWeekLabel(weekStart);
+
+  const dateKeys = weekDates.map((dateObj) => getKokpitDateKey(dateObj));
+  const weekEvents = dateKeys.reduce((count, dateKey) => {
+    return count + Object.keys(kokpitAgendaEvents).filter((slotKey) => slotKey.startsWith(`${dateKey}_`) && kokpitAgendaEvents[slotKey]).length;
+  }, 0);
+  summaryEl.textContent = weekEvents > 0 ? `Bu hafta ${weekEvents} olay planlandı.` : 'Henüz planlanmış olay yok.';
+
+  let html = '<div class="agenda-head-cell">Saat</div>';
+  weekDates.forEach((dateObj) => {
+    const dayLabel = dateObj.toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric' }).replace(/(^|\s)\S/g, (t) => t.toUpperCase());
+    html += `<div class="agenda-head-cell">${dayLabel}</div>`;
+  });
+
+  for (let hour = 0; hour < 24; hour += 1) {
+    const hourLabel = `${String(hour).padStart(2, '0')}:00`;
+    html += `<div class="agenda-hour-cell">${hourLabel}</div>`;
+
+    weekDates.forEach((dateObj) => {
+      const dateKey = getKokpitDateKey(dateObj);
+      const slotKey = getKokpitAgendaSlotKey(dateKey, hour);
+      const event = kokpitAgendaEvents[slotKey];
+      const typeClass = event ? getKokpitAgendaTypeClass(event.type) : '';
+      const eventTitle = event ? escapeHtml(event.title || event.type || 'Olay') : '<span class="agenda-slot-empty-mark">+</span>';
+      const eventMeta = event ? `${escapeHtml(event.type || 'Olay')}${event.location ? ` • ${escapeHtml(event.location)}` : ''}` : '';
+      html += `
+        <button type="button" class="agenda-slot ${event ? 'has-event ' + typeClass : 'empty'}" onclick="openKokpitAgendaSlot('${dateKey}', ${hour})" aria-label="${escapeHtml(formatKokpitAgendaDateTime(dateObj, hour, false))}">
+          <div class="agenda-slot-time">${hourLabel}</div>
+          <div class="agenda-slot-title">${eventTitle}</div>
+          ${event ? `<div class="agenda-slot-meta">${eventMeta}</div>` : ''}
+        </button>
+      `;
+    });
+  }
+
+  gridEl.innerHTML = html;
+}
+
+function changeKokpitAgendaWeek(step) {
+  kokpitAgendaWeekOffset += Number(step) || 0;
+  renderKokpitAgenda();
+}
+
+function openKokpitAgendaSlot(dateKey, hour) {
+  const slotKey = getKokpitAgendaSlotKey(dateKey, hour);
+  const event = kokpitAgendaEvents[slotKey] || null;
+  kokpitAgendaActiveSlotKey = slotKey;
+
+  const parts = String(dateKey || '').split('-').map(Number);
+  const dateObj = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
+  const slotLabel = formatKokpitAgendaSlotKeyLabel(dateKey, hour);
+
+  const slotLabelEl = document.getElementById('kokpitAgendaModalSlot');
+  const dateTimeEl = document.getElementById('kokpitAgendaDateTime');
+  const typeEl = document.getElementById('kokpitAgendaType');
+  const titleEl = document.getElementById('kokpitAgendaTitle');
+  const locationEl = document.getElementById('kokpitAgendaLocation');
+  const noteEl = document.getElementById('kokpitAgendaNote');
+  const allDayEl = document.getElementById('kokpitAgendaAllDay');
+  const deleteBtn = document.getElementById('kokpitAgendaDeleteBtn');
+
+  if (slotLabelEl) slotLabelEl.textContent = slotLabel;
+  if (dateTimeEl) dateTimeEl.value = event ? formatKokpitAgendaDateTime(dateObj, hour, !!event.allDay) : formatKokpitAgendaDateTime(dateObj, hour, false);
+  if (typeEl) {
+    typeEl.value = event && event.type ? event.type : '';
+    if (!event || !event.type) {
+      typeEl.selectedIndex = 0;
+    }
+  }
+  if (titleEl) titleEl.value = event && event.title ? event.title : '';
+  if (locationEl) locationEl.value = event && event.location ? event.location : '';
+  if (noteEl) noteEl.value = event && event.note ? event.note : '';
+  if (allDayEl) allDayEl.checked = !!(event && event.allDay);
+  if (deleteBtn) deleteBtn.style.display = event ? 'inline-flex' : 'none';
+
+  modalAc('kokpitAgendaModal');
+}
+
+function saveKokpitAgendaEventFromModal() {
+  if (!kokpitAgendaActiveSlotKey) {
+    alert('Önce bir saat seçin.');
+    return;
+  }
+
+  const typeEl = document.getElementById('kokpitAgendaType');
+  const titleEl = document.getElementById('kokpitAgendaTitle');
+  const locationEl = document.getElementById('kokpitAgendaLocation');
+  const noteEl = document.getElementById('kokpitAgendaNote');
+  const allDayEl = document.getElementById('kokpitAgendaAllDay');
+
+  const slotParts = kokpitAgendaActiveSlotKey.split('_');
+  const dateKey = slotParts.slice(0, 3).join('-');
+  const hour = Number(slotParts[3] || 0);
+  const type = typeEl ? typeEl.value : 'Toplantı';
+  const title = titleEl ? titleEl.value.trim() : '';
+  const location = locationEl ? locationEl.value.trim() : '';
+  const note = noteEl ? noteEl.value.trim() : '';
+  const allDay = !!(allDayEl && allDayEl.checked);
+
+  if (!type) {
+    alert('Lütfen olay türü seçin.');
+    return;
+  }
+
+  kokpitAgendaEvents[kokpitAgendaActiveSlotKey] = {
+    dateKey,
+    hour,
+    type,
+    title: title || type,
+    location,
+    note,
+    allDay,
+    savedAt: Date.now()
+  };
+
+  saveKokpitAgendaEvents();
+  renderKokpitAgenda();
+  modalKapat('kokpitAgendaModal');
+}
+
+function deleteKokpitAgendaEvent() {
+  if (!kokpitAgendaActiveSlotKey) return;
+
+  delete kokpitAgendaEvents[kokpitAgendaActiveSlotKey];
+  saveKokpitAgendaEvents();
+  renderKokpitAgenda();
+  modalKapat('kokpitAgendaModal');
 }
 
 // Başlangıçta hemen çağır ve sonra her saniye güncelle
