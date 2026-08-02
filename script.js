@@ -15,9 +15,24 @@ function resolveApiBaseUrl() {
 
 const API_URL = resolveApiBaseUrl();
 let activeStudentId = null;
+let activeMuhasebeStudentId = null;
 let programWeekOffset = 0;
 let currentUserEmail = null;
 let savedResourceSuggestions = [];
+
+const MUHASEBE_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+
+function normalizeClassLevel(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function getClassDisplayLabel(value) {
+  const classLevel = normalizeClassLevel(value);
+  if (!classLevel) return 'Sınıf bilgisi yok';
+  if (classLevel === '8') return 'LGS';
+  if (classLevel === 'YKS') return 'YKS';
+  return `${classLevel}. Sınıf`;
+}
 
 const initialResourceSuggestions = [
   { sinif: '8', lesson: 'Matematik', name: 'FENOMEN B', level: 'Orta' },
@@ -74,20 +89,25 @@ const initialResourceSuggestions = [
 ];
 
 function ekranıGoster(sayfaId) {
-  document.getElementById('landingPage').style.display = 'none';
-  document.getElementById('promoPage').style.display = 'none';
-  document.getElementById('dashboardApp').style.display = 'none';
-  document.getElementById('mainNavbar').style.display = 'none';
+  const promoPageEl = document.getElementById('promoPage');
+  const dashboardAppEl = document.getElementById('dashboardApp');
+  const mainNavbarEl = document.getElementById('mainNavbar');
 
-  if (sayfaId === 'landingPage') {
-    document.getElementById('landingPage').style.display = 'flex';
-  } else if (sayfaId === 'loginPage') {
-    document.getElementById('loginPage').style.display = 'flex';
+  if (promoPageEl) promoPageEl.style.display = 'none';
+  if (dashboardAppEl) dashboardAppEl.style.display = 'none';
+  if (mainNavbarEl) mainNavbarEl.style.display = 'none';
+
+  if (sayfaId === 'loginPage') {
+    const loginPageEl = document.getElementById('loginPage');
+    if (loginPageEl) loginPageEl.style.display = 'flex';
   } else if (sayfaId === 'promoPage') {
-    document.getElementById('promoPage').style.display = 'block';
-    document.getElementById('mainNavbar').style.display = 'flex';
+    if (promoPageEl) promoPageEl.style.display = 'block';
+    if (mainNavbarEl) mainNavbarEl.style.display = 'flex';
   } else if (sayfaId === 'dashboardApp') {
-    document.getElementById('dashboardApp').style.display = 'block';
+    if (dashboardAppEl) dashboardAppEl.style.display = 'block';
+  } else {
+    if (promoPageEl) promoPageEl.style.display = 'block';
+    if (mainNavbarEl) mainNavbarEl.style.display = 'flex';
   }
 }
 
@@ -102,7 +122,7 @@ window.addEventListener('popstate', (e) => {
   if (e.state && e.state.sayfaId) {
     ekranıGoster(e.state.sayfaId);
   } else {
-    ekranıGoster('landingPage');
+    ekranıGoster('promoPage');
   }
 });
 
@@ -412,6 +432,8 @@ async function attemptAutoLogin() {
 function sekmeAcs(sekmeAd) {
   document.getElementById('tabKokpit').style.display = 'none';
   document.getElementById('tabOgrenci').style.display = 'none';
+  const muhasebeEl = document.getElementById('tabMuhasebe');
+  if (muhasebeEl) muhasebeEl.style.display = 'none';
   document.getElementById('tabOgrenciDetay').style.display = 'none';
   document.getElementById('tabProgram').style.display = 'none';
   document.getElementById('tabKaynak').style.display = 'none';
@@ -445,6 +467,10 @@ function sekmeAcs(sekmeAd) {
   } else if (sekmeAd === 'ogrenci') {
     document.getElementById('tabOgrenci').style.display = 'block';
     markMenuActive('menu-ogrenci');
+  } else if (sekmeAd === 'muhasebe') {
+    if (muhasebeEl) muhasebeEl.style.display = 'block';
+    markMenuActive('menu-muhasebe');
+    renderMuhasebeStudentCards();
   } else if (sekmeAd === 'ogrenci-detay') {
     document.getElementById('tabOgrenciDetay').style.display = 'block';
     markMenuActive('menu-ogrenci');
@@ -670,7 +696,7 @@ function renderBransExamHistory() {
 
   listEl.innerHTML = records.map((item) => {
     const title = item.examName || `${item.lesson || 'Ders'} Denemesi`;
-    const meta = `${item.classLevel || '-'}. sınıf · ${item.lesson || '-'} · ${item.unit || 'Ünite yok'} · ${formatExamDate(item.examDate)}`;
+    const meta = `${getClassDisplayLabel(item.classLevel)} · ${item.lesson || '-'} · ${item.unit || 'Ünite yok'} · ${formatExamDate(item.examDate)}`;
     const details = `Soru: ${item.questionCount} · D: ${item.correct} · Y: ${item.wrong} · B: ${item.blank}`;
     const topicSummary = item.topicStats && item.topicStats.length
       ? item.topicStats.map((t) => `${t.unit} / ${t.topic} (Y:${t.wrong}, B:${t.blank})`).join(' | ')
@@ -1107,7 +1133,7 @@ function cikisYap() {
   localStorage.removeItem('koclukUserEmail');
   sessionStorage.removeItem('koclukUserEmail');
   currentUserEmail = null;
-  sayfaAcs('landingPage');
+  sayfaAcs('promoPage');
 }
 
 function createResourceCard(name, level, url, lesson) {
@@ -1175,8 +1201,9 @@ function renderResourceSuggestions() {
 function selectKaynakSinif(sinif, element) {
   sekmeAcs('kaynak');
   selectedKaynakSinif = sinif;
-  document.getElementById('kaynakClassTitle').textContent = `${sinif}. Sınıf Kaynakları`;
-  document.getElementById('kaynakClassDescription').textContent = `Burada sadece ${sinif}. sınıf için atanmış kaynak önerilerini görür ve yenilerini ekleyebilirsiniz.`;
+  const classLabel = getClassDisplayLabel(sinif);
+  document.getElementById('kaynakClassTitle').textContent = `${classLabel} Kaynakları`;
+  document.getElementById('kaynakClassDescription').textContent = `Burada sadece ${classLabel} için atanmış kaynak önerilerini görür ve yenilerini ekleyebilirsiniz.`;
 
   document.querySelectorAll('#menu-kaynak .submenu-item').forEach(item => {
     item.classList.toggle('active', item.dataset.sinif === sinif);
@@ -1224,9 +1251,10 @@ function initUniteKonuPanel() {
   const lessonEl = document.getElementById('uniteKonuLesson');
   if (!lessonEl) return;
 
-  if (classTitleEl) classTitleEl.textContent = `${selectedUniteKonuSinif}. Sınıf Ünite / Konu Yönetimi`;
-  if (classDescEl) classDescEl.textContent = `Bu alanda ${selectedUniteKonuSinif}. sınıf için ders bazında ünite ve konu ekleyebilirsiniz. Eklenenler mevcut tüm seçim alanlarına entegre edilir.`;
-  if (classDisplayEl) classDisplayEl.value = `Sınıf ${selectedUniteKonuSinif}`;
+  const classLabel = getClassDisplayLabel(selectedUniteKonuSinif);
+  if (classTitleEl) classTitleEl.textContent = `${classLabel} Ünite / Konu Yönetimi`;
+  if (classDescEl) classDescEl.textContent = `Bu alanda ${classLabel} için ders bazında ünite ve konu ekleyebilirsiniz. Eklenenler mevcut tüm seçim alanlarına entegre edilir.`;
+  if (classDisplayEl) classDisplayEl.value = classLabel;
 
   const currentLesson = lessonEl.value || '';
   lessonEl.innerHTML = '<option value="">Ders seçin</option>';
@@ -1530,14 +1558,14 @@ function addKaynakOnerisi() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  history.replaceState({ sayfaId: 'landingPage' }, "", "#landingPage");
+  history.replaceState({ sayfaId: 'promoPage' }, "", "#promoPage");
   loadSavedResourceSuggestions();
   startUserCountAutoRefresh();
   loadKokpitNotebookNotes();
   renderKokpitTodoDate();
   attemptAutoLogin().then(auto => {
     if (!auto) {
-      sayfaAcs('landingPage', false);
+      sayfaAcs('promoPage', false);
     }
     renderResourceSuggestions();
   });
@@ -1756,6 +1784,7 @@ function ogrenciEkle() {
   const name = document.getElementById('ogrenciAdiInput').value.trim();
   const email = document.getElementById('ogrenciEmailInput').value.trim();
   const phone = document.getElementById('ogrenciTelefonInput').value.trim();
+  const classLevel = document.getElementById('ogrenciSinifInput')?.value || '8';
   if (!name) {
     alert('Öğrenci adı girin.');
     return;
@@ -1766,7 +1795,7 @@ function ogrenciEkle() {
     name,
     email,
     phone,
-    classLevel: '4',
+    classLevel,
     status: 'Aktif',
     program: {
       weeks: {}
@@ -1782,6 +1811,8 @@ function ogrenciEkle() {
   document.getElementById('ogrenciAdiInput').value = '';
   document.getElementById('ogrenciEmailInput').value = '';
   document.getElementById('ogrenciTelefonInput').value = '';
+  const classInput = document.getElementById('ogrenciSinifInput');
+  if (classInput) classInput.value = '8';
   modalKapat('ogrenciEkleModal');
 }
 
@@ -1909,7 +1940,7 @@ function openStudentInfoPage(studentId) {
   if (nameEl) nameEl.textContent = student.name || 'Öğrenci Bilgi Sayfası';
 
   if (metaEl) {
-    const classPart = student.classLevel ? `Sınıf ${student.classLevel}` : 'Sınıf bilgisi yok';
+    const classPart = getClassDisplayLabel(student.classLevel);
     const emailPart = student.email ? student.email : 'E-posta yok';
     metaEl.textContent = `${classPart} · ${emailPart}`;
   }
@@ -1942,7 +1973,7 @@ function openStudentBransPage() {
   bransTopicStats = {};
   const classDisplayEl = document.getElementById('bransExamClassDisplay');
   if (classDisplayEl) {
-    classDisplayEl.value = `Sınıf ${student.classLevel || '8'}`;
+    classDisplayEl.value = getClassDisplayLabel(student.classLevel || '8');
   }
   updateBransUnitOptions();
   renderBransExamHistory();
@@ -2039,7 +2070,7 @@ function initKaynakIlerlemePanelForStudent(student) {
   const classEl = document.getElementById('kaynakIlerlemeClass');
   const lessonEl = document.getElementById('kaynakIlerlemeLesson');
 
-  if (classEl) classEl.value = `Sınıf ${classLevel}`;
+  if (classEl) classEl.value = getClassDisplayLabel(classLevel);
   if (!lessonEl) return;
 
   lessonEl.innerHTML = '<option value="">Ders seçin</option>';
@@ -2455,7 +2486,7 @@ function initCozulenSoruPanelForStudent(student) {
   const classLevel = student && student.classLevel ? String(student.classLevel) : '8';
   const classEl = document.getElementById('cozulenClassDisplay');
   const lessonEl = document.getElementById('cozulenLesson');
-  if (classEl) classEl.value = `Sınıf ${classLevel}`;
+  if (classEl) classEl.value = getClassDisplayLabel(classLevel);
   if (!lessonEl) return;
 
   lessonEl.innerHTML = '<option value="">Ders seçin</option>';
@@ -2877,6 +2908,375 @@ function ogrenciProgramunaGit(card) {
   openStudentInfoPage(studentId);
 }
 
+function formatCurrencyTry(amount) {
+  const value = Number(amount) || 0;
+  return new Intl.NumberFormat('tr-TR', {
+    style: 'currency',
+    currency: 'TRY',
+    maximumFractionDigits: 0
+  }).format(value);
+}
+
+function ensureMuhasebeData(student) {
+  if (!student.muhasebe || typeof student.muhasebe !== 'object') {
+    student.muhasebe = { payments: [], lessons: [] };
+  }
+  if (!Array.isArray(student.muhasebe.payments)) student.muhasebe.payments = [];
+  if (!Array.isArray(student.muhasebe.lessons)) student.muhasebe.lessons = [];
+  return student.muhasebe;
+}
+
+function calculateMuhasebeTotals(student) {
+  const muhasebe = ensureMuhasebeData(student);
+  const total = muhasebe.payments.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const paid = muhasebe.payments.reduce((sum, item) => sum + (item.paid ? (Number(item.amount) || 0) : 0), 0);
+  const pending = Math.max(0, total - paid);
+  return { total, paid, pending };
+}
+
+let muhasebeAutoScrollToBottom = {
+  payments: false,
+  lessons: false
+};
+
+function renderMuhasebeStudentCards() {
+  const container = document.getElementById('muhasebeStudentCards');
+  if (!container) return;
+
+  const students = getStoredOgrenciler();
+  if (!students.length) {
+    container.innerHTML = '<div class="muhasebe-empty">Henüz öğrenci yok.</div>';
+    return;
+  }
+
+  container.innerHTML = students.map((student) => {
+    const totals = calculateMuhasebeTotals(student);
+    let statusClass = 'pending';
+    let statusText = 'Ödeme yapmadı';
+
+    if (totals.total > 0 && totals.pending === 0) {
+      statusClass = 'paid';
+      statusText = 'Ödemeler tamamlandı';
+    } else if (totals.paid > 0) {
+      statusClass = 'partial';
+      statusText = 'Kısmi ödeme var';
+    }
+
+    const initials = String(student.name || 'Ö')
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join('') || 'Ö';
+
+    return `
+      <div class="muhasebe-student-card" onclick="openMuhasebeDetailModal(${student.id})">
+        <div class="muhasebe-student-head">
+          <div class="muhasebe-student-avatar">${escapeHtml(initials)}</div>
+          <div>
+            <div class="muhasebe-student-name">${escapeHtml(student.name || 'Öğrenci')}</div>
+            <div class="muhasebe-student-meta">${escapeHtml(getClassDisplayLabel(student.classLevel || '-'))}</div>
+          </div>
+        </div>
+        <div class="muhasebe-status-badge ${statusClass}">${statusText}</div>
+        <div class="muhasebe-student-meta">Bekleyen: ${formatCurrencyTry(totals.pending)} • Ödendi: ${formatCurrencyTry(totals.paid)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openMuhasebeDetailModal(studentId) {
+  const students = getStoredOgrenciler();
+  const student = students.find((s) => String(s.id) === String(studentId));
+  if (!student) {
+    alert('Öğrenci bulunamadı.');
+    return;
+  }
+
+  activeMuhasebeStudentId = student.id;
+  const monthEl = document.getElementById('muhasebeNewMonth');
+  if (monthEl) monthEl.value = MUHASEBE_MONTHS[new Date().getMonth()];
+
+  const paymentDateEl = document.getElementById('muhasebeNewDate');
+  const lessonDateEl = document.getElementById('muhasebeLessonDate');
+  if (paymentDateEl) paymentDateEl.value = getTodayTrDate();
+  if (lessonDateEl) lessonDateEl.value = getTodayTrDate();
+
+  modalAc('muhasebeDetailModal');
+  renderMuhasebeDetailModal();
+}
+
+function closeMuhasebeDetailModal() {
+  modalKapat('muhasebeDetailModal');
+  activeMuhasebeStudentId = null;
+}
+
+function renderMuhasebeDetailModal() {
+  if (!activeMuhasebeStudentId) return;
+
+  const students = getStoredOgrenciler();
+  const student = students.find((s) => s.id === activeMuhasebeStudentId);
+  if (!student) return;
+
+  const muhasebe = ensureMuhasebeData(student);
+  const totals = calculateMuhasebeTotals(student);
+
+  const titleEl = document.getElementById('muhasebeDetailStudentName');
+  const metaEl = document.getElementById('muhasebeDetailStudentMeta');
+  const pendingEl = document.getElementById('muhasebePendingAmount');
+  const paidEl = document.getElementById('muhasebePaidAmount');
+  const paymentListEl = document.getElementById('muhasebePaymentList');
+  const lessonListEl = document.getElementById('muhasebeLessonList');
+
+  if (titleEl) titleEl.textContent = student.name || 'Öğrenci';
+  if (metaEl) metaEl.textContent = `${getClassDisplayLabel(student.classLevel || '-')} • Ödeme Takibi`;
+  if (pendingEl) pendingEl.textContent = formatCurrencyTry(totals.pending);
+  if (paidEl) paidEl.textContent = formatCurrencyTry(totals.paid);
+
+  if (paymentListEl) {
+    if (!muhasebe.payments.length) {
+      paymentListEl.innerHTML = '<div class="muhasebe-empty">Henüz ödeme kaydı yok.</div>';
+    } else {
+      paymentListEl.innerHTML = muhasebe.payments.map((item) => {
+        const paidText = item.paid ? `Ödendi${item.paidAt ? ` (${formatExamDate(item.paidAt)})` : ''}` : 'Bekliyor';
+        const paymentDate = formatExamDate(item.date || item.dueDate || '');
+        return `
+          <div class="muhasebe-row">
+            <div class="muhasebe-row-top">
+              <div class="muhasebe-row-title">${escapeHtml(item.month || '-')} • ${formatCurrencyTry(item.amount)}</div>
+              <div class="muhasebe-row-meta">${paidText}</div>
+            </div>
+            <div class="muhasebe-row-meta">Tarih: ${paymentDate || '-'} ${item.note ? `• ${escapeHtml(item.note)}` : ''}</div>
+            <div class="muhasebe-row-actions">
+              <button type="button" class="muhasebe-btn-paid" onclick="toggleMuhasebePaymentPaid(${item.id})">${item.paid ? 'Geri Al' : 'Ödendi'}</button>
+              <button type="button" class="muhasebe-btn-delete" onclick="deleteMuhasebePaymentRecord(${item.id})">Sil</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+    if (muhasebeAutoScrollToBottom.payments) {
+      requestAnimationFrame(() => {
+        paymentListEl.scrollTop = paymentListEl.scrollHeight;
+      });
+      muhasebeAutoScrollToBottom.payments = false;
+    }
+  }
+
+  if (lessonListEl) {
+    if (!muhasebe.lessons.length) {
+      lessonListEl.innerHTML = '<div class="muhasebe-empty">Henüz ders kaydı yok.</div>';
+    } else {
+      lessonListEl.innerHTML = muhasebe.lessons.map((item) => `
+        <div class="muhasebe-row">
+          <div class="muhasebe-row-top">
+            <div class="muhasebe-row-title">Ders Kaydı</div>
+            <div class="muhasebe-row-meta">${formatExamDate(item.date || '')}</div>
+          </div>
+          <div class="muhasebe-row-meta">Süre: ${Number(item.duration || 0)} dk</div>
+          <div class="muhasebe-row-actions">
+            <button type="button" class="muhasebe-btn-delete" onclick="deleteMuhasebeLessonRecord(${item.id})">Sil</button>
+          </div>
+        </div>
+      `).join('');
+    }
+    if (muhasebeAutoScrollToBottom.lessons) {
+      requestAnimationFrame(() => {
+        lessonListEl.scrollTop = lessonListEl.scrollHeight;
+      });
+      muhasebeAutoScrollToBottom.lessons = false;
+    }
+  }
+}
+
+function mutateMuhasebeStudentData(mutator) {
+  if (!activeMuhasebeStudentId || typeof mutator !== 'function') return;
+
+  const students = getStoredOgrenciler();
+  const student = students.find((s) => s.id === activeMuhasebeStudentId);
+  if (!student) return;
+
+  const muhasebe = ensureMuhasebeData(student);
+  mutator(muhasebe, student);
+  setStoredOgrenciler(students);
+  renderMuhasebeDetailModal();
+  renderMuhasebeStudentCards();
+}
+
+function addMuhasebePaymentRecord() {
+  const month = document.getElementById('muhasebeNewMonth')?.value || '';
+  const amount = Number(document.getElementById('muhasebeNewAmount')?.value) || 0;
+  const date = String(document.getElementById('muhasebeNewDate')?.value || '').trim();
+  const note = String(document.getElementById('muhasebeNewNote')?.value || '').trim();
+
+  if (!month || amount <= 0) {
+    alert('Ay ve tutar zorunludur.');
+    return;
+  }
+  if (!date || !isValidTrDate(date)) {
+    alert('Tarih GG.AA.YYYY formatında olmalı.');
+    return;
+  }
+
+  muhasebeAutoScrollToBottom.payments = true;
+  mutateMuhasebeStudentData((muhasebe) => {
+    muhasebe.payments.push({
+      id: Date.now(),
+      month,
+      amount,
+      date,
+      note,
+      paid: false,
+      paidAt: ''
+    });
+  });
+
+  const amountEl = document.getElementById('muhasebeNewAmount');
+  const noteEl = document.getElementById('muhasebeNewNote');
+  if (amountEl) amountEl.value = '';
+  if (noteEl) noteEl.value = '';
+}
+
+function toggleMuhasebePaymentPaid(recordId) {
+  mutateMuhasebeStudentData((muhasebe) => {
+    const item = muhasebe.payments.find((p) => Number(p.id) === Number(recordId));
+    if (!item) return;
+    item.paid = !item.paid;
+    item.paidAt = item.paid ? getTodayTrDate() : '';
+  });
+}
+
+function deleteMuhasebePaymentRecord(recordId) {
+  mutateMuhasebeStudentData((muhasebe) => {
+    muhasebe.payments = muhasebe.payments.filter((p) => Number(p.id) !== Number(recordId));
+  });
+}
+
+function addMuhasebeLessonRecord() {
+  const date = String(document.getElementById('muhasebeLessonDate')?.value || '').trim();
+  const duration = Number(document.getElementById('muhasebeLessonDuration')?.value) || 0;
+
+  if (!date || !isValidTrDate(date)) {
+    alert('Ders tarihi GG.AA.YYYY formatında olmalı.');
+    return;
+  }
+
+  muhasebeAutoScrollToBottom.lessons = true;
+  mutateMuhasebeStudentData((muhasebe) => {
+    muhasebe.lessons.push({
+      id: Date.now(),
+      date,
+      duration
+    });
+  });
+
+  const durationEl = document.getElementById('muhasebeLessonDuration');
+  if (durationEl) durationEl.value = '';
+}
+
+function deleteMuhasebeLessonRecord(recordId) {
+  mutateMuhasebeStudentData((muhasebe) => {
+    muhasebe.lessons = muhasebe.lessons.filter((l) => Number(l.id) !== Number(recordId));
+  });
+}
+
+function indirMuhasebeDetayPdf() {
+  if (!activeMuhasebeStudentId) {
+    alert('Once bir ogrenci secin.');
+    return;
+  }
+
+  const students = getStoredOgrenciler();
+  const student = students.find((s) => s.id === activeMuhasebeStudentId);
+  if (!student) {
+    alert('Ogrenci bulunamadi.');
+    return;
+  }
+
+  const muhasebe = ensureMuhasebeData(student);
+  if (!muhasebe.payments.length && !muhasebe.lessons.length) {
+    alert('PDF olusturmak icin odeme veya ders kaydi ekleyin.');
+    return;
+  }
+
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert('PDF kutuphanesi yuklenemedi.');
+    return;
+  }
+
+  const doc = new window.jspdf.jsPDF('p', 'pt', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  let y = 48;
+
+  const pdfMoney = (value) => {
+    const amount = Number(value) || 0;
+    return `${amount.toLocaleString('tr-TR')} TL`;
+  };
+
+  const ensureSpace = (needed = 22) => {
+    if (y + needed > pageHeight - margin) {
+      doc.addPage();
+      y = margin;
+    }
+  };
+
+  const writeLine = (text, fontSize = 10, indent = 0, gap = 15) => {
+    ensureSpace(gap + 6);
+    doc.setFontSize(fontSize);
+    doc.text(pdfSafeText(String(text)), margin + indent, y);
+    y += gap;
+  };
+
+  const normalizeFileName = (value) => String(value || 'ogrenci')
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9\-]/g, '')
+    .slice(0, 40) || 'ogrenci';
+
+  doc.setFont('helvetica', 'bold');
+  writeLine('Muhasebe Ozeti', 16, 0, 22);
+  doc.setFont('helvetica', 'normal');
+  writeLine(`Ogrenci: ${student.name || '-'}`, 11);
+  writeLine(`Sinif: ${student.classLevel || '-'}`, 11);
+  writeLine(`Olusturma Tarihi: ${getTodayTrDate()}`, 11);
+  y += 6;
+
+  doc.setFont('helvetica', 'bold');
+  writeLine('Eklenen Odemeler', 13, 0, 18);
+  doc.setFont('helvetica', 'normal');
+  if (!muhasebe.payments.length) {
+    writeLine('Kayit yok.', 10, 8);
+  } else {
+    muhasebe.payments.forEach((item, index) => {
+      const paymentDate = formatExamDate(item.date || item.dueDate || '') || '-';
+      const paymentStatus = item.paid
+        ? `Odendi${item.paidAt ? ` (${formatExamDate(item.paidAt)})` : ''}`
+        : 'Bekliyor';
+      const mainLine = `${index + 1}. ${item.month || '-'} | ${pdfMoney(item.amount)} | ${paymentDate} | ${paymentStatus}`;
+      writeLine(mainLine, 10, 8);
+      if (item.note) writeLine(`Aciklama: ${item.note}`, 9, 18, 13);
+    });
+  }
+
+  y += 6;
+  doc.setFont('helvetica', 'bold');
+  writeLine('Yapilan Dersler', 13, 0, 18);
+  doc.setFont('helvetica', 'normal');
+  if (!muhasebe.lessons.length) {
+    writeLine('Kayit yok.', 10, 8);
+  } else {
+    muhasebe.lessons.forEach((item, index) => {
+      const lessonDate = formatExamDate(item.date || '') || '-';
+      writeLine(`${index + 1}. Tarih: ${lessonDate} | Sure: ${Number(item.duration || 0)} dk`, 10, 8);
+    });
+  }
+
+  const safeName = normalizeFileName(student.name);
+  doc.save(`muhasebe-${safeName}.pdf`);
+}
+
 function getWeekStartDate(offset = 0) {
   const now = new Date();
   const currentDay = now.getDay();
@@ -3279,9 +3679,13 @@ function getLessonOptionsForClass(classLevel) {
     '5': ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Sosyal Bilgiler', 'İngilizce'],
     '6': ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'],
     '7': ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'],
-    '8': ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce']
+    '8': ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'],
+    '9': ['Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'],
+    '10': ['Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'],
+    '11': ['Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'],
+    'YKS': ['Matematik', 'Geometri', 'Fizik', 'Kimya', 'Biyoloji', 'Türkçe', 'Tarih', 'Coğrafya']
   };
-  return lessonsByClass[classLevel] || ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'];
+  return lessonsByClass[normalizeClassLevel(classLevel)] || ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'];
 }
 
 function getUnitOptionsForLesson(classLevel, lesson) {
@@ -3664,7 +4068,7 @@ function renderStoredOgrenciler() {
     card.onclick = () => ogrenciProgramunaGit(card);
     const badges = [
       student.status || 'YKS',
-      student.classLevel ? 'Sınıf ' + student.classLevel : 'Genel'
+      student.classLevel ? getClassDisplayLabel(student.classLevel) : 'Genel'
     ];
 
     card.innerHTML = `
