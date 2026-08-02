@@ -2190,6 +2190,7 @@ function renderKokpitUserCard() {
   loadKokpitNotebookNotes();
   renderKokpitTodoDate();
   loadKokpitAgendaEvents();
+  loadKokpitAgendaDragScalePreference();
   renderKokpitAgenda();
 }
 
@@ -2654,6 +2655,8 @@ let kokpitNotebookNotes = {};
 let kokpitAgendaWeekOffset = 0;
 let kokpitAgendaEvents = {};
 let kokpitAgendaActiveSlotKey = null;
+let kokpitAgendaDragScale = 1;
+let kokpitAgendaResizeSession = null;
 
 function getKokpitNotebookStorageKey() {
   const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
@@ -2734,6 +2737,74 @@ function onKokpitNotebookInput() {
 function getKokpitAgendaStorageKey() {
   const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
   return `kokpit_agenda_${email}`;
+}
+
+function getKokpitAgendaDragScaleStorageKey() {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  return `kokpit_agenda_drag_scale_${email}`;
+}
+
+function loadKokpitAgendaDragScalePreference() {
+  const savedScaleRaw = localStorage.getItem(getKokpitAgendaDragScaleStorageKey());
+  const parsedScale = Number(savedScaleRaw);
+  kokpitAgendaDragScale = Number.isFinite(parsedScale) ? parsedScale : 1;
+  kokpitAgendaDragScale = Math.max(0.72, Math.min(1.12, kokpitAgendaDragScale));
+  applyKokpitAgendaDragScale(kokpitAgendaDragScale);
+}
+
+function applyKokpitAgendaDragScale(scale) {
+  const cardEl = document.getElementById('kokpitAgendaCard');
+  if (!cardEl) return;
+  const safeScale = Math.max(0.72, Math.min(1.12, Number(scale) || 1));
+  kokpitAgendaDragScale = safeScale;
+
+  const canUseZoom = typeof cardEl.style.zoom !== 'undefined';
+  if (canUseZoom) {
+    // Scale the full agenda card (header + summary + grid) as one block.
+    cardEl.style.zoom = safeScale.toFixed(3);
+    cardEl.style.setProperty('--agenda-drag-scale', '1');
+  } else {
+    cardEl.style.zoom = '';
+    cardEl.style.setProperty('--agenda-drag-scale', safeScale.toFixed(3));
+  }
+}
+
+function onKokpitAgendaResizeMove(event) {
+  if (!kokpitAgendaResizeSession) return;
+  const dx = kokpitAgendaResizeSession.startX - event.clientX;
+  const dy = event.clientY - kokpitAgendaResizeSession.startY;
+  const inwardDrag = dx + dy;
+  const nextScale = kokpitAgendaResizeSession.startScale - (inwardDrag * 0.0016);
+  applyKokpitAgendaDragScale(nextScale);
+}
+
+function stopKokpitAgendaResize() {
+  if (!kokpitAgendaResizeSession) return;
+  const cardEl = document.getElementById('kokpitAgendaCard');
+  if (cardEl) cardEl.classList.remove('resizing');
+
+  window.removeEventListener('pointermove', onKokpitAgendaResizeMove);
+  window.removeEventListener('pointerup', stopKokpitAgendaResize);
+  window.removeEventListener('pointercancel', stopKokpitAgendaResize);
+  localStorage.setItem(getKokpitAgendaDragScaleStorageKey(), String(kokpitAgendaDragScale));
+  kokpitAgendaResizeSession = null;
+}
+
+function startKokpitAgendaResize(event) {
+  const cardEl = document.getElementById('kokpitAgendaCard');
+  if (!cardEl) return;
+
+  event.preventDefault();
+  kokpitAgendaResizeSession = {
+    startX: event.clientX,
+    startY: event.clientY,
+    startScale: kokpitAgendaDragScale
+  };
+
+  cardEl.classList.add('resizing');
+  window.addEventListener('pointermove', onKokpitAgendaResizeMove);
+  window.addEventListener('pointerup', stopKokpitAgendaResize);
+  window.addEventListener('pointercancel', stopKokpitAgendaResize);
 }
 
 function loadKokpitAgendaEvents() {
