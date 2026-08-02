@@ -15,6 +15,11 @@
   <meta property="og:description" content="Öğrenci takibi, haftalık planlama ve deneme analizi için modern koçluk paneli.">
   <meta property="og:url" content="https://parabolkocluk.com/">
   <meta property="og:locale" content="tr_TR">
+  <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon.png">
   <link rel="manifest" href="manifest.json">
   <style>
     /* RENK PALETİ VE KAVİSLER */
@@ -92,6 +97,15 @@
     .login-card { background: #ffffff; padding: 40px 32px; border-radius: var(--radius-rounded); box-shadow: 0 20px 45px rgba(16, 32, 64, 0.24); width: 100%; max-width: 400px; text-align: center; border: 2px solid var(--color-lightgreen); }
     .input-field { width: 100%; padding: 12px 14px; border: 1.5px solid #cbd5e1; border-radius: 12px; margin-bottom: 12px; font-size: 0.9rem; outline: none; background: #f8fafc; }
     .input-field:focus { border-color: var(--color-teal); background: #fff; }
+    .hp-field {
+      position: absolute;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
     .password-field { position: relative; margin-bottom: 12px; }
     .password-field .input-field { margin-bottom: 0; padding-right: 46px; }
     .toggle-password-btn {
@@ -1022,7 +1036,7 @@
   <!-- NAVBAR (Tanıtım Sayfasında Görünür) -->
   <div class="top-navbar" id="mainNavbar" style="display:none;">
     <div class="brand-badge" onclick="sayfaAcs('promoPage')" style="display:flex; align-items:center; gap:10px;">
-      <img src="icons/icon.png" alt="Parabol logo" class="brand-icon-img">
+      <img src="icons/icon.png" alt="Parabol logo" class="brand-icon-img" loading="lazy">
       <span>Parabol Koçluk Sistemi</span>
     </div>
     <div class="nav-buttons" id="navButtons">
@@ -1034,7 +1048,7 @@
   <!-- EKRAN 2: GİRİŞ KARTI -->
   <div id="loginPage">
     <div class="login-card">
-      <div class="logo-badge" style="margin: 0 auto 12px; width:48px; height:48px;"><img src="icons/icon.png" alt="Parabol logo"></div>
+      <div class="logo-badge" style="margin: 0 auto 12px; width:48px; height:48px;"><img src="icons/icon.png" alt="Parabol logo" loading="lazy"></div>
       <h2 id="loginTitle">Öğretmen Girişi</h2>
       <p style="color:#64748b; font-size:0.85rem; margin-bottom:16px;">Parabol koçluk sistemine hoş geldiniz</p>
       
@@ -1124,6 +1138,10 @@
 
       <!-- Kayıt Formu -->
       <form id="formKayit" style="display: none;" onsubmit="event.preventDefault(); kayitOl();">
+        <div class="hp-field" aria-hidden="true">
+          <label for="regWebsite">Website</label>
+          <input type="text" id="regWebsite" name="website" tabindex="-1" autocomplete="off">
+        </div>
         <input type="text" class="input-field" id="regName" placeholder="AD SOYAD *" required>
         <input type="email" class="input-field" id="regEmail" placeholder="EMAİL *" required>
         <select id="regBranch" class="input-field">
@@ -1212,7 +1230,7 @@
       <div class="sidebar-wrapper">
         <div class="sidebar">
           <div class="sidebar-logo" style="display:flex; align-items:center; gap:10px;">
-            <img src="icons/icon.png" alt="Parabol logo">
+            <img src="icons/icon.png" alt="Parabol logo" loading="lazy">
             <span class="logo-text">Parabol</span>
           </div>
 

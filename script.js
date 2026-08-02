@@ -21,6 +21,10 @@ let currentUserEmail = null;
 let currentUserName = null;
 let currentUserBranch = null;
 let savedResourceSuggestions = [];
+let registerFormOpenedAt = Date.now();
+
+const REGISTER_MIN_SUBMIT_MS = 2500;
+const REGISTER_MAX_TEXT_LEN = 120;
 
 const MUHASEBE_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 
@@ -251,6 +255,25 @@ function openLegalModal(type) {
   modalAc('legalModal');
 }
 
+function refreshRegisterSpamGuards() {
+  registerFormOpenedAt = Date.now();
+  const honeypotEl = document.getElementById('regWebsite');
+  if (honeypotEl) honeypotEl.value = '';
+}
+
+function isValidRegisterName(name) {
+  const normalized = String(name || '').trim();
+  if (!normalized) return false;
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return false;
+  return /^[A-Za-zÇĞİÖŞÜçğıöşü\s.'-]+$/.test(normalized);
+}
+
+function isValidRegisterEmail(email) {
+  const value = String(email || '').trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
+}
+
 function tabDegistir(mod) {
   const tabGiris = document.getElementById('tabGiris');
   const tabKayit = document.getElementById('tabKayit');
@@ -267,6 +290,7 @@ function tabDegistir(mod) {
     tabGiris.classList.remove('active');
     formKayit.style.display = 'block';
     formGiris.style.display = 'none';
+    refreshRegisterSpamGuards();
   }
 }
 
@@ -374,20 +398,41 @@ function kayitOl() {
   const pass = document.getElementById('regPass').value;
   const passConfirm = document.getElementById('regPassConfirm').value;
   const phone = document.getElementById('regPhone').value.trim();
+  const honeypot = document.getElementById('regWebsite');
   const regErrorBox = document.getElementById('regErrorBox');
 
-  if (!name || name.split(" ").filter(w => w.length > 0).length < 2) {
+  if (honeypot && honeypot.value.trim()) {
+    regErrorBox.textContent = "İşlem doğrulanamadı. Lütfen tekrar deneyin.";
+    regErrorBox.style.display = "block";
+    return;
+  }
+
+  if ((Date.now() - registerFormOpenedAt) < REGISTER_MIN_SUBMIT_MS) {
+    regErrorBox.textContent = "Formu çok hızlı gönderdiniz. Lütfen bilgileri kontrol edip tekrar deneyin.";
+    regErrorBox.style.display = "block";
+    return;
+  }
+
+  if (!isValidRegisterName(name) || name.length > REGISTER_MAX_TEXT_LEN) {
     regErrorBox.textContent = "Lütfen geçerli bir Ad ve Soyad girin.";
     regErrorBox.style.display = "block";
     return;
   }
 
+  if (!isValidRegisterEmail(email) || email.length > REGISTER_MAX_TEXT_LEN) {
+    regErrorBox.textContent = "Lütfen geçerli bir e-posta adresi girin.";
+    regErrorBox.style.display = "block";
+    return;
+  }
+
   const phoneDigits = phone.replace(/\D/g, '');
-  if (!phone || phoneDigits.length < 10) {
+  if (!phone || phoneDigits.length < 10 || phoneDigits.length > 15) {
     regErrorBox.textContent = "Lütfen en az 10 haneli geçerli bir telefon numarası girin.";
     regErrorBox.style.display = "block";
     return;
   }
+
+  const normalizedPhone = phoneDigits;
 
   if (pass !== passConfirm) {
     regErrorBox.textContent = "Şifreler birbiriyle eşleşmiyor!";
@@ -404,7 +449,7 @@ function kayitOl() {
   // Backend'e kayıt isteği gönder
   fetch(API_URL + '/api/register', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email, password: pass, phone, branch })
+    body: JSON.stringify({ name, email, password: pass, phone: normalizedPhone, branch })
   }).then(async res => {
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
@@ -1689,6 +1734,7 @@ function addKaynakOnerisi() {
 
 document.addEventListener('DOMContentLoaded', () => {
   history.replaceState({ sayfaId: 'promoPage' }, "", "#promoPage");
+  refreshRegisterSpamGuards();
   loadSavedResourceSuggestions();
   startUserCountAutoRefresh();
   loadKokpitNotebookNotes();
