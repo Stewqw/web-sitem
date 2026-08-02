@@ -26,6 +26,25 @@ let registerFormOpenedAt = Date.now();
 const REGISTER_MIN_SUBMIT_MS = 2500;
 const REGISTER_MAX_TEXT_LEN = 120;
 
+function getFirebaseServices() {
+  return window.firebaseServices || null;
+}
+
+function isFirebaseReady() {
+  const services = getFirebaseServices();
+  return !!(services && typeof services.isEnabled === 'function' && services.isEnabled());
+}
+
+function shouldUseFirebaseAuth() {
+  const services = getFirebaseServices();
+  return !!(isFirebaseReady() && services.settings && services.settings.useFirebaseAuth);
+}
+
+function shouldUseFirestoreForms() {
+  const services = getFirebaseServices();
+  return !!(isFirebaseReady() && services.settings && services.settings.useFirestoreForms);
+}
+
 const MUHASEBE_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 
 function normalizeClassLevel(value) {
@@ -267,7 +286,7 @@ function toggleLandingFaq(buttonEl) {
   item.classList.toggle('open');
 }
 
-function submitLandingApplyForm(event) {
+async function submitLandingApplyForm(event) {
   if (event) event.preventDefault();
 
   const nameEl = document.getElementById('landingApplyName');
@@ -306,6 +325,25 @@ function submitLandingApplyForm(event) {
     alert('Lütfen seviye seçin.');
     levelEl.focus();
     return;
+  }
+
+  const note = noteEl ? noteEl.value.trim() : '';
+
+  if (shouldUseFirestoreForms()) {
+    try {
+      const services = getFirebaseServices();
+      await services.saveLandingApplication({
+        name: name,
+        email: email,
+        phone: phoneDigits,
+        level: level,
+        note: note
+      });
+    } catch (error) {
+      console.error('Firestore başvuru kaydı hatası:', error);
+      alert('Başvuru kaydedilirken bir sorun oluştu. Lütfen tekrar deneyin.');
+      return;
+    }
   }
 
   successEl.style.display = 'block';
@@ -403,7 +441,7 @@ function sifremiUnuttumAc(kaynak) {
   modalAc('forgotModal');
 }
 
-function sifreSifirla() {
+async function sifreSifirla() {
   const email = document.getElementById('forgotEmail').value.trim();
   const newPassword = document.getElementById('forgotNewPass').value;
   const confirmPassword = document.getElementById('forgotNewPassConfirm').value;
@@ -425,6 +463,21 @@ function sifreSifirla() {
     forgotErrorBox.textContent = 'Şifre en az 8 karakter olmalı, bir küçük harf ve bir sayı içermeli.';
     forgotErrorBox.style.display = 'block';
     return;
+  }
+
+  if (shouldUseFirebaseAuth()) {
+    try {
+      const services = getFirebaseServices();
+      await services.resetPassword(email);
+      forgotErrorBox.style.display = 'none';
+      modalKapat('forgotModal');
+      alert('Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.');
+      return;
+    } catch (error) {
+      forgotErrorBox.textContent = 'Şifre sıfırlama işlemi yapılamadı. E-posta adresinizi kontrol edin.';
+      forgotErrorBox.style.display = 'block';
+      return;
+    }
   }
 
   fetch(API_URL + '/api/forgot-password', {
@@ -507,6 +560,25 @@ function kayitOl() {
     return;
   }
 
+  if (shouldUseFirebaseAuth()) {
+    const services = getFirebaseServices();
+    services.registerWithEmail({
+      name: name,
+      email: email,
+      password: pass,
+      phone: normalizedPhone,
+      branch: branch
+    }).then(() => {
+      regErrorBox.style.display = "none";
+      alert("Kayıt başarılı! Şimdi giriş yapabilirsiniz.");
+      tabDegistir('giris');
+    }).catch((error) => {
+      regErrorBox.textContent = error && error.message ? error.message : 'Firebase kayıt sırasında hata oluştu.';
+      regErrorBox.style.display = 'block';
+    });
+    return;
+  }
+
   // Backend'e kayıt isteği gönder
   fetch(API_URL + '/api/register', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -540,6 +612,36 @@ function paneleGirisYap(nereden) {
     eposta = document.getElementById('modalEmail').value.trim();
     sifre = document.getElementById('modalPass').value.trim();
     errorBox = document.getElementById('modalErrorBox');
+  }
+
+  if (shouldUseFirebaseAuth()) {
+    const services = getFirebaseServices();
+    services.loginWithEmail({ email: eposta, password: sifre }).then((session) => {
+      if (errorBox) errorBox.style.display = 'none';
+
+      const userEmail = (session && session.email ? session.email : eposta).toLowerCase();
+      localStorage.removeItem('koclukToken');
+      sessionStorage.removeItem('koclukToken');
+      localStorage.setItem('koclukUserEmail', userEmail);
+      sessionStorage.removeItem('koclukUserEmail');
+
+      currentUserEmail = userEmail;
+      currentUserName = session && session.name ? session.name : currentUserName;
+      currentUserBranch = session && session.branch ? session.branch : currentUserBranch;
+      loadSavedResourceSuggestions();
+
+      modalKapat('authModal');
+      sayfaAcs('dashboardApp');
+      renderStoredOgrenciler();
+      updateUserCountLabel();
+      renderKokpitUserCard();
+    }).catch((error) => {
+      if (errorBox) {
+        errorBox.textContent = error && error.message ? error.message : 'Firebase giriş başarısız.';
+        errorBox.style.display = 'block';
+      }
+    });
+    return;
   }
 
   // Backend'e login isteği gönder
@@ -604,6 +706,30 @@ function paneleGirisYap(nereden) {
 
 // Otomatik giriş (remember me) işlevselliği
 async function attemptAutoLogin() {
+  if (shouldUseFirebaseAuth()) {
+    try {
+      const services = getFirebaseServices();
+      const session = await services.getCurrentUserSession();
+      if (session && session.email) {
+        const email = session.email.toLowerCase();
+        currentUserEmail = email;
+        currentUserName = session.name || currentUserName;
+        currentUserBranch = session.branch || currentUserBranch;
+        loadSavedResourceSuggestions();
+        localStorage.setItem('koclukUserEmail', email);
+        sessionStorage.removeItem('koclukUserEmail');
+
+        sayfaAcs('dashboardApp', false);
+        renderStoredOgrenciler();
+        updateUserCountLabel();
+        renderKokpitUserCard();
+        return true;
+      }
+    } catch (error) {
+      return false;
+    }
+  }
+
   const token = localStorage.getItem('koclukToken') || sessionStorage.getItem('koclukToken');
   if (!token) return false;
   try {
@@ -1341,7 +1467,16 @@ function kaydetGenelDeneme() {
   clearGenelExamForm();
 }
 
-function cikisYap() {
+async function cikisYap() {
+  if (shouldUseFirebaseAuth()) {
+    try {
+      const services = getFirebaseServices();
+      await services.signOut();
+    } catch (error) {
+      console.warn('Firebase çıkış işlemi tamamlanamadı:', error);
+    }
+  }
+
   // Oturum kapatma sırasında token temizlenir
   localStorage.removeItem('koclukToken');
   sessionStorage.removeItem('koclukToken');
