@@ -78,6 +78,21 @@
     console.warn("Firebase Realtime Database SDK yuklenemedi. Kayit profil yazimi eksik calisabilir.");
   }
 
+  function withTimeout(promise, timeoutMs, timeoutCode, timeoutMessage) {
+    let timerId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timerId = setTimeout(() => {
+        const err = new Error(timeoutMessage || "Firebase istegi zaman asimina ugradi.");
+        err.code = timeoutCode || "app/request-timeout";
+        reject(err);
+      }, timeoutMs);
+    });
+
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      clearTimeout(timerId);
+    });
+  }
+
   async function getProfileByUid(uid) {
     if (rtdb) {
       try {
@@ -103,9 +118,19 @@
     const password = String(payload.password || "");
     const displayName = String(payload.name || "").trim();
 
-    const credential = await auth.createUserWithEmailAndPassword(email, password);
+    const credential = await withTimeout(
+      auth.createUserWithEmailAndPassword(email, password),
+      20000,
+      "app/auth-create-timeout",
+      "Kayıt işlemi zaman aşımına uğradı."
+    );
     if (displayName) {
-      await credential.user.updateProfile({ displayName: displayName });
+      await withTimeout(
+        credential.user.updateProfile({ displayName: displayName }),
+        12000,
+        "app/profile-update-timeout",
+        "Profil güncellemesi zaman aşımına uğradı."
+      );
     }
 
     const nowIso = new Date().toISOString();
@@ -120,23 +145,35 @@
       updatedAtIso: nowIso
     };
 
-    if (!rtdb) {
-      const missingDbError = new Error("Realtime Database kullanima hazir degil.");
-      missingDbError.code = "app/realtime-db-unavailable";
-      throw missingDbError;
+    if (rtdb) {
+      try {
+        await withTimeout(
+          rtdb.ref("users/" + credential.user.uid).set(profilePayload),
+          12000,
+          "app/realtime-db-timeout",
+          "Profil verisi kaydedilirken zaman aşımı oluştu."
+        );
+      } catch (error) {
+        console.error("Realtime Database profil yazma hatası:", error);
+      }
+    } else {
+      console.warn("Realtime Database kullanima hazir degil; profil yazimi atlandi.");
     }
-
-    await rtdb.ref("users/" + credential.user.uid).set(profilePayload);
 
     if (db && fieldValue) {
       try {
-        await db.collection("users").doc(credential.user.uid).set(
-          {
-            ...profilePayload,
-            createdAt: fieldValue.serverTimestamp(),
-            updatedAt: fieldValue.serverTimestamp()
-          },
-          { merge: true }
+        await withTimeout(
+          db.collection("users").doc(credential.user.uid).set(
+            {
+              ...profilePayload,
+              createdAt: fieldValue.serverTimestamp(),
+              updatedAt: fieldValue.serverTimestamp()
+            },
+            { merge: true }
+          ),
+          12000,
+          "app/firestore-timeout",
+          "Firestore profil kaydi zaman aşımına uğradı."
         );
       } catch (error) {
         console.warn("Firestore profil yazimi atlandi:", error);
@@ -154,8 +191,24 @@
   services.loginWithEmail = async function loginWithEmail(payload) {
     const email = String(payload.email || "").trim().toLowerCase();
     const password = String(payload.password || "");
-    const credential = await auth.signInWithEmailAndPassword(email, password);
-    const profile = await getProfileByUid(credential.user.uid);
+    const credential = await withTimeout(
+      auth.signInWithEmailAndPassword(email, password),
+      20000,
+      "app/auth-signin-timeout",
+      "Giriş işlemi zaman aşımına uğradı."
+    );
+
+    let profile = null;
+    try {
+      profile = await withTimeout(
+        getProfileByUid(credential.user.uid),
+        10000,
+        "app/profile-read-timeout",
+        "Kullanıcı profili okunurken zaman aşımı oluştu."
+      );
+    } catch (error) {
+      console.warn("Profil okuma zamanında tamamlanamadı:", error);
+    }
 
     return {
       uid: credential.user.uid,

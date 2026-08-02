@@ -99,6 +99,15 @@ function getFirebaseAuthErrorMessage(error, fallbackMessage) {
       return 'Hatalı şifre girdiniz.';
     case 'auth/too-many-requests':
       return 'Çok fazla başarısız deneme yaptınız. Lütfen biraz bekleyin.';
+    case 'auth/network-request-failed':
+      return 'Ağ bağlantısı kurulamadı. İnternetinizi kontrol edip tekrar deneyin.';
+    case 'app/auth-create-timeout':
+    case 'app/auth-signin-timeout':
+    case 'app/profile-update-timeout':
+    case 'app/profile-read-timeout':
+    case 'app/realtime-db-timeout':
+    case 'app/firestore-timeout':
+      return 'İşlem beklenenden uzun sürdü. Lütfen tekrar deneyin.';
     default:
       return fallbackMessage || 'Bir hata oluştu. Lütfen tekrar deneyin.';
   }
