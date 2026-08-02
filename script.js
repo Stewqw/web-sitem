@@ -419,6 +419,8 @@ function sekmeAcs(sekmeAd) {
   document.getElementById('tabBrans').style.display = 'none';
   const genelEl = document.getElementById('tabGenel');
   if (genelEl) genelEl.style.display = 'none';
+  const kaynakIlerlemeEl = document.getElementById('tabKaynakIlerleme');
+  if (kaynakIlerlemeEl) kaynakIlerlemeEl.style.display = 'none';
 
   const markMenuActive = (menuId) => {
     const el = document.getElementById(menuId);
@@ -611,6 +613,27 @@ function formatExamDate(dateText) {
   return d.toLocaleDateString('tr-TR');
 }
 
+function pdfSafeText(value) {
+  return String(value ?? '')
+    .replace(/İ/g, 'I')
+    .replace(/ı/g, 'i')
+    .replace(/Ş/g, 'S')
+    .replace(/ş/g, 's')
+    .replace(/Ğ/g, 'G')
+    .replace(/ğ/g, 'g')
+    .replace(/Ü/g, 'U')
+    .replace(/ü/g, 'u')
+    .replace(/Ö/g, 'O')
+    .replace(/ö/g, 'o')
+    .replace(/Ç/g, 'C')
+    .replace(/ç/g, 'c')
+    .replace(/Â|â/g, 'a')
+    .replace(/Î|î/g, 'i')
+    .replace(/Û|û/g, 'u')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function renderBransExamHistory() {
   const listEl = document.getElementById('bransExamSavedList');
   if (!listEl) return;
@@ -685,47 +708,47 @@ function indirTumBransDenemelerPdf() {
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.text('Brans Deneme Karnesi', marginLeft, y);
+  doc.text(pdfSafeText('Brans Deneme Karnesi'), marginLeft, y);
   y += 24;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
-  doc.text(`Ogrenci: ${studentName}`, marginLeft, y);
+  doc.text(pdfSafeText(`Ogrenci: ${studentName}`), marginLeft, y);
   y += 16;
-  doc.text(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`, marginLeft, y);
+  doc.text(pdfSafeText(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`), marginLeft, y);
   y += 22;
 
   records.forEach((item, index) => {
     ensureSpace(120);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text(`${index + 1}. ${item.examName || (item.lesson || 'Brans') + ' Denemesi'}`, marginLeft, y);
+    doc.text(pdfSafeText(`${index + 1}. ${item.examName || (item.lesson || 'Brans') + ' Denemesi'}`), marginLeft, y);
     y += 16;
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    doc.text(`Sinif: ${item.classLevel || '-'}`, marginLeft, y);
+    doc.text(pdfSafeText(`Sinif: ${item.classLevel || '-'}`), marginLeft, y);
     y += 14;
-    doc.text(`Ders: ${item.lesson || '-'}`, marginLeft, y);
+    doc.text(pdfSafeText(`Ders: ${item.lesson || '-'}`), marginLeft, y);
     y += 14;
-    doc.text(`Unite: ${item.unit || '-'}`, marginLeft, y);
+    doc.text(pdfSafeText(`Unite: ${item.unit || '-'}`), marginLeft, y);
     y += 14;
-    doc.text(`Tarih: ${formatExamDate(item.examDate)}`, marginLeft, y);
+    doc.text(pdfSafeText(`Tarih: ${formatExamDate(item.examDate)}`), marginLeft, y);
     y += 14;
 
     const details = `Soru: ${item.questionCount || 0}   Dogru: ${item.correct || 0}   Yanlis: ${item.wrong || 0}   Bos: ${item.blank || 0}`;
-    doc.text(details, marginLeft, y);
+    doc.text(pdfSafeText(details), marginLeft, y);
     y += 14;
 
     const topicSummary = item.topicStats && item.topicStats.length
       ? item.topicStats.map((t) => `${t.unit} / ${t.topic} (Y:${t.wrong}, B:${t.blank})`).join(' | ')
       : '-';
-    const topicLines = doc.splitTextToSize(`Konu Dagilimi: ${topicSummary}`, 510);
+    const topicLines = doc.splitTextToSize(pdfSafeText(`Konu Dagilimi: ${topicSummary}`), 510);
     doc.text(topicLines, marginLeft, y);
     y += topicLines.length * 12 + 4;
 
     doc.setFont('helvetica', 'bold');
-    doc.text(`Net: ${Number(item.net || 0).toFixed(2)}`, marginLeft, y);
+    doc.text(pdfSafeText(`Net: ${Number(item.net || 0).toFixed(2)}`), marginLeft, y);
     y += 18;
 
     doc.setDrawColor(220, 226, 232);
@@ -949,26 +972,26 @@ function indirTumGenelDenemelerPdf() {
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.text('Genel Deneme Karnesi', marginLeft, y);
+  doc.text(pdfSafeText('Genel Deneme Karnesi'), marginLeft, y);
   y += 24;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
-  doc.text(`Ogrenci: ${studentName}`, marginLeft, y);
+  doc.text(pdfSafeText(`Ogrenci: ${studentName}`), marginLeft, y);
   y += 16;
-  doc.text(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`, marginLeft, y);
+  doc.text(pdfSafeText(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`), marginLeft, y);
   y += 22;
 
   records.forEach((item, index) => {
     ensureSpace(130);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text(`${index + 1}. ${item.examName || 'Genel Deneme'}`, marginLeft, y);
+    doc.text(pdfSafeText(`${index + 1}. ${item.examName || 'Genel Deneme'}`), marginLeft, y);
     y += 16;
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    doc.text(`Tarih: ${formatExamDate(item.examDate)}`, marginLeft, y);
+    doc.text(pdfSafeText(`Tarih: ${formatExamDate(item.examDate)}`), marginLeft, y);
     y += 14;
 
     const breakdown = [
@@ -980,12 +1003,12 @@ function indirTumGenelDenemelerPdf() {
       `Din: ${Number(item.lessons?.Din?.net || 0).toFixed(2)}`
     ].join('   |   ');
 
-    const wrapped = doc.splitTextToSize(breakdown, 510);
+    const wrapped = doc.splitTextToSize(pdfSafeText(breakdown), 510);
     doc.text(wrapped, marginLeft, y);
     y += wrapped.length * 12 + 8;
 
     doc.setFont('helvetica', 'bold');
-    doc.text(`Toplam Net: ${Number(item.totalNet || 0).toFixed(2)}`, marginLeft, y);
+    doc.text(pdfSafeText(`Toplam Net: ${Number(item.totalNet || 0).toFixed(2)}`), marginLeft, y);
     y += 20;
 
     doc.setDrawColor(220, 226, 232);
@@ -1404,7 +1427,8 @@ function setStudentDetailButtonState(activeSection) {
   const buttonMap = {
     program: document.getElementById('studentInfoBtnProgram'),
     brans: document.getElementById('studentInfoBtnBrans'),
-    genel: document.getElementById('studentInfoBtnGenel')
+    genel: document.getElementById('studentInfoBtnGenel'),
+    kaynak: document.getElementById('studentInfoBtnKaynak')
   };
 
   Object.keys(buttonMap).forEach((key) => {
@@ -1419,14 +1443,16 @@ function setStudentDetailSection(section) {
   const programEl = document.getElementById('tabProgram');
   const bransEl = document.getElementById('tabBrans');
   const genelEl = document.getElementById('tabGenel');
+  const kaynakIlerlemeEl = document.getElementById('tabKaynakIlerleme');
   const noteEl = document.getElementById('studentInfoNote');
 
-  if (!detailEl || !programEl || !bransEl || !genelEl) return;
+  if (!detailEl || !programEl || !bransEl || !genelEl || !kaynakIlerlemeEl) return;
 
   detailEl.style.display = 'block';
   programEl.style.display = 'none';
   bransEl.style.display = 'none';
   genelEl.style.display = 'none';
+  kaynakIlerlemeEl.style.display = 'none';
 
   if (section === 'program') {
     programEl.style.display = 'block';
@@ -1437,6 +1463,9 @@ function setStudentDetailSection(section) {
   } else if (section === 'genel') {
     genelEl.style.display = 'block';
     if (noteEl) noteEl.textContent = 'Genel denemeler bölümü aşağıda açıldı. Ders bazlı sonuçları girip kaydedebilirsiniz.';
+  } else if (section === 'kaynak') {
+    kaynakIlerlemeEl.style.display = 'block';
+    if (noteEl) noteEl.textContent = 'Kaynak ve konu ilerleme bölümü aşağıda açıldı. Ders ve üniteye göre konu takibi yapabilirsiniz.';
   } else {
     if (noteEl) noteEl.textContent = 'Bu sayfa seçili öğrenci için hızlı geçiş ekranıdır. Buradaki butonlardan öğrenciye özel çalışma programı ve deneme alanlarına geçebilirsiniz.';
   }
@@ -1509,6 +1538,284 @@ function openStudentGenelPage() {
   setStudentDetailSection('genel');
   renderGenelExamHistory();
   updateGenelTotalNet();
+}
+
+let kaynakIlerlemeState = {
+  lesson: '',
+  data: {},
+  resourcePool: []
+};
+
+const KAYNAK_DURUM_OPTIONS = ['Konu Bitti', 'Çalışıyor', 'Konu Anlaşılmadı', 'Daha Sonra Yapılacak', 'Konuya Gelinmedi'];
+
+function getKaynakIlerlemeStorageKey(lesson) {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const studentKey = activeStudentId ? String(activeStudentId) : 'none';
+  return `kaynak_ilerleme_${email}_${studentKey}_${lesson || 'none'}`;
+}
+
+function readKaynakIlerlemeData(lesson) {
+  const key = getKaynakIlerlemeStorageKey(lesson);
+  const raw = localStorage.getItem(key);
+  try {
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed || typeof parsed !== 'object') {
+      return { data: {}, resourcePool: [] };
+    }
+    if (Object.prototype.hasOwnProperty.call(parsed, 'data') || Object.prototype.hasOwnProperty.call(parsed, 'resourcePool')) {
+      return {
+        data: parsed.data && typeof parsed.data === 'object' ? parsed.data : {},
+        resourcePool: Array.isArray(parsed.resourcePool) ? parsed.resourcePool : []
+      };
+    }
+    return { data: parsed, resourcePool: [] };
+  } catch (e) {
+    return { data: {}, resourcePool: [] };
+  }
+}
+
+function writeKaynakIlerlemeData(lesson, payload) {
+  const key = getKaynakIlerlemeStorageKey(lesson);
+  localStorage.setItem(key, JSON.stringify({
+    data: payload?.data || {},
+    resourcePool: Array.isArray(payload?.resourcePool) ? payload.resourcePool : []
+  }));
+}
+
+function saveKaynakIlerlemeState(showAlert = false) {
+  if (!kaynakIlerlemeState.lesson) {
+    if (showAlert) alert('Önce ders seçin.');
+    return;
+  }
+
+  writeKaynakIlerlemeData(kaynakIlerlemeState.lesson, kaynakIlerlemeState);
+  if (showAlert) alert('Kaynak/Konu ilerleme kaydı yapıldı.');
+}
+
+function kaynakTopicKey(unit, topic) {
+  return `${unit || 'GENEL'}|||${topic || ''}`;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function initKaynakIlerlemePanelForStudent(student) {
+  const classLevel = student && student.classLevel ? String(student.classLevel) : '8';
+  const classEl = document.getElementById('kaynakIlerlemeClass');
+  const lessonEl = document.getElementById('kaynakIlerlemeLesson');
+
+  if (classEl) classEl.value = `Sınıf ${classLevel}`;
+  if (!lessonEl) return;
+
+  lessonEl.innerHTML = '<option value="">Ders seçin</option>';
+  getLessonOptionsForClass(classLevel).forEach((lesson) => {
+    const opt = document.createElement('option');
+    opt.value = lesson;
+    opt.textContent = lesson;
+    lessonEl.appendChild(opt);
+  });
+
+  if (!lessonEl.value && lessonEl.options.length > 1) {
+    lessonEl.value = lessonEl.options[1].value;
+  }
+
+  onKaynakLessonChange();
+}
+
+function onKaynakLessonChange() {
+  saveKaynakIlerlemeState(false);
+
+  const lessonEl = document.getElementById('kaynakIlerlemeLesson');
+  if (!lessonEl) return;
+
+  const lesson = lessonEl.value || '';
+
+  if (!lesson) {
+    kaynakIlerlemeState = { lesson: '', data: {}, resourcePool: [] };
+    renderKaynakIlerlemeRows();
+    return;
+  }
+
+  kaynakIlerlemeState.lesson = lesson;
+  const stored = readKaynakIlerlemeData(lesson);
+  kaynakIlerlemeState.data = stored.data;
+  kaynakIlerlemeState.resourcePool = stored.resourcePool;
+  renderKaynakIlerlemeRows();
+}
+
+function renderKaynakIlerlemeRows() {
+  const container = document.getElementById('kaynakIlerlemeRows');
+  const barEl = document.getElementById('kaynakIlerlemeBar');
+  const metaLeft = document.getElementById('kaynakIlerlemeMetaLeft');
+  const metaRight = document.getElementById('kaynakIlerlemeMetaRight');
+  const lessonEl = document.getElementById('kaynakIlerlemeLesson');
+  if (!container || !barEl || !metaLeft || !metaRight || !lessonEl) return;
+
+  const lesson = lessonEl.value || '';
+  const classLevel = getActiveStudentClassLevel();
+
+  if (!lesson) {
+    container.innerHTML = 'Ders seçildikten sonra konu listesi burada görünecek.';
+    barEl.style.width = '0%';
+    metaLeft.textContent = 'Tamamlanan: 0 / 0';
+    metaRight.textContent = '%0';
+    return;
+  }
+
+  if (kaynakIlerlemeState.lesson !== lesson) {
+    saveKaynakIlerlemeState(false);
+    kaynakIlerlemeState.lesson = lesson;
+    const stored = readKaynakIlerlemeData(lesson);
+    kaynakIlerlemeState.data = stored.data;
+    kaynakIlerlemeState.resourcePool = stored.resourcePool;
+  }
+
+  const units = getUnitOptionsForLesson(classLevel, lesson);
+  const unitList = units.length ? units : ['GENEL'];
+
+  const unitBlocks = unitList.map((unit) => {
+    const unitTopics = getTopicOptionsForLesson(classLevel, lesson, unit === 'GENEL' ? '' : unit).filter((t) => t && t !== 'Konu seçiniz');
+    if (!unitTopics.length) return '';
+
+    const topicRows = unitTopics.map((topic) => {
+      const topicKey = kaynakTopicKey(unit, topic);
+      const entry = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', resources: [] };
+      const selectOptions = KAYNAK_DURUM_OPTIONS
+        .map((opt) => `<option value="${escapeHtml(opt)}" ${entry.status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`)
+        .join('');
+      const selectedResources = Array.isArray(entry.resources) ? entry.resources : [];
+      const chipsHtml = selectedResources.length
+        ? selectedResources.map((res, idx) => `<span class="progress-resource-chip">${escapeHtml(res)} <button type="button" class="progress-resource-remove" data-topic-key="${escapeHtml(topicKey)}" data-index="${idx}" onclick="removeKaynakResource(this)">x</button></span>`).join('')
+        : '<span class="progress-resource-muted">Kaynak yok</span>';
+      const rowPercent = entry.status === 'Konu Bitti' ? 100 : entry.status === 'Çalışıyor' ? 50 : 0;
+
+      return `
+      <div class="progress-row">
+        <div class="progress-topic">${escapeHtml(topic)}</div>
+        <div>
+          <select class="input-field" data-topic-key="${escapeHtml(topicKey)}" onchange="onKaynakStatusChange(this)">${selectOptions}</select>
+        </div>
+        <div class="progress-resource-cell">
+          <div class="progress-resource-list">${chipsHtml}</div>
+          <div class="progress-resource-inline">
+            <input class="input-field progress-resource-input" type="text" placeholder="Kaynak adı" data-topic-key="${escapeHtml(topicKey)}" onkeydown="if(event.key==='Enter'){event.preventDefault();addKaynakResource(this);}">
+            <button type="button" class="btn-action btn-coral progress-resource-add" onclick="addKaynakResource(this)">Ekle</button>
+          </div>
+        </div>
+        <div style="font-weight:700; color:#475569;">%${rowPercent}</div>
+      </div>
+    `;
+    }).join('');
+
+    return `
+    <div class="progress-unit-block">
+      <div class="progress-unit-title">${escapeHtml(unit)}</div>
+      ${topicRows}
+    </div>
+  `;
+  }).filter(Boolean).join('');
+
+  if (!unitBlocks) {
+    container.innerHTML = 'Bu seçim için konu bulunamadı.';
+    barEl.style.width = '0%';
+    metaLeft.textContent = 'Tamamlanan: 0 / 0';
+    metaRight.textContent = '%0';
+    return;
+  }
+
+  container.innerHTML = unitBlocks;
+
+  const allTopicKeys = unitList.flatMap((unit) => {
+    return getTopicOptionsForLesson(classLevel, lesson, unit === 'GENEL' ? '' : unit)
+      .filter((t) => t && t !== 'Konu seçiniz')
+      .map((topic) => kaynakTopicKey(unit, topic));
+  });
+  updateKaynakProgressMetrics(allTopicKeys);
+}
+
+function onKaynakStatusChange(selectEl) {
+  const topicKey = selectEl?.dataset?.topicKey || '';
+  if (!topicKey) return;
+
+  const current = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', resources: [] };
+  current.status = selectEl.value;
+  if (!Array.isArray(current.resources)) current.resources = [];
+
+  kaynakIlerlemeState.data[topicKey] = current;
+  saveKaynakIlerlemeState(false);
+  renderKaynakIlerlemeRows();
+}
+
+function addKaynakResource(triggerEl) {
+  const parent = triggerEl?.closest('.progress-resource-inline');
+  const inputEl = parent ? parent.querySelector('input[data-topic-key]') : null;
+  const topicKey = inputEl?.dataset?.topicKey || '';
+  const resource = (inputEl?.value || '').trim();
+  if (!topicKey || !resource) return;
+
+  const current = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', resources: [] };
+  if (!Array.isArray(current.resources)) current.resources = [];
+  if (!current.resources.includes(resource)) current.resources.push(resource);
+
+  kaynakIlerlemeState.data[topicKey] = current;
+  if (!kaynakIlerlemeState.resourcePool.includes(resource)) {
+    kaynakIlerlemeState.resourcePool.push(resource);
+  }
+
+  inputEl.value = '';
+  saveKaynakIlerlemeState(false);
+  renderKaynakIlerlemeRows();
+}
+
+function removeKaynakResource(btnEl) {
+  const topicKey = btnEl?.dataset?.topicKey || '';
+  const index = Number(btnEl?.dataset?.index || -1);
+  if (!topicKey || Number.isNaN(index) || index < 0) return;
+
+  const current = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', resources: [] };
+  if (!Array.isArray(current.resources)) current.resources = [];
+
+  current.resources.splice(index, 1);
+  kaynakIlerlemeState.data[topicKey] = current;
+  saveKaynakIlerlemeState(false);
+  renderKaynakIlerlemeRows();
+}
+
+function updateKaynakProgressMetrics(topicKeys) {
+  const barEl = document.getElementById('kaynakIlerlemeBar');
+  const metaLeft = document.getElementById('kaynakIlerlemeMetaLeft');
+  const metaRight = document.getElementById('kaynakIlerlemeMetaRight');
+  if (!barEl || !metaLeft || !metaRight) return;
+
+  const total = topicKeys.length;
+  const completed = topicKeys.filter((topicKey) => {
+    const e = kaynakIlerlemeState.data[topicKey];
+    return e && e.status === 'Konu Bitti';
+  }).length;
+
+  const percent = total ? Math.round((completed / total) * 100) : 0;
+  barEl.style.width = `${percent}%`;
+  metaLeft.textContent = `Tamamlanan: ${completed} / ${total}`;
+  metaRight.textContent = `%${percent}`;
+}
+
+function openStudentKaynakIlerlemePage() {
+  const students = getStoredOgrenciler();
+  const student = students.find(s => s.id === activeStudentId);
+  if (!student) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  kaynakIlerlemeState = { lesson: '', data: {}, resourcePool: [] };
+  setStudentDetailSection('kaynak');
+  initKaynakIlerlemePanelForStudent(student);
 }
 
 function ogrenciProgramunaGit(card) {
