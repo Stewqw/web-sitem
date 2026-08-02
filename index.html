@@ -270,6 +270,25 @@
       font-size: 0.86rem;
       font-weight: 600;
     }
+    .exam-history-wrap { margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 18px; }
+    .exam-history-title { font-size: 1rem; font-weight: 800; color: var(--color-dark-teal); margin-bottom: 10px; }
+    .exam-history-list { display: grid; gap: 10px; }
+    .exam-history-item {
+      background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+      border: 1px solid #e2e8f0;
+      border-left: 5px solid var(--color-coral);
+      border-radius: 14px;
+      padding: 12px 14px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+    .exam-history-item strong { color: #102040; }
+    .exam-history-meta { font-size: 0.82rem; color: #64748b; margin-top: 3px; }
+    .exam-history-net { justify-self: end; text-align: right; }
+    .exam-history-net .value { color: #ff8800; font-size: 1.4rem; font-weight: 900; line-height: 1; }
+    .exam-history-empty { color: #64748b; font-size: 0.86rem; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 12px; }
 
     @media(max-width: 900px) {
       .landing-container, .hero-section, .grid-dashboard { grid-template-columns: 1fr; display: flex; flex-direction: column; }
@@ -679,6 +698,13 @@
             </div>
             <div style="display:flex; justify-content:flex-end;">
               <button class="btn-action btn-coral" style="padding: 12px 24px;" onclick="kaydetBransDenemesi()">Kaydet</button>
+            </div>
+
+            <div class="exam-history-wrap">
+              <div class="exam-history-title">Kaydedilen Branş Denemeleri</div>
+              <div id="bransExamSavedList" class="exam-history-list">
+                <div class="exam-history-empty">Henüz kayıt yok.</div>
+              </div>
             </div>
           </div>
         </div>

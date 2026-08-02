@@ -457,6 +457,120 @@ function updateBransExamNet() {
   if (netEl) netEl.textContent = net.toFixed(2);
 }
 
+function getBransExamStorageKey() {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const studentKey = activeStudentId ? String(activeStudentId) : 'none';
+  return `brans_exam_${email}_${studentKey}`;
+}
+
+function getStoredBransExams() {
+  const key = getBransExamStorageKey();
+  const raw = localStorage.getItem(key);
+  try {
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function setStoredBransExams(records) {
+  const key = getBransExamStorageKey();
+  localStorage.setItem(key, JSON.stringify(records));
+}
+
+function formatExamDate(dateText) {
+  if (!dateText) return '-';
+  const d = new Date(dateText);
+  if (Number.isNaN(d.getTime())) return dateText;
+  return d.toLocaleDateString('tr-TR');
+}
+
+function renderBransExamHistory() {
+  const listEl = document.getElementById('bransExamSavedList');
+  if (!listEl) return;
+
+  const records = getStoredBransExams();
+  if (!records.length) {
+    listEl.innerHTML = '<div class="exam-history-empty">Henüz kayıt yok.</div>';
+    return;
+  }
+
+  listEl.innerHTML = records.map((item) => {
+    const title = item.examName || `${item.lesson || 'Ders'} Denemesi`;
+    const meta = `${item.lesson || '-'} · ${formatExamDate(item.examDate)}`;
+    const details = `Soru: ${item.questionCount} · D: ${item.correct} · Y: ${item.wrong} · B: ${item.blank}`;
+    return `
+      <div class="exam-history-item">
+        <div>
+          <strong>${title}</strong>
+          <div class="exam-history-meta">${meta}</div>
+        </div>
+        <div class="exam-history-meta">${details}</div>
+        <div class="exam-history-net">
+          <div class="value">${Number(item.net || 0).toFixed(2)}</div>
+          <div class="exam-history-meta">Net</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function kaydetBransDenemesi() {
+  if (!activeStudentId) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  const lesson = document.getElementById('bransExamLesson')?.value || '';
+  const examDate = document.getElementById('bransExamDate')?.value || '';
+  const examName = document.getElementById('bransExamName')?.value.trim() || '';
+  const questionCount = Number(document.getElementById('bransExamQuestionCount')?.value) || 0;
+  const correct = Number(document.getElementById('bransExamCorrect')?.value) || 0;
+  const wrong = Number(document.getElementById('bransExamWrong')?.value) || 0;
+  const blank = Number(document.getElementById('bransExamBlank')?.value) || 0;
+
+  if (!lesson || !examDate || !examName) {
+    alert('Lütfen ders, deneme tarihi ve deneme adını doldurun.');
+    return;
+  }
+
+  if (questionCount <= 0) {
+    alert('Soru sayısı 0’dan büyük olmalı.');
+    return;
+  }
+
+  if (correct + wrong + blank > questionCount) {
+    alert('Doğru + yanlış + boş toplamı soru sayısından büyük olamaz.');
+    return;
+  }
+
+  const net = correct - wrong * 0.25;
+  const records = getStoredBransExams();
+  records.unshift({
+    id: Date.now(),
+    lesson,
+    examDate,
+    examName,
+    questionCount,
+    correct,
+    wrong,
+    blank,
+    net,
+    savedAt: Date.now()
+  });
+
+  setStoredBransExams(records);
+  renderBransExamHistory();
+
+  document.getElementById('bransExamQuestionCount').value = '';
+  document.getElementById('bransExamCorrect').value = '';
+  document.getElementById('bransExamWrong').value = '';
+  document.getElementById('bransExamBlank').value = '';
+  document.getElementById('bransExamName').value = '';
+  const netEl = document.getElementById('bransExamNet');
+  if (netEl) netEl.textContent = '0.00';
+}
+
 function cikisYap() {
   // Oturum kapatma sırasında token temizlenir
   localStorage.removeItem('koclukToken');
@@ -890,6 +1004,7 @@ function openStudentBransPage() {
   }
 
   setStudentDetailSection('brans');
+  renderBransExamHistory();
 }
 
 function openStudentGenelPage() {
