@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$conns=Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue; if($conns){$procIds=$conns | Select-Object -ExpandProperty OwningProcess -Unique; foreach($procId in $procIds){Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue}}; node server.js\""
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
