@@ -2245,6 +2245,7 @@ function renderProgramForStudent(student) {
   const info = document.getElementById('programStudentInfo');
   const grid = document.getElementById('programDaysGrid');
   const addTaskBtn = document.getElementById('programAddTaskBtn');
+  const daySelectEl = document.getElementById('programTaskDaySelect');
 
   if (header) header.textContent = `📅 ${student.name} Programı`;
   if (info) info.textContent = `${student.name} için haftalık plan`;
@@ -2264,16 +2265,16 @@ function renderProgramForStudent(student) {
       card.innerHTML = `
         <div class="day-header">${labels[index]}</div>
         ${tasks.length > 0 ? tasks.map((task, taskIndex) => formatTaskHtml(task, key, taskIndex)).join('') : '<p class="day-empty">Boş</p>'}
-        <div class="day-footer">
-          <button class="day-add-button" onclick="event.stopPropagation(); openTaskModal('${key}')">+\nGörev\nEkle</button>
-        </div>
       `;
       grid.appendChild(card);
     });
   }
 
   if (addTaskBtn) {
-    addTaskBtn.onclick = () => openTaskModal('pzt');
+    addTaskBtn.onclick = () => {
+      const selectedDay = daySelectEl && daySelectEl.value ? daySelectEl.value : 'pzt';
+      openTaskModal(selectedDay);
+    };
   }
 
   updateProgramCalendarHeader();
@@ -2626,7 +2627,6 @@ function formatTaskHtml(task, dayKey, taskIndex) {
       <div class="task-card-type">${type}</div>
       <div class="task-card-footer">
         <span class="task-card-badge">${source}</span>
-        <span class="task-card-status">Yapılmadı</span>
       </div>
     </div>
   `;
