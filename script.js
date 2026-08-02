@@ -255,6 +255,67 @@ function openLegalModal(type) {
   modalAc('legalModal');
 }
 
+function scrollToLandingSection(sectionId) {
+  const target = document.getElementById(sectionId);
+  if (!target) return;
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function toggleLandingFaq(buttonEl) {
+  const item = buttonEl && buttonEl.closest('.faq-item');
+  if (!item) return;
+  item.classList.toggle('open');
+}
+
+function submitLandingApplyForm(event) {
+  if (event) event.preventDefault();
+
+  const nameEl = document.getElementById('landingApplyName');
+  const emailEl = document.getElementById('landingApplyEmail');
+  const phoneEl = document.getElementById('landingApplyPhone');
+  const levelEl = document.getElementById('landingApplyLevel');
+  const noteEl = document.getElementById('landingApplyNote');
+  const successEl = document.getElementById('landingApplySuccess');
+
+  if (!nameEl || !emailEl || !phoneEl || !levelEl || !successEl) return;
+
+  const name = nameEl.value.trim();
+  const email = emailEl.value.trim();
+  const phoneDigits = phoneEl.value.replace(/\D/g, '');
+  const level = levelEl.value.trim();
+
+  if (!name || name.split(/\s+/).length < 2) {
+    alert('Lütfen ad ve soyad girin.');
+    nameEl.focus();
+    return;
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    alert('Lütfen geçerli bir e-posta adresi girin.');
+    emailEl.focus();
+    return;
+  }
+
+  if (phoneDigits.length < 10) {
+    alert('Lütfen geçerli bir telefon numarası girin.');
+    phoneEl.focus();
+    return;
+  }
+
+  if (!level) {
+    alert('Lütfen seviye seçin.');
+    levelEl.focus();
+    return;
+  }
+
+  successEl.style.display = 'block';
+  if (noteEl) noteEl.value = '';
+  nameEl.value = '';
+  emailEl.value = '';
+  phoneEl.value = '';
+  levelEl.value = '';
+}
+
 function refreshRegisterSpamGuards() {
   registerFormOpenedAt = Date.now();
   const honeypotEl = document.getElementById('regWebsite');
