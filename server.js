@@ -13,6 +13,7 @@ const USERS_FILE = path.join(__dirname, 'users.json');
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
+app.use(express.static(__dirname));
 
 function readUsers() {
   try {
@@ -144,10 +145,11 @@ app.post('/api/users/:id/admin', (req, res) => {
   }
 });
 
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 app.listen(PORT, () => {
   console.log(`Auth server running on http://localhost:${PORT}`);
   ensureInitialAdmin();
-});
-app.get("/", (req, res) => {
-    res.send("Sunucu çalışıyor.");
 });
