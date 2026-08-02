@@ -1,16 +1,17 @@
 (function () {
   const firebaseConfig = {
-    apiKey: "YOUR_FIREBASE_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyAnLmvL1pXi5UiuD-ojA_ICxrOCjpkI55I",
+    authDomain: "parabol-kocluk.firebaseapp.com",
+    projectId: "parabol-kocluk",
+    storageBucket: "parabol-kocluk.firebasestorage.app",
+    messagingSenderId: "252912880544",
+    appId: "1:252912880544:web:5b87683ab2191bac18b2c5",
+    measurementId: "G-RC8PYC03W7"
   };
 
   const integrationSettings = {
     // true yaparsan kayit/giris/sifre sifirlama formlari Firebase Auth kullanir.
-    useFirebaseAuth: false,
+    useFirebaseAuth: true,
     // true ise anasayfa basvuru formu Firestore'a kaydedilir.
     useFirestoreForms: true
   };
