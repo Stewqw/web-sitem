@@ -1175,6 +1175,34 @@ function pdfSafeText(value) {
     .trim();
 }
 
+let pdfLogoDataUrlCache = null;
+
+async function getPdfLogoDataUrl() {
+  if (pdfLogoDataUrlCache) return pdfLogoDataUrlCache;
+  try {
+    const response = await fetch('icons/icon.png', { cache: 'no-store' });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    pdfLogoDataUrlCache = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Logo okunamadi'));
+      reader.readAsDataURL(blob);
+    });
+    return pdfLogoDataUrlCache;
+  } catch (error) {
+    return null;
+  }
+}
+
+function normalizeFileName(value) {
+  return String(value || 'rapor')
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9\-]/g, '')
+    .slice(0, 60) || 'rapor';
+}
+
 function renderBransExamHistory() {
   const listEl = document.getElementById('bransExamSavedList');
   if (!listEl) return;
@@ -1198,6 +1226,7 @@ function renderBransExamHistory() {
           <strong>${title}</strong>
           <div class="exam-history-meta">${meta}</div>
           <div class="exam-history-actions">
+            <button type="button" class="exam-delete-btn exam-pdf-btn" onclick="indirBransExamPdf(${item.id})">PDF İndir</button>
             <button type="button" class="exam-delete-btn" onclick="deleteBransExam(${item.id})">Sil</button>
           </div>
         </div>
@@ -1209,6 +1238,235 @@ function renderBransExamHistory() {
       </div>
     `;
   }).join('');
+}
+
+async function indirBransExamPdf(recordId) {
+  const records = getStoredBransExams();
+  const item = records.find((r) => String(r.id) === String(recordId));
+  if (!item) {
+    alert('PDF için deneme kaydı bulunamadı.');
+    return;
+  }
+
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert('PDF kütüphanesi yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin.');
+    return;
+  }
+
+  const student = getStoredOgrenciler().find((s) => s.id === activeStudentId);
+  const studentName = student && student.name ? student.name : 'Ogrenci';
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('l', 'pt', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  const darkBlue = [18, 47, 92];
+  const softLine = [224, 232, 242];
+  const logoDataUrl = await getPdfLogoDataUrl();
+
+  let y = margin;
+  const ensureSpace = (needed) => {
+    if (y + needed > pageHeight - margin) {
+      doc.addPage();
+      y = margin;
+    }
+  };
+
+  const drawSectionTitle = (title) => {
+    ensureSpace(30);
+    doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+    doc.roundedRect(margin, y, 170, 22, 10, 10, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11.5);
+    doc.text(pdfSafeText(title), margin + 12, y + 15);
+    y += 30;
+  };
+
+  const drawTable = (columns, rows, options = {}) => {
+    const headerHeight = options.headerHeight || 24;
+    const rowMinHeight = options.rowMinHeight || 24;
+    const fontSize = options.fontSize || 9;
+
+    ensureSpace(headerHeight + rowMinHeight + 6);
+
+    let x = margin;
+    doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+    doc.setDrawColor(softLine[0], softLine[1], softLine[2]);
+    doc.setLineWidth(1.1);
+    columns.forEach((col) => {
+      doc.rect(x, y, col.width, headerHeight, 'FD');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.text(pdfSafeText(col.label), x + col.width / 2, y + 15, { align: 'center' });
+      x += col.width;
+    });
+    y += headerHeight;
+
+    rows.forEach((row) => {
+      const wrappedCells = columns.map((col) => {
+        const text = row[col.key] === undefined || row[col.key] === null ? '-' : String(row[col.key]);
+        return doc.splitTextToSize(pdfSafeText(text), Math.max(18, col.width - 8));
+      });
+      const maxLines = wrappedCells.reduce((max, lines) => Math.max(max, lines.length || 1), 1);
+      const rowHeight = Math.max(rowMinHeight, maxLines * (fontSize + 2) + 8);
+
+      ensureSpace(rowHeight + 2);
+
+      let cellX = margin;
+      columns.forEach((col, colIndex) => {
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(softLine[0], softLine[1], softLine[2]);
+        doc.setLineWidth(1.1);
+        doc.rect(cellX, y, col.width, rowHeight, 'FD');
+
+        const lines = wrappedCells[colIndex];
+        const lineHeight = fontSize + 2;
+        const textTop = y + 6;
+        doc.setTextColor(20, 28, 45);
+        doc.setFont('helvetica', col.bold ? 'bold' : 'normal');
+        doc.setFontSize(fontSize);
+        lines.forEach((line, lineIdx) => {
+          doc.text(line, cellX + 5, textTop + lineIdx * lineHeight);
+        });
+
+        cellX += col.width;
+      });
+
+      y += rowHeight;
+    });
+  };
+
+  doc.setDrawColor(255, 161, 38);
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(margin, y, contentWidth, 96, 12, 12, 'FD');
+
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, 'PNG', margin + 12, y + 14, 92, 68, undefined, 'FAST');
+    } catch (error) {
+      doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('PARABOL KOCLUK', margin + 18, y + 48);
+    }
+  } else {
+    doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('PARABOL KOCLUK', margin + 18, y + 48);
+  }
+
+  doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(24);
+  doc.text(pdfSafeText('BRANS DENEME KARNESI'), margin + 155, y + 46);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(107, 114, 128);
+  doc.text(pdfSafeText('Tek deneme raporu'), margin + 155, y + 63);
+  doc.setDrawColor(softLine[0], softLine[1], softLine[2]);
+  doc.setLineWidth(0.8);
+  doc.line(margin + 155, y + 70, margin + 420, y + 70);
+
+  const rightInfoX = pageWidth - 250;
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+  doc.text('Ogrenci', rightInfoX, y + 30);
+  doc.text('Rapor Tarihi', rightInfoX, y + 56);
+  doc.setFont('helvetica', 'normal');
+  doc.text(pdfSafeText(studentName), rightInfoX + 92, y + 30);
+  doc.text(pdfSafeText(formatExamDate(item.examDate || new Date().toLocaleDateString('tr-TR'))), rightInfoX + 92, y + 56);
+
+  y += 110;
+
+  drawSectionTitle('1. DENEME OZETI');
+
+  const summaryColumns = [
+    { key: 'examName', label: 'DENEME', width: 125, bold: true },
+    { key: 'classLevel', label: 'SINIF', width: 52, bold: false },
+    { key: 'lesson', label: 'DERS', width: 80, bold: false },
+    { key: 'unit', label: 'UNITE', width: 190, bold: false },
+    { key: 'examDate', label: 'TARIH', width: 78, bold: false },
+    { key: 'questionCount', label: 'SORU', width: 58, bold: false },
+    { key: 'correct', label: 'DOGRU', width: 58, bold: false },
+    { key: 'wrong', label: 'YANLIS', width: 58, bold: false },
+    { key: 'blank', label: 'BOS', width: 50, bold: false },
+    { key: 'net', label: 'NET', width: 64, bold: true }
+  ];
+
+  const summaryRows = [{
+    examName: item.examName || `${item.lesson || 'Brans'} Denemesi`,
+    classLevel: item.classLevel || '-',
+    lesson: item.lesson || '-',
+    unit: item.unit || '-',
+    examDate: formatExamDate(item.examDate),
+    questionCount: String(item.questionCount || 0),
+    correct: String(item.correct || 0),
+    wrong: String(item.wrong || 0),
+    blank: String(item.blank || 0),
+    net: Number(item.net || 0).toFixed(2)
+  }];
+
+  drawTable(summaryColumns, summaryRows, { headerHeight: 22, rowMinHeight: 42, fontSize: 9 });
+
+  y += 14;
+  drawSectionTitle('YANLIS VE BOS SORU DAGILIMI');
+
+  const topicRowsSource = Array.isArray(item.topicStats) && item.topicStats.length
+    ? item.topicStats
+    : [{ unit: '-', topic: 'Konu girilmedi', wrong: item.wrong || 0, blank: item.blank || 0 }];
+
+  const totalQuestion = Math.max(1, Number(item.questionCount || 0));
+  let totalWrong = 0;
+  let totalBlank = 0;
+
+  const topicRows = topicRowsSource.map((topicItem) => {
+    const wrong = Number(topicItem.wrong || 0);
+    const blank = Number(topicItem.blank || 0);
+    totalWrong += wrong;
+    totalBlank += blank;
+    const topicName = topicItem.unit && topicItem.unit !== '-'
+      ? `${topicItem.unit} / ${topicItem.topic || '-'}`
+      : (topicItem.topic || '-');
+
+    return {
+      topic: topicName,
+      wrongCount: String(wrong),
+      wrongRate: `%${((wrong / totalQuestion) * 100).toFixed(0)}`,
+      blankCount: String(blank),
+      blankRate: `%${((blank / totalQuestion) * 100).toFixed(0)}`,
+      totalTracked: String(wrong + blank)
+    };
+  });
+
+  topicRows.push({
+    topic: 'TOPLAM',
+    wrongCount: String(totalWrong),
+    wrongRate: `%${((totalWrong / totalQuestion) * 100).toFixed(0)}`,
+    blankCount: String(totalBlank),
+    blankRate: `%${((totalBlank / totalQuestion) * 100).toFixed(0)}`,
+    totalTracked: String(totalWrong + totalBlank)
+  });
+
+  const topicColumns = [
+    { key: 'topic', label: 'KONU', width: 265, bold: false },
+    { key: 'wrongCount', label: 'YANLIS SAYI', width: 100, bold: true },
+    { key: 'wrongRate', label: 'YANLIS ORAN (%)', width: 110, bold: true },
+    { key: 'blankCount', label: 'BOS SAYI', width: 100, bold: true },
+    { key: 'blankRate', label: 'BOS ORAN (%)', width: 110, bold: true },
+    { key: 'totalTracked', label: 'TOPLAM SORU', width: 128, bold: true }
+  ];
+
+  drawTable(topicColumns, topicRows, { headerHeight: 22, rowMinHeight: 30, fontSize: 9 });
+
+  const safeStudent = normalizeFileName(studentName);
+  const safeExam = normalizeFileName(item.examName || `${item.lesson || 'brans'}-deneme`);
+  doc.save(`${safeStudent}_${safeExam}_karnesi.pdf`);
 }
 
 function deleteBransExam(recordId) {
