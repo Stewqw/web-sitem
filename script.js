@@ -2280,7 +2280,7 @@ function renderProgramForStudent(student) {
   updateProgramCalendarHeader();
 }
 
-function exportProgramPdf() {
+async function exportProgramPdf() {
   const student = getStoredOgrenciler().find(s => s.id === activeStudentId);
   if (!student) {
     alert('Önce bir öğrenci seçin.');
@@ -2293,35 +2293,96 @@ function exportProgramPdf() {
     return;
   }
 
-  html2canvas(exportArea, {
-    scale: 2,
-    backgroundColor: '#ffffff',
-    useCORS: true
-  }).then(canvas => {
+  const exportClone = exportArea.cloneNode(true);
+  exportClone.id = 'programExportAreaClone';
+  exportClone.style.position = 'fixed';
+  exportClone.style.left = '-10000px';
+  exportClone.style.top = '0';
+  exportClone.style.width = `${exportArea.offsetWidth}px`;
+  exportClone.style.zIndex = '-1';
+  exportClone.style.background = '#ffffff';
+
+  const clonePdfBtn = exportClone.querySelector('#programExportPdfBtn');
+  const cloneDaySelect = exportClone.querySelector('#programTaskDaySelect');
+  const cloneAddBtn = exportClone.querySelector('#programAddTaskBtn');
+  const cloneNav = exportClone.querySelector('.program-calendar-nav');
+  if (clonePdfBtn) clonePdfBtn.style.display = 'none';
+  if (cloneDaySelect) cloneDaySelect.style.display = 'none';
+  if (cloneAddBtn) cloneAddBtn.style.display = 'none';
+  if (cloneNav) cloneNav.style.display = 'none';
+
+  document.body.appendChild(exportClone);
+
+  try {
+    const dayColumns = Array.from(exportClone.querySelectorAll('.day-column'));
+    const maxTaskCount = dayColumns.reduce((max, col) => {
+      const count = col.querySelectorAll('.task-card').length;
+      return Math.max(max, count);
+    }, 0);
+
+    const tasksPerPage = 2;
+    const pageCount = Math.max(1, Math.ceil(maxTaskCount / tasksPerPage));
+
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF('l', 'pt', 'a4');
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
 
-    const imageData = canvas.toDataURL('image/png');
-    const imageWidth = pdfWidth;
-    const imageHeight = (canvas.height * pdfWidth) / canvas.width;
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+      const start = pageIndex * tasksPerPage;
+      const end = start + tasksPerPage;
 
-    let position = 0;
-    pdf.addImage(imageData, 'PNG', 0, position, imageWidth, imageHeight);
+      dayColumns.forEach((col) => {
+        const cards = Array.from(col.querySelectorAll('.task-card'));
+        let visibleCount = 0;
 
-    while (imageHeight + position > pdfHeight) {
-      position -= pdfHeight;
-      pdf.addPage();
-      pdf.addImage(imageData, 'PNG', 0, position, imageWidth, imageHeight);
+        cards.forEach((card, idx) => {
+          const visible = idx >= start && idx < end;
+          card.style.display = visible ? '' : 'none';
+          if (visible) visibleCount += 1;
+        });
+
+        let emptyEl = col.querySelector('.day-empty');
+        if (visibleCount === 0) {
+          if (!emptyEl) {
+            emptyEl = document.createElement('p');
+            emptyEl.className = 'day-empty';
+            emptyEl.textContent = 'Boş';
+            col.appendChild(emptyEl);
+          }
+          emptyEl.style.display = 'block';
+        } else if (emptyEl) {
+          emptyEl.style.display = 'none';
+        }
+      });
+
+      const canvas = await html2canvas(exportClone, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true
+      });
+
+      const imageData = canvas.toDataURL('image/png');
+      const widthRatio = pdfWidth / canvas.width;
+      const heightRatio = pdfHeight / canvas.height;
+      const ratio = Math.min(widthRatio, heightRatio);
+      const imageWidth = canvas.width * ratio;
+      const imageHeight = canvas.height * ratio;
+      const x = (pdfWidth - imageWidth) / 2;
+      const y = (pdfHeight - imageHeight) / 2;
+
+      if (pageIndex > 0) pdf.addPage();
+      pdf.addImage(imageData, 'PNG', x, y, imageWidth, imageHeight);
     }
 
     const filename = `${student.name.replace(/\s+/g, '_')}_Haftalik_Program.pdf`;
     pdf.save(filename);
-  }).catch(err => {
+  } catch (err) {
     console.error(err);
     alert('PDF oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.');
-  });
+  } finally {
+    exportClone.remove();
+  }
 }
 
 let pendingTaskDayKey = 'pzt';
