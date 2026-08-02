@@ -951,6 +951,27 @@ function sekmeAcs(sekmeAd) {
     markMenuActive('menu-unite-konu');
     initUniteKonuPanel();
   }
+
+  closeMobileSidebar();
+}
+
+function toggleMobileSidebar() {
+  const appLayout = document.querySelector('#dashboardApp .app-layout');
+  const toggleButton = document.querySelector('.mobile-sidebar-toggle');
+  if (!appLayout) return;
+
+  const nextState = !appLayout.classList.contains('sidebar-open');
+  appLayout.classList.toggle('sidebar-open', nextState);
+  if (toggleButton) toggleButton.setAttribute('aria-expanded', String(nextState));
+}
+
+function closeMobileSidebar() {
+  const appLayout = document.querySelector('#dashboardApp .app-layout');
+  const toggleButton = document.querySelector('.mobile-sidebar-toggle');
+  if (!appLayout) return;
+
+  appLayout.classList.remove('sidebar-open');
+  if (toggleButton) toggleButton.setAttribute('aria-expanded', 'false');
 }
 
 function updateBransExamNet() {
