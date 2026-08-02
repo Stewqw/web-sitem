@@ -4791,6 +4791,7 @@ function renderStoredOgrenciler() {
     ];
 
     card.innerHTML = `
+      <button type="button" class="delete-student-btn" aria-label="Öğrenciyi sil" title="Öğrenciyi sil">🗑️</button>
       <div style="display: flex; align-items: center; gap: 10px;">
         <div style="width: 32px; height: 32px; background: var(--color-dark-teal); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800;">${student.name.charAt(0).toUpperCase()}</div>
         <strong style="font-size: 0.9rem;">${student.name}</strong>
@@ -4804,14 +4805,45 @@ function renderStoredOgrenciler() {
       </div>
     `;
     const editBtn = card.querySelector('.edit-student-btn');
+    const deleteBtn = card.querySelector('.delete-student-btn');
     if (editBtn) {
       editBtn.addEventListener('click', e => {
         e.stopPropagation();
         openStudentEditModal(student.id);
       });
     }
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        deleteStudentFromCard(student.id);
+      });
+    }
     container.appendChild(card);
   });
+}
+
+function deleteStudentFromCard(studentId) {
+  const students = getStoredOgrenciler();
+  const student = students.find(s => s.id.toString() === studentId.toString());
+  if (!student) {
+    alert('Öğrenci bulunamadı.');
+    return;
+  }
+
+  if (!confirm(`${student.name} adlı öğrenciyi silmek istiyor musunuz?`)) {
+    return;
+  }
+
+  const updatedStudents = students.filter(s => s.id.toString() !== studentId.toString());
+  setStoredOgrenciler(updatedStudents);
+
+  if (activeStudentId && activeStudentId.toString() === studentId.toString()) {
+    activeStudentId = null;
+    ogrenciPanelKapat();
+  }
+
+  renderStoredOgrenciler();
+  updateUserCountLabel();
 }
 
 function ogrenciPanelKapat() {
