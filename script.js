@@ -595,6 +595,14 @@ function isValidTrDate(dateText) {
   return testDate.getFullYear() === year && testDate.getMonth() === (month - 1) && testDate.getDate() === day;
 }
 
+function getTodayTrDate() {
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  return `${day}.${month}.${year}`;
+}
+
 function getBransExamStorageKey() {
   const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
   const studentKey = activeStudentId ? String(activeStudentId) : 'none';
@@ -619,9 +627,14 @@ function setStoredBransExams(records) {
 function formatExamDate(dateText) {
   if (!dateText) return '-';
   if (/^\d{2}\.\d{2}\.\d{4}$/.test(dateText)) return dateText;
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateText || '').trim());
+  if (isoMatch) return `${isoMatch[3]}.${isoMatch[2]}.${isoMatch[1]}`;
   const d = new Date(dateText);
   if (Number.isNaN(d.getTime())) return dateText;
-  return d.toLocaleDateString('tr-TR');
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}.${month}.${year}`;
 }
 
 function pdfSafeText(value) {
@@ -2106,7 +2119,7 @@ function renderKaynakIlerlemeRows() {
       const topicKey = kaynakTopicKey(unit, topic);
       const entry = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', doneResources: [] };
       if (!Array.isArray(entry.doneResources)) entry.doneResources = [];
-      const finishedDate = entry.finishedDate ? String(entry.finishedDate) : '';
+      const finishedDate = entry.finishedDate ? formatExamDate(String(entry.finishedDate)) : '';
       const selectOptions = KAYNAK_DURUM_OPTIONS
         .map((opt) => `<option value="${escapeHtml(opt)}" ${entry.status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`)
         .join('');
@@ -2125,7 +2138,7 @@ function renderKaynakIlerlemeRows() {
         <div class="progress-topic">${escapeHtml(topic)}</div>
         <div>
           <div style="display:flex; align-items:center; gap:8px;">
-            ${entry.status === 'Konu Bitti' ? `<input type="date" class="input-field" value="${escapeHtml(finishedDate)}" data-topic-key="${escapeHtml(topicKey)}" onchange="onKaynakFinishedDateChange(this)" style="max-width:138px; margin-bottom:0; padding:8px 10px; font-size:0.78rem;">` : ''}
+            ${entry.status === 'Konu Bitti' ? `<input type="text" class="input-field" value="${escapeHtml(finishedDate)}" placeholder="GG.AA.YYYY" maxlength="10" oninput="formatDateInput(this)" data-topic-key="${escapeHtml(topicKey)}" onchange="onKaynakFinishedDateChange(this)" style="max-width:138px; margin-bottom:0; padding:8px 10px; font-size:0.78rem;">` : ''}
             <select class="input-field progress-status-select" data-topic-key="${escapeHtml(topicKey)}" onchange="onKaynakStatusChange(this)" style="margin-bottom:0;">${selectOptions}</select>
           </div>
         </div>
@@ -2174,7 +2187,7 @@ function onKaynakStatusChange(selectEl) {
   current.status = selectEl.value;
   if (!Array.isArray(current.doneResources)) current.doneResources = [];
   if (current.status === 'Konu Bitti' && !current.finishedDate) {
-    current.finishedDate = new Date().toISOString().slice(0, 10);
+    current.finishedDate = getTodayTrDate();
   }
 
   kaynakIlerlemeState.data[topicKey] = current;
@@ -2188,7 +2201,8 @@ function onKaynakFinishedDateChange(inputEl) {
 
   const current = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', doneResources: [] };
   if (!Array.isArray(current.doneResources)) current.doneResources = [];
-  current.finishedDate = inputEl.value || '';
+  const rawDate = String(inputEl.value || '').trim();
+  current.finishedDate = rawDate ? formatExamDate(rawDate) : '';
 
   kaynakIlerlemeState.data[topicKey] = current;
   saveKaynakIlerlemeState(false);
@@ -2468,7 +2482,7 @@ function initCozulenSoruPanelForStudent(student) {
   if (cEl) cEl.value = '';
   if (wEl) wEl.value = '';
   if (bEl) bEl.value = '';
-  if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+  if (dateEl) dateEl.value = getTodayTrDate();
 }
 
 function onCozulenLessonChange() {
@@ -2596,7 +2610,7 @@ function saveCozulenSoruRecord() {
   const unit = document.getElementById('cozulenUnit')?.value || '';
   const topic = document.getElementById('cozulenTopic')?.value || '';
   const source = document.getElementById('cozulenSource')?.value || '';
-  const date = document.getElementById('cozulenDate')?.value || new Date().toISOString().slice(0, 10);
+  const date = formatExamDate(document.getElementById('cozulenDate')?.value || getTodayTrDate());
   const questionCount = Number(document.getElementById('cozulenQuestion')?.value) || 0;
   const correct = Number(document.getElementById('cozulenCorrect')?.value) || 0;
   const wrong = Number(document.getElementById('cozulenWrong')?.value) || 0;
@@ -2604,6 +2618,11 @@ function saveCozulenSoruRecord() {
 
   if (!lesson || !topic || !source) {
     alert('Ders, konu ve kaynak seçin.');
+    return;
+  }
+
+  if (!isValidTrDate(date)) {
+    alert('Tarih GG.AA.YYYY formatında olmalı.');
     return;
   }
 
