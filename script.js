@@ -1810,7 +1810,7 @@ function renderKokpitAgenda() {
     html += `<div class="agenda-head-cell">${dayLabel}</div>`;
   });
 
-  for (let hour = 0; hour < 24; hour += 1) {
+  for (let hour = 9; hour <= 23; hour += 1) {
     const hourLabel = `${String(hour).padStart(2, '0')}:00`;
     html += `<div class="agenda-hour-cell">${hourLabel}</div>`;
 
