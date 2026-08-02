@@ -2495,7 +2495,7 @@
                 <h2 style="margin:0; font-size:1.25rem; color: var(--color-dark-teal);">Çözülen Soru Sayısı</h2>
                 <p style="margin:8px 0 0; color:#64748b; font-size:0.9rem;">Ders, ünite, konu ve kaynağa göre soru çözüm takibi.</p>
               </div>
-              <button class="btn-nav-outline" onclick="indirTumCozulenSorularPdf()">PDF indir</button>
+              <button class="btn-nav-outline" onclick="openCozulenSoruPdfPanel()">PDF indir</button>
             </div>
 
             <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:16px;">
@@ -2568,6 +2568,26 @@
           </div>
         </div>
 
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="cozulenPdfFilterModal" onclick="if(event.target === this) modalKapat('cozulenPdfFilterModal')">
+    <div class="modal-card" style="max-width:460px;">
+      <button class="modal-close" onclick="modalKapat('cozulenPdfFilterModal')">✕</button>
+      <h3 style="margin:0; color:var(--color-dark-teal);">PDF Ders Seçimi</h3>
+      <p id="cozulenPdfLessonInfo" style="margin:10px 0 0; color:#64748b; font-size:0.9rem;">Kayitlar yukleniyor...</p>
+
+      <div class="form-group" style="margin-top:14px; margin-bottom:0;">
+        <label class="form-label" for="cozulenPdfLessonSelect">Hangi dersin PDF raporu oluşturulsun?</label>
+        <select id="cozulenPdfLessonSelect" class="input-field" style="margin-bottom:0;">
+          <option value="">Hepsi (Tüm Dersler)</option>
+        </select>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button class="btn-nav-outline" type="button" onclick="modalKapat('cozulenPdfFilterModal')">İptal</button>
+        <button class="btn-action btn-coral" type="button" style="padding:10px 18px;" onclick="onConfirmCozulenSoruPdfFilter()">PDF Oluştur</button>
       </div>
     </div>
   </div>
