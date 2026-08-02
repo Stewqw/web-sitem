@@ -1284,8 +1284,6 @@ function addUniteKonuUnit() {
 
   inputEl.value = '';
   onUniteKonuLessonChange();
-  const unitSelectEl = document.getElementById('uniteKonuUnitSelect');
-  if (unitSelectEl) unitSelectEl.value = unitName;
   renderUniteKonuTopicList();
 }
 
@@ -1326,8 +1324,16 @@ function removeCustomUniteKonuUnit(unitName) {
   if (!lesson || !unitName) return;
 
   updateCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson, (lessonData) => {
+    const defaultUnits = (DEFAULT_UNITS_BY_CLASS[String(selectedUniteKonuSinif)] && DEFAULT_UNITS_BY_CLASS[String(selectedUniteKonuSinif)][lesson]) || [];
+    const isSystemUnit = defaultUnits.includes(unitName);
+
+    if (isSystemUnit && !lessonData.hiddenUnits.includes(unitName)) {
+      lessonData.hiddenUnits.push(unitName);
+    }
+
     lessonData.units = lessonData.units.filter((name) => name !== unitName);
     delete lessonData.topicsByUnit[unitName];
+    delete lessonData.hiddenTopicsByUnit[unitName];
   });
 
   onUniteKonuLessonChange();
@@ -1338,13 +1344,29 @@ function removeCustomUniteKonuTopic(unitName, topicName) {
   if (!lesson || !topicName) return;
 
   updateCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson, (lessonData) => {
+    const defaultTopicsMap = DEFAULT_TOPICS_BY_CLASS[String(selectedUniteKonuSinif)] && DEFAULT_TOPICS_BY_CLASS[String(selectedUniteKonuSinif)][lesson];
+    const isNested = defaultTopicsMap && typeof defaultTopicsMap === 'object' && !Array.isArray(defaultTopicsMap);
+
     if (unitName) {
       const topics = Array.isArray(lessonData.topicsByUnit[unitName]) ? lessonData.topicsByUnit[unitName] : [];
       lessonData.topicsByUnit[unitName] = topics.filter((name) => name !== topicName);
+
+      const systemTopics = isNested ? (defaultTopicsMap[unitName] || []) : [];
+      if (systemTopics.includes(topicName)) {
+        if (!lessonData.hiddenTopicsByUnit[unitName]) lessonData.hiddenTopicsByUnit[unitName] = [];
+        if (!lessonData.hiddenTopicsByUnit[unitName].includes(topicName)) {
+          lessonData.hiddenTopicsByUnit[unitName].push(topicName);
+        }
+      }
       return;
     }
 
     lessonData.generalTopics = lessonData.generalTopics.filter((name) => name !== topicName);
+
+    const systemTopics = Array.isArray(defaultTopicsMap) ? defaultTopicsMap : [];
+    if (systemTopics.includes(topicName) && !lessonData.hiddenGeneralTopics.includes(topicName)) {
+      lessonData.hiddenGeneralTopics.push(topicName);
+    }
   });
 
   renderUniteKonuTopicList();
@@ -1370,13 +1392,14 @@ function renderUniteKonuUnitList() {
   }
 
   listEl.innerHTML = units.map((unit) => {
-    const deletable = customUnits.includes(unit);
-    const removeBtn = deletable
-      ? `<button type="button" class="exam-delete-btn" onclick="removeCustomUniteKonuUnit(decodeURIComponent('${encodeURIComponent(unit)}'))">Sil</button>`
-      : '<span style="font-size:0.73rem; color:#64748b;">Sistem</span>';
+    const sourceTag = customUnits.includes(unit) ? 'Eklenen' : 'Sistem';
+    const removeBtn = `<button type="button" class="exam-delete-btn" onclick="removeCustomUniteKonuUnit(decodeURIComponent('${encodeURIComponent(unit)}'))">Sil</button>`;
     return `
       <div class="exam-history-item">
-        <div><strong>${escapeHtml(unit)}</strong></div>
+        <div>
+          <strong>${escapeHtml(unit)}</strong>
+          <div class="exam-history-meta">${sourceTag}</div>
+        </div>
         <div class="exam-history-actions">${removeBtn}</div>
       </div>
     `;
@@ -1448,14 +1471,12 @@ function renderUniteKonuTopicList() {
   }
 
   listEl.innerHTML = uniqueRows.map((row) => {
-    const removeBtn = row.deletable
-      ? `<button type="button" class="exam-delete-btn" onclick="removeCustomUniteKonuTopic(decodeURIComponent('${encodeURIComponent(row.unitName)}'), decodeURIComponent('${encodeURIComponent(row.topic)}'))">Sil</button>`
-      : '<span style="font-size:0.73rem; color:#64748b;">Sistem</span>';
+    const removeBtn = `<button type="button" class="exam-delete-btn" onclick="removeCustomUniteKonuTopic(decodeURIComponent('${encodeURIComponent(row.unitName)}'), decodeURIComponent('${encodeURIComponent(row.topic)}'))">Sil</button>`;
     return `
       <div class="exam-history-item">
         <div>
           <strong>${escapeHtml(row.topic)}</strong>
-          <div class="exam-history-meta">${row.unitName ? `Ünite: ${escapeHtml(row.unitName)}` : 'Genel konu'}</div>
+          <div class="exam-history-meta">${row.unitName ? `Ünite: ${escapeHtml(row.unitName)}` : 'Genel konu'}${row.deletable ? ' · Eklenen' : ' · Sistem'}</div>
         </div>
         <div class="exam-history-actions">${removeBtn}</div>
       </div>
@@ -2085,6 +2106,7 @@ function renderKaynakIlerlemeRows() {
       const topicKey = kaynakTopicKey(unit, topic);
       const entry = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', doneResources: [] };
       if (!Array.isArray(entry.doneResources)) entry.doneResources = [];
+      const finishedDate = entry.finishedDate ? String(entry.finishedDate) : '';
       const selectOptions = KAYNAK_DURUM_OPTIONS
         .map((opt) => `<option value="${escapeHtml(opt)}" ${entry.status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`)
         .join('');
@@ -2102,7 +2124,10 @@ function renderKaynakIlerlemeRows() {
       <div class="progress-row">
         <div class="progress-topic">${escapeHtml(topic)}</div>
         <div>
-          <select class="input-field progress-status-select" data-topic-key="${escapeHtml(topicKey)}" onchange="onKaynakStatusChange(this)">${selectOptions}</select>
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${entry.status === 'Konu Bitti' ? `<input type="date" class="input-field" value="${escapeHtml(finishedDate)}" data-topic-key="${escapeHtml(topicKey)}" onchange="onKaynakFinishedDateChange(this)" style="max-width:138px; margin-bottom:0; padding:8px 10px; font-size:0.78rem;">` : ''}
+            <select class="input-field progress-status-select" data-topic-key="${escapeHtml(topicKey)}" onchange="onKaynakStatusChange(this)" style="margin-bottom:0;">${selectOptions}</select>
+          </div>
         </div>
         <div class="progress-resource-cell">
           <div class="progress-resource-list">${chipsHtml}</div>
@@ -2148,10 +2173,25 @@ function onKaynakStatusChange(selectEl) {
   const current = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', doneResources: [] };
   current.status = selectEl.value;
   if (!Array.isArray(current.doneResources)) current.doneResources = [];
+  if (current.status === 'Konu Bitti' && !current.finishedDate) {
+    current.finishedDate = new Date().toISOString().slice(0, 10);
+  }
 
   kaynakIlerlemeState.data[topicKey] = current;
   saveKaynakIlerlemeState(false);
   renderKaynakIlerlemeRows();
+}
+
+function onKaynakFinishedDateChange(inputEl) {
+  const topicKey = inputEl?.dataset?.topicKey || '';
+  if (!topicKey) return;
+
+  const current = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', doneResources: [] };
+  if (!Array.isArray(current.doneResources)) current.doneResources = [];
+  current.finishedDate = inputEl.value || '';
+
+  kaynakIlerlemeState.data[topicKey] = current;
+  saveKaynakIlerlemeState(false);
 }
 
 function onKaynakResourceDoneToggle(checkEl) {
@@ -3156,7 +3196,10 @@ function createEmptyCustomLessonData() {
   return {
     units: [],
     topicsByUnit: {},
-    generalTopics: []
+    generalTopics: [],
+    hiddenUnits: [],
+    hiddenTopicsByUnit: {},
+    hiddenGeneralTopics: []
   };
 }
 
@@ -3166,10 +3209,17 @@ function normalizeCustomLessonData(raw) {
 
   lessonData.units = ensureUniqueList(raw.units);
   lessonData.generalTopics = ensureUniqueList(raw.generalTopics);
+  lessonData.hiddenUnits = ensureUniqueList(raw.hiddenUnits);
+  lessonData.hiddenGeneralTopics = ensureUniqueList(raw.hiddenGeneralTopics);
 
   const topicsByUnit = raw.topicsByUnit && typeof raw.topicsByUnit === 'object' ? raw.topicsByUnit : {};
   Object.keys(topicsByUnit).forEach((unitName) => {
     lessonData.topicsByUnit[unitName] = ensureUniqueList(topicsByUnit[unitName]);
+  });
+
+  const hiddenTopicsByUnit = raw.hiddenTopicsByUnit && typeof raw.hiddenTopicsByUnit === 'object' ? raw.hiddenTopicsByUnit : {};
+  Object.keys(hiddenTopicsByUnit).forEach((unitName) => {
+    lessonData.hiddenTopicsByUnit[unitName] = ensureUniqueList(hiddenTopicsByUnit[unitName]);
   });
 
   return lessonData;
@@ -3211,7 +3261,8 @@ function getLessonOptionsForClass(classLevel) {
 function getUnitOptionsForLesson(classLevel, lesson) {
   const defaultUnits = (DEFAULT_UNITS_BY_CLASS[String(classLevel)] && DEFAULT_UNITS_BY_CLASS[String(classLevel)][lesson]) || [];
   const customLessonData = getCustomUnitTopicLessonData(classLevel, lesson);
-  return ensureUniqueList([].concat(defaultUnits, customLessonData.units));
+  const visibleDefaultUnits = defaultUnits.filter((unitName) => !customLessonData.hiddenUnits.includes(unitName));
+  return ensureUniqueList([].concat(visibleDefaultUnits, customLessonData.units));
 }
 
 function getTopicOptionsForLesson(classLevel, lesson, unit) {
@@ -3222,9 +3273,14 @@ function getTopicOptionsForLesson(classLevel, lesson, unit) {
   const isNestedTopicMap = lessonTopics && typeof lessonTopics === 'object' && !Array.isArray(lessonTopics);
 
   if (isNestedTopicMap) {
-    defaultTopics = unit ? (lessonTopics[unit] || []) : [];
+    if (unit && !customLessonData.hiddenUnits.includes(unit)) {
+      defaultTopics = lessonTopics[unit] || [];
+    }
+    const hiddenForUnit = Array.isArray(customLessonData.hiddenTopicsByUnit[unit]) ? customLessonData.hiddenTopicsByUnit[unit] : [];
+    defaultTopics = defaultTopics.filter((topicName) => !hiddenForUnit.includes(topicName));
   } else if (Array.isArray(lessonTopics)) {
     defaultTopics = unit ? [] : lessonTopics;
+    defaultTopics = defaultTopics.filter((topicName) => !customLessonData.hiddenGeneralTopics.includes(topicName));
   }
 
   const customTopics = unit
