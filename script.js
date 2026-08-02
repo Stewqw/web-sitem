@@ -452,10 +452,14 @@ function sekmeAcs(sekmeAd) {
 }
 
 function updateBransExamNet() {
+  const questionCount = Number(document.getElementById('bransExamQuestionCount')?.value) || 0;
   const correct = Number(document.getElementById('bransExamCorrect')?.value) || 0;
   const wrong = Number(document.getElementById('bransExamWrong')?.value) || 0;
+  const blank = Math.max(0, questionCount - correct - wrong);
   const net = correct - wrong * 0.25;
   const netEl = document.getElementById('bransExamNet');
+  const blankEl = document.getElementById('bransExamBlank');
+  if (blankEl) blankEl.value = String(blank);
   if (netEl) netEl.textContent = net.toFixed(2);
 }
 
@@ -639,7 +643,7 @@ function kaydetBransDenemesi() {
   const questionCount = Number(document.getElementById('bransExamQuestionCount')?.value) || 0;
   const correct = Number(document.getElementById('bransExamCorrect')?.value) || 0;
   const wrong = Number(document.getElementById('bransExamWrong')?.value) || 0;
-  const blank = Number(document.getElementById('bransExamBlank')?.value) || 0;
+  const blank = Math.max(0, questionCount - correct - wrong);
 
   if (!lesson || !examDate || !examName) {
     alert('Lütfen ders, deneme tarihi ve deneme adını doldurun.');
@@ -715,15 +719,17 @@ function getGenelLessonValues(shortKey) {
   const q = Number(document.getElementById('genel' + shortKey + 'Q')?.value) || 0;
   const d = Number(document.getElementById('genel' + shortKey + 'D')?.value) || 0;
   const y = Number(document.getElementById('genel' + shortKey + 'Y')?.value) || 0;
-  const b = Number(document.getElementById('genel' + shortKey + 'B')?.value) || 0;
+  const b = Math.max(0, q - d - y);
   const net = d - y * 0.25;
   return { q, d, y, b, net };
 }
 
 function updateGenelLessonNet(shortKey) {
   const netEl = document.getElementById('genel' + shortKey + 'Net');
+  const blankEl = document.getElementById('genel' + shortKey + 'B');
   if (!netEl) return;
   const values = getGenelLessonValues(shortKey);
+  if (blankEl) blankEl.value = String(values.b);
   netEl.textContent = values.net.toFixed(2);
   updateGenelTotalNet();
 }
