@@ -1290,26 +1290,60 @@ async function indirBransExamPdf(recordId) {
     const rowMinHeight = options.rowMinHeight || 24;
     const fontSize = options.fontSize || 9;
 
-    ensureSpace(headerHeight + rowMinHeight + 6);
+    const wrapFriendlyText = (value) => String(value)
+      .replace(/\//g, '/ ')
+      .replace(/:/g, ': ')
+      .replace(/-/g, '- ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
 
-    let x = margin;
+    const headerFontSize = options.headerFontSize || 10;
+    const headerLineHeight = headerFontSize + 1;
+    const wrappedHeaders = columns.map((col) => {
+      const safeLabel = pdfSafeText(wrapFriendlyText(col.label || ''));
+      return doc.splitTextToSize(safeLabel, Math.max(16, col.width - 8));
+    });
+    const maxHeaderLines = wrappedHeaders.reduce((max, lines) => Math.max(max, lines.length || 1), 1);
+    const computedHeaderHeight = Math.max(headerHeight, (maxHeaderLines * headerLineHeight) + 8);
+    const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+
+    ensureSpace(computedHeaderHeight + rowMinHeight + 6);
+
     doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
     doc.setDrawColor(softLine[0], softLine[1], softLine[2]);
     doc.setLineWidth(1.1);
+    doc.rect(margin, y, tableWidth, computedHeaderHeight, 'FD');
+
+    let x = margin;
     columns.forEach((col) => {
-      doc.rect(x, y, col.width, headerHeight, 'FD');
+      x += col.width;
+      if (x < margin + tableWidth) {
+        doc.line(x, y, x, y + computedHeaderHeight);
+      }
+    });
+
+    x = margin;
+    doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+    doc.setDrawColor(softLine[0], softLine[1], softLine[2]);
+    doc.setLineWidth(1.1);
+    columns.forEach((col, colIndex) => {
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10.5);
-      doc.text(pdfSafeText(col.label), x + col.width / 2, y + 15, { align: 'center' });
+      doc.setFontSize(headerFontSize);
+      const headerLines = wrappedHeaders[colIndex];
+      const headerTextHeight = headerLines.length * headerLineHeight;
+      const headerTop = y + Math.max(5, (computedHeaderHeight - headerTextHeight) / 2) + (headerLineHeight - 2);
+      headerLines.forEach((line, lineIdx) => {
+        doc.text(line, x + col.width / 2, headerTop + (lineIdx * headerLineHeight), { align: 'center' });
+      });
       x += col.width;
     });
-    y += headerHeight;
+    y += computedHeaderHeight;
 
     rows.forEach((row) => {
       const wrappedCells = columns.map((col) => {
         const text = row[col.key] === undefined || row[col.key] === null ? '-' : String(row[col.key]);
-        return doc.splitTextToSize(pdfSafeText(text), Math.max(18, col.width - 8));
+        return doc.splitTextToSize(pdfSafeText(wrapFriendlyText(text)), Math.max(18, col.width - 10));
       });
       const maxLines = wrappedCells.reduce((max, lines) => Math.max(max, lines.length || 1), 1);
       const rowHeight = Math.max(rowMinHeight, maxLines * (fontSize + 2) + 8);
@@ -1729,6 +1763,7 @@ function renderGenelExamHistory() {
           <strong>${item.examName}</strong>
           <div class="exam-history-meta">${formatExamDate(item.examDate)}</div>
           <div class="exam-history-actions">
+            <button type="button" class="exam-delete-btn exam-pdf-btn" onclick="indirGenelExamPdf(${item.id})">PDF İndir</button>
             <button type="button" class="exam-delete-btn" onclick="deleteGenelExam(${item.id})">Sil</button>
           </div>
         </div>
@@ -1740,6 +1775,249 @@ function renderGenelExamHistory() {
       </div>
     `;
   }).join('');
+}
+
+async function indirGenelExamPdf(recordId) {
+  const records = getStoredGenelExams();
+  const item = records.find((r) => String(r.id) === String(recordId));
+  if (!item) {
+    alert('PDF için genel deneme kaydı bulunamadı.');
+    return;
+  }
+
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert('PDF kütüphanesi yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin.');
+    return;
+  }
+
+  const student = getStoredOgrenciler().find((s) => s.id === activeStudentId);
+  const studentName = student && student.name ? student.name : 'Ogrenci';
+  const logoDataUrl = await getPdfLogoDataUrl();
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('l', 'pt', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - (margin * 2);
+
+  const darkBlue = [18, 47, 92];
+  const orange = [229, 165, 62];
+  const lineColor = [224, 232, 242];
+
+  let y = margin;
+  const ensureSpace = (needed) => {
+    if (y + needed > pageHeight - margin) {
+      doc.addPage();
+      y = margin;
+    }
+  };
+
+  const lessons = [
+    { key: 'Mat', name: 'Matematik' },
+    { key: 'Fen', name: 'Fen Bilimleri' },
+    { key: 'Tur', name: 'Turkce' },
+    { key: 'Ink', name: 'Inkilap Tarihi' },
+    { key: 'Ing', name: 'Ingilizce' },
+    { key: 'Din', name: 'Din Kulturu' }
+  ];
+
+  const lessonRows = lessons.map((lesson) => {
+    const values = item.lessons && item.lessons[lesson.key] ? item.lessons[lesson.key] : {};
+    const d = Number(values.d || 0);
+    const yv = Number(values.y || 0);
+    const b = Number(values.b || 0);
+    const net = Number(values.net || 0);
+    return {
+      lesson: lesson.name,
+      d,
+      y: yv,
+      b,
+      net
+    };
+  });
+
+  const totals = lessonRows.reduce((acc, row) => {
+    acc.d += row.d;
+    acc.y += row.y;
+    acc.b += row.b;
+    acc.net += row.net;
+    return acc;
+  }, { d: 0, y: 0, b: 0, net: 0 });
+
+  ensureSpace(120);
+  doc.setDrawColor(orange[0], orange[1], orange[2]);
+  doc.setLineWidth(1.2);
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(margin, y, contentWidth, 92, 10, 10, 'FD');
+
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, 'PNG', margin + 8, y + 10, 88, 68, undefined, 'FAST');
+    } catch (error) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+      doc.text('PARABOL KOCLUK', margin + 14, y + 46);
+    }
+  }
+
+  doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(27);
+  doc.text(pdfSafeText('GENEL DENEME KARNESI'), margin + 130, y + 42);
+  doc.setDrawColor(orange[0], orange[1], orange[2]);
+  doc.setLineWidth(1);
+  doc.line(margin + 130, y + 55, margin + 370, y + 55);
+
+  const infoX = pageWidth - 240;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('OGRENCI', infoX, y + 28);
+  doc.text('RAPOR TARIHI', infoX, y + 56);
+  doc.setFont('helvetica', 'normal');
+  doc.text(pdfSafeText(studentName), infoX + 96, y + 28);
+  doc.text(pdfSafeText(formatExamDate(item.examDate || new Date().toLocaleDateString('tr-TR'))), infoX + 96, y + 56);
+
+  y += 106;
+
+  ensureSpace(40);
+  doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+  doc.roundedRect(margin, y, 220, 24, 10, 10, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text('1. DENEME BILGILERI', margin + 16, y + 16);
+  y += 30;
+
+  ensureSpace(56);
+  doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+  doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2]);
+  doc.setLineWidth(1);
+  doc.rect(margin, y, contentWidth, 26, 'FD');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(pdfSafeText(`1. ${item.examName || 'GENEL DENEME'}`), margin + (contentWidth / 2), y + 17, { align: 'center' });
+  y += 26;
+
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2]);
+  doc.rect(margin, y, contentWidth, 24, 'FD');
+  doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(pdfSafeText(`Tarih: ${formatExamDate(item.examDate)}`), margin + (contentWidth / 2), y + 16, { align: 'center' });
+  y += 30;
+
+  const tableColumns = [
+    { key: 'lesson', label: 'DERS', width: Math.round(contentWidth * 0.22), align: 'left', bold: true },
+    { key: 'd', label: 'DOGRU (D)', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
+    { key: 'y', label: 'YANLIS (Y)', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
+    { key: 'b', label: 'BOS (B)', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
+    { key: 'net', label: 'NET', width: 0, align: 'center', bold: true }
+  ];
+  const assignedWidth = tableColumns.slice(0, 4).reduce((sum, c) => sum + c.width, 0);
+  tableColumns[4].width = contentWidth - assignedWidth;
+
+  const drawCellText = (text, x, cellWidth, baseY, cellHeight, align, color, bold = false) => {
+    doc.setTextColor(color[0], color[1], color[2]);
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(11);
+    const safe = pdfSafeText(String(text));
+    const textY = baseY + (cellHeight / 2) + 4;
+    if (align === 'center') {
+      doc.text(safe, x + (cellWidth / 2), textY, { align: 'center' });
+    } else if (align === 'right') {
+      doc.text(safe, x + cellWidth - 8, textY, { align: 'right' });
+    } else {
+      doc.text(safe, x + 8, textY);
+    }
+  };
+
+  const tableHeaderHeight = 24;
+  ensureSpace(40 + ((lessonRows.length + 1) * 30));
+
+  let x = margin;
+  doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+  doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2]);
+  doc.setLineWidth(1);
+  tableColumns.forEach((col) => {
+    doc.rect(x, y, col.width, tableHeaderHeight, 'FD');
+    drawCellText(col.label, x, col.width, y, tableHeaderHeight, 'center', [255, 255, 255], true);
+    x += col.width;
+  });
+  y += tableHeaderHeight;
+
+  lessonRows.forEach((row) => {
+    const rowHeight = 30;
+    x = margin;
+    tableColumns.forEach((col) => {
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2]);
+      doc.rect(x, y, col.width, rowHeight, 'FD');
+
+      let value = row[col.key];
+      if (col.key === 'net') value = Number(row.net || 0).toFixed(2);
+      if (col.key === 'd' || col.key === 'y' || col.key === 'b') value = String(Number(value || 0));
+
+      const valueColor = col.key === 'd'
+        ? [24, 138, 52]
+        : col.key === 'y'
+          ? [199, 46, 46]
+          : [18, 47, 92];
+
+      drawCellText(value, x, col.width, y, rowHeight, col.align, valueColor, col.key !== 'b');
+      x += col.width;
+    });
+    y += rowHeight;
+  });
+
+  const summaryHeight = 52;
+  const summaryWidth = contentWidth / 5;
+  y += 8;
+  ensureSpace(summaryHeight + 6);
+
+  for (let i = 0; i < 5; i += 1) {
+    const cellX = margin + (i * summaryWidth);
+    if (i === 0) {
+      doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+      doc.setTextColor(255, 255, 255);
+    } else {
+      doc.setFillColor(255, 255, 255);
+      doc.setTextColor(17, 24, 39);
+    }
+    doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2]);
+    doc.rect(cellX, y, summaryWidth, summaryHeight, 'FD');
+
+    if (i === 0) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text('GENEL TOPLAM', cellX + (summaryWidth / 2), y + 21, { align: 'center' });
+      doc.text('RAPORU', cellX + (summaryWidth / 2), y + 38, { align: 'center' });
+      continue;
+    }
+
+    const blockData = i === 1
+      ? { title: 'TOPLAM DOGRU', value: totals.d, color: [24, 138, 52] }
+      : i === 2
+        ? { title: 'TOPLAM YANLIS', value: totals.y, color: [199, 46, 46] }
+        : i === 3
+          ? { title: 'TOPLAM BOS', value: totals.b, color: [107, 114, 128] }
+          : { title: 'TOPLAM NET', value: Number(item.totalNet ?? totals.net).toFixed(2), color: darkBlue };
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(31, 41, 55);
+    doc.text(blockData.title, cellX + (summaryWidth / 2), y + 18, { align: 'center' });
+    doc.setFontSize(17);
+    doc.setTextColor(blockData.color[0], blockData.color[1], blockData.color[2]);
+    doc.text(String(blockData.value), cellX + (summaryWidth / 2), y + 41, { align: 'center' });
+  }
+
+  const safeStudent = normalizeFileName(studentName);
+  const safeExam = normalizeFileName(item.examName || 'genel-deneme');
+  doc.save(`${safeStudent}_${safeExam}_genel-karnesi.pdf`);
 }
 
 function indirTumGenelDenemelerPdf() {

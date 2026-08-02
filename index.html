@@ -44,6 +44,16 @@
     body { line-height: 1.5; }
     img, svg, video, canvas { max-width: 100%; height: auto; }
     button, input, select, textarea { font: inherit; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td {
+      vertical-align: middle;
+      padding: 10px 8px;
+      line-height: 1.35;
+    }
+    th { text-align: center; font-weight: 800; }
+    td { text-align: left; }
+    td[data-align="center"], th[data-align="center"], .text-center { text-align: center; }
+    td[data-align="right"], th[data-align="right"], .text-right { text-align: right; }
 
     /* NAVBAR */
     .top-navbar {
