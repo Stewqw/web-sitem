@@ -114,6 +114,16 @@ app.get('/api/me', (req, res) => {
   }
 });
 
+// Public: yalnızca toplam kullanıcı sayısını döndür
+app.get('/api/users/count', (req, res) => {
+  try {
+    const users = readUsers();
+    return res.json({ count: users.length });
+  } catch (e) {
+    return res.status(500).json({ error: 'Sunucu hatası' });
+  }
+});
+
 // Helper: ensure admin user exists from env vars if provided
 function ensureInitialAdmin() {
   const users = readUsers();

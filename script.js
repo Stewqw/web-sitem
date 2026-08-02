@@ -576,11 +576,11 @@ function addKaynakOnerisi() {
 document.addEventListener('DOMContentLoaded', () => {
   history.replaceState({ sayfaId: 'landingPage' }, "", "#landingPage");
   loadSavedResourceSuggestions();
+  startUserCountAutoRefresh();
   attemptAutoLogin().then(auto => {
     if (!auto) {
       sayfaAcs('landingPage', false);
     }
-    updateUserCountLabel();
     renderResourceSuggestions();
   });
 });
@@ -618,23 +618,35 @@ function updateUserCountLabel() {
   const labelEl = document.getElementById('userCountLabel');
   if (!labelEl) return;
 
-  const localCount = getStoredOgrenciler().length;
-  const token = getAuthToken();
-  if (!token) {
-    labelEl.textContent = `${localCount} üye`;
-    return;
-  }
-
-  fetch(API_URL + '/api/users', { headers: { 'Authorization': 'Bearer ' + token } })
+  fetch(API_URL + '/api/users/count')
     .then(async res => {
       if (!res.ok) throw new Error('Fail');
       const data = await res.json().catch(() => null);
-      const count = data && Array.isArray(data.users) ? data.users.length : localCount;
-      labelEl.textContent = `${count} üye`;
+      if (data && typeof data.count === 'number') {
+        labelEl.textContent = `${data.count} üye`;
+      }
     })
     .catch(() => {
-      labelEl.textContent = `${localCount} üye`;
+      // Ağ hatasında mevcut etiket korunur.
     });
+}
+
+let userCountIntervalId = null;
+
+function startUserCountAutoRefresh() {
+  updateUserCountLabel();
+
+  if (userCountIntervalId) {
+    clearInterval(userCountIntervalId);
+  }
+
+  userCountIntervalId = setInterval(updateUserCountLabel, 10000);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      updateUserCountLabel();
+    }
+  });
 }
 
 function openUsersModal() {
