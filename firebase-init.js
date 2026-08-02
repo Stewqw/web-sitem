@@ -69,13 +69,33 @@
     ? window.firebase.app()
     : window.firebase.initializeApp(firebaseConfig);
   const auth = window.firebase.auth(app);
-  const db = window.firebase.firestore(app);
+  const db = window.firebase.firestore ? window.firebase.firestore(app) : null;
+  const rtdb = window.firebase.database ? window.firebase.database(app) : null;
 
-  const fieldValue = window.firebase.firestore.FieldValue;
+  const fieldValue = window.firebase.firestore ? window.firebase.firestore.FieldValue : null;
+
+  if (!rtdb) {
+    console.warn("Firebase Realtime Database SDK yuklenemedi. Kayit profil yazimi eksik calisabilir.");
+  }
 
   async function getProfileByUid(uid) {
-    const doc = await db.collection("users").doc(uid).get();
-    return doc.exists ? doc.data() : null;
+    if (rtdb) {
+      try {
+        const snapshot = await rtdb.ref("users/" + uid).get();
+        if (snapshot.exists()) {
+          return snapshot.val();
+        }
+      } catch (error) {
+        console.warn("Realtime Database profil okuma hatasi:", error);
+      }
+    }
+
+    if (db) {
+      const doc = await db.collection("users").doc(uid).get();
+      return doc.exists ? doc.data() : null;
+    }
+
+    return null;
   }
 
   services.registerWithEmail = async function registerWithEmail(payload) {
@@ -89,19 +109,39 @@
     }
 
     const nowIso = new Date().toISOString();
-    await db.collection("users").doc(credential.user.uid).set(
-      {
-        name: displayName,
-        email: email,
-        phone: payload.phone || "",
-        branch: payload.branch || "",
-        role: "coach",
-        createdAt: fieldValue.serverTimestamp(),
-        createdAtIso: nowIso,
-        updatedAt: fieldValue.serverTimestamp()
-      },
-      { merge: true }
-    );
+    const profilePayload = {
+      uid: credential.user.uid,
+      name: displayName,
+      email: email,
+      phone: payload.phone || "",
+      branch: payload.branch || "",
+      role: "coach",
+      createdAtIso: nowIso,
+      updatedAtIso: nowIso
+    };
+
+    if (!rtdb) {
+      const missingDbError = new Error("Realtime Database kullanima hazir degil.");
+      missingDbError.code = "app/realtime-db-unavailable";
+      throw missingDbError;
+    }
+
+    await rtdb.ref("users/" + credential.user.uid).set(profilePayload);
+
+    if (db && fieldValue) {
+      try {
+        await db.collection("users").doc(credential.user.uid).set(
+          {
+            ...profilePayload,
+            createdAt: fieldValue.serverTimestamp(),
+            updatedAt: fieldValue.serverTimestamp()
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        console.warn("Firestore profil yazimi atlandi:", error);
+      }
+    }
 
     return {
       uid: credential.user.uid,

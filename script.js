@@ -45,6 +45,44 @@ function shouldUseFirestoreForms() {
   return !!(isFirebaseReady() && services.settings && services.settings.useFirestoreForms);
 }
 
+let isSignUpSubmitting = false;
+let isSignInSubmitting = false;
+
+function setSubmitButtonLoading(button, isLoading, loadingText = 'İşleniyor...') {
+  if (!button) return;
+
+  if (isLoading) {
+    if (!button.dataset.originalText) {
+      button.dataset.originalText = button.textContent || '';
+    }
+    button.textContent = loadingText;
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    return;
+  }
+
+  button.disabled = false;
+  button.removeAttribute('aria-busy');
+  if (button.dataset.originalText) {
+    button.textContent = button.dataset.originalText;
+  }
+}
+
+function getSignUpSubmitButton() {
+  const form = document.getElementById('formKayit');
+  return form ? form.querySelector('button[type="submit"]') : null;
+}
+
+function getSignInSubmitButton(source) {
+  if (source === 'card') {
+    const loginPage = document.getElementById('loginPage');
+    return loginPage ? loginPage.querySelector('form button[type="submit"]') : null;
+  }
+
+  const form = document.getElementById('formGiris');
+  return form ? form.querySelector('button[type="submit"]') : null;
+}
+
 function getFirebaseAuthErrorMessage(error, fallbackMessage) {
   const code = error && error.code ? String(error.code) : '';
 
@@ -526,7 +564,7 @@ async function sifreSifirla() {
   });
 }
 
-function kayitOl() {
+async function kayitOl() {
   const name = document.getElementById('regName').value.trim();
   const email = document.getElementById('regEmail').value.trim();
   const branch = document.getElementById('regBranch').value.trim();
@@ -581,46 +619,82 @@ function kayitOl() {
     return;
   }
 
-  if (shouldUseFirebaseAuth()) {
-    const services = getFirebaseServices();
-    services.registerWithEmail({
-      name: name,
-      email: email,
-      password: pass,
-      phone: normalizedPhone,
-      branch: branch
-    }).then(() => {
-      regErrorBox.style.display = "none";
-      alert("Kayıt başarılı! Şimdi giriş yapabilirsiniz.");
-      tabDegistir('giris');
-    }).catch((error) => {
-      regErrorBox.textContent = getFirebaseAuthErrorMessage(error, 'Firebase kayıt sırasında hata oluştu.');
-      regErrorBox.style.display = 'block';
-    });
-    return;
-  }
+  if (isSignUpSubmitting) return;
+  isSignUpSubmitting = true;
+  const submitBtn = getSignUpSubmitButton();
+  setSubmitButtonLoading(submitBtn, true);
 
-  // Backend'e kayıt isteği gönder
-  fetch(API_URL + '/api/register', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email, password: pass, phone: normalizedPhone, branch })
-  }).then(async res => {
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      regErrorBox.style.display = "none";
-      alert("Kayıt başarılı! Şimdi giriş yapabilirsiniz.");
-      tabDegistir('giris');
-    } else {
-      regErrorBox.textContent = data.error || 'Kayıt sırasında hata oluştu.';
-      regErrorBox.style.display = 'block';
+  try {
+    regErrorBox.style.display = 'none';
+
+    if (shouldUseFirebaseAuth()) {
+      const services = getFirebaseServices();
+      const session = await services.registerWithEmail({
+        name: name,
+        email: email,
+        password: pass,
+        phone: normalizedPhone,
+        branch: branch
+      });
+
+      const userEmail = (session && session.email ? session.email : email).toLowerCase();
+      currentUserEmail = userEmail;
+      currentUserName = session && session.name ? session.name : name;
+      currentUserBranch = session && session.branch ? session.branch : branch;
+
+      localStorage.removeItem('koclukToken');
+      sessionStorage.removeItem('koclukToken');
+      localStorage.setItem('koclukUserEmail', userEmail);
+      sessionStorage.removeItem('koclukUserEmail');
+
+      loadSavedResourceSuggestions();
+      renderStoredOgrenciler();
+      renderKokpitUserCard();
+      updateUserCountLabel();
+
+      const cardEmail = document.getElementById('cardEmail');
+      const modalEmail = document.getElementById('modalEmail');
+      if (cardEmail) cardEmail.value = userEmail;
+      if (modalEmail) modalEmail.value = userEmail;
+
+      alert('Kayıt başarılı! Panele yönlendiriliyorsunuz.');
+      modalKapat('authModal');
+      sayfaAcs('dashboardApp');
+      return;
     }
-  }).catch(err => {
-    regErrorBox.textContent = 'Sunucuya bağlanılamıyor.';
+
+    const res = await fetch(API_URL + '/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password: pass, phone: normalizedPhone, branch })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Kayıt sırasında hata oluştu.');
+    }
+
+    alert('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
+    tabDegistir('giris');
+  } catch (error) {
+    console.error('Kayıt akışı hatası:', {
+      mode: shouldUseFirebaseAuth() ? 'firebase' : 'backend',
+      code: error && error.code ? error.code : null,
+      message: error && error.message ? error.message : String(error),
+      error: error
+    });
+
+    regErrorBox.textContent = shouldUseFirebaseAuth()
+      ? getFirebaseAuthErrorMessage(error, 'Kayıt sırasında bir hata oluştu. Lütfen tekrar deneyin.')
+      : (error && error.message ? error.message : 'Sunucuya bağlanılamıyor.');
     regErrorBox.style.display = 'block';
-  });
+  } finally {
+    setSubmitButtonLoading(submitBtn, false);
+    isSignUpSubmitting = false;
+  }
 }
 
-function paneleGirisYap(nereden) {
+async function paneleGirisYap(nereden) {
   let eposta = "";
   let sifre = "";
   let errorBox = null;
@@ -635,16 +709,38 @@ function paneleGirisYap(nereden) {
     errorBox = document.getElementById('modalErrorBox');
   }
 
-  if (shouldUseFirebaseAuth()) {
-    const services = getFirebaseServices();
-    services.loginWithEmail({ email: eposta, password: sifre }).then((session) => {
-      if (errorBox) errorBox.style.display = 'none';
+  if (isSignInSubmitting) return;
+  isSignInSubmitting = true;
+  const submitBtn = getSignInSubmitButton(nereden);
+  setSubmitButtonLoading(submitBtn, true);
+
+  try {
+    if (errorBox) errorBox.style.display = 'none';
+
+    // Remember-me kontrolü: localStorage (kalıcı) / sessionStorage (oturum)
+    let remember = false;
+    if (nereden === 'card') {
+      const cb = document.getElementById('rememberCard');
+      remember = cb && cb.checked;
+    } else {
+      const cb = document.getElementById('rememberModal');
+      remember = cb && cb.checked;
+    }
+
+    if (shouldUseFirebaseAuth()) {
+      const services = getFirebaseServices();
+      const session = await services.loginWithEmail({ email: eposta, password: sifre });
 
       const userEmail = (session && session.email ? session.email : eposta).toLowerCase();
       localStorage.removeItem('koclukToken');
       sessionStorage.removeItem('koclukToken');
-      localStorage.setItem('koclukUserEmail', userEmail);
-      sessionStorage.removeItem('koclukUserEmail');
+      if (remember) {
+        localStorage.setItem('koclukUserEmail', userEmail);
+        sessionStorage.removeItem('koclukUserEmail');
+      } else {
+        sessionStorage.setItem('koclukUserEmail', userEmail);
+        localStorage.removeItem('koclukUserEmail');
+      }
 
       currentUserEmail = userEmail;
       currentUserName = session && session.name ? session.name : currentUserName;
@@ -656,20 +752,15 @@ function paneleGirisYap(nereden) {
       renderStoredOgrenciler();
       updateUserCountLabel();
       renderKokpitUserCard();
-    }).catch((error) => {
-      if (errorBox) {
-        errorBox.textContent = getFirebaseAuthErrorMessage(error, 'Firebase giriş başarısız.');
-        errorBox.style.display = 'block';
-      }
-    });
-    return;
-  }
+      return;
+    }
 
-  // Backend'e login isteği gönder
-  fetch(API_URL + '/api/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: eposta, password: sifre })
-  }).then(async res => {
+    const res = await fetch(API_URL + '/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: eposta, password: sifre })
+    });
+
     const text = await res.text();
     let data = {};
     try {
@@ -678,51 +769,50 @@ function paneleGirisYap(nereden) {
       data = {};
     }
 
-    if (res.ok && data.token) {
-      if (errorBox) errorBox.style.display = 'none';
-
-      // Remember-me kontrolü: localStorage (kalıcı) / sessionStorage (oturum)
-      let remember = false;
-      if (nereden === 'card') {
-        const cb = document.getElementById('rememberCard');
-        remember = cb && cb.checked;
-      } else {
-        const cb = document.getElementById('rememberModal');
-        remember = cb && cb.checked;
-      }
-
-      const userEmail = data.user && data.user.email ? data.user.email.toLowerCase() : eposta.toLowerCase();
-      if (remember) {
-        localStorage.setItem('koclukToken', data.token);
-        localStorage.setItem('koclukUserEmail', userEmail);
-        sessionStorage.removeItem('koclukUserEmail');
-      } else {
-        sessionStorage.setItem('koclukToken', data.token);
-        sessionStorage.setItem('koclukUserEmail', userEmail);
-        localStorage.removeItem('koclukUserEmail');
-      }
-      currentUserEmail = userEmail;
-      currentUserName = data.user && data.user.name ? data.user.name : currentUserName;
-      currentUserBranch = data.user && data.user.branch ? data.user.branch : currentUserBranch;
-      loadSavedResourceSuggestions();
-
-      modalKapat('authModal');
-      sayfaAcs('dashboardApp');
-      renderStoredOgrenciler();
-      updateUserCountLabel();
-      renderKokpitUserCard();
-    } else {
-      if (errorBox) {
-        errorBox.textContent = data.error || ('Giriş başarısız (HTTP ' + res.status + ').');
-        errorBox.style.display = 'block';
-      }
+    if (!res.ok || !data.token) {
+      throw new Error(data.error || ('Giriş başarısız (HTTP ' + res.status + ').'));
     }
-  }).catch(err => {
+
+    const userEmail = data.user && data.user.email ? data.user.email.toLowerCase() : eposta.toLowerCase();
+    if (remember) {
+      localStorage.setItem('koclukToken', data.token);
+      localStorage.setItem('koclukUserEmail', userEmail);
+      sessionStorage.removeItem('koclukUserEmail');
+    } else {
+      sessionStorage.setItem('koclukToken', data.token);
+      sessionStorage.setItem('koclukUserEmail', userEmail);
+      localStorage.removeItem('koclukUserEmail');
+    }
+
+    currentUserEmail = userEmail;
+    currentUserName = data.user && data.user.name ? data.user.name : currentUserName;
+    currentUserBranch = data.user && data.user.branch ? data.user.branch : currentUserBranch;
+    loadSavedResourceSuggestions();
+
+    modalKapat('authModal');
+    sayfaAcs('dashboardApp');
+    renderStoredOgrenciler();
+    updateUserCountLabel();
+    renderKokpitUserCard();
+  } catch (error) {
+    console.error('Giriş akışı hatası:', {
+      source: nereden,
+      mode: shouldUseFirebaseAuth() ? 'firebase' : 'backend',
+      code: error && error.code ? error.code : null,
+      message: error && error.message ? error.message : String(error),
+      error: error
+    });
+
     if (errorBox) {
-      errorBox.textContent = 'Sunucuya bağlanılamıyor.';
+      errorBox.textContent = shouldUseFirebaseAuth()
+        ? getFirebaseAuthErrorMessage(error, 'Giriş sırasında bir hata oluştu. Lütfen tekrar deneyin.')
+        : (error && error.message ? error.message : 'Sunucuya bağlanılamıyor.');
       errorBox.style.display = 'block';
     }
-  });
+  } finally {
+    setSubmitButtonLoading(submitBtn, false);
+    isSignInSubmitting = false;
+  }
 }
 
 // Otomatik giriş (remember me) işlevselliği
