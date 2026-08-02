@@ -18,6 +18,8 @@ let activeStudentId = null;
 let activeMuhasebeStudentId = null;
 let programWeekOffset = 0;
 let currentUserEmail = null;
+let currentUserName = null;
+let currentUserBranch = null;
 let savedResourceSuggestions = [];
 
 const MUHASEBE_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
@@ -268,6 +270,7 @@ function sifreSifirla() {
 function kayitOl() {
   const name = document.getElementById('regName').value.trim();
   const email = document.getElementById('regEmail').value.trim();
+  const branch = document.getElementById('regBranch').value.trim();
   const pass = document.getElementById('regPass').value;
   const passConfirm = document.getElementById('regPassConfirm').value;
   const phone = document.getElementById('regPhone').value.trim();
@@ -301,7 +304,7 @@ function kayitOl() {
   // Backend'e kayıt isteği gönder
   fetch(API_URL + '/api/register', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email, password: pass, phone })
+    body: JSON.stringify({ name, email, password: pass, phone, branch })
   }).then(async res => {
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
@@ -370,12 +373,15 @@ function paneleGirisYap(nereden) {
         localStorage.removeItem('koclukUserEmail');
       }
       currentUserEmail = userEmail;
+      currentUserName = data.user && data.user.name ? data.user.name : currentUserName;
+      currentUserBranch = data.user && data.user.branch ? data.user.branch : currentUserBranch;
       loadSavedResourceSuggestions();
 
       modalKapat('authModal');
       sayfaAcs('dashboardApp');
       renderStoredOgrenciler();
       updateUserCountLabel();
+      renderKokpitUserCard();
     } else {
       if (errorBox) {
         errorBox.textContent = data.error || ('Giriş başarısız (HTTP ' + res.status + ').');
@@ -409,6 +415,8 @@ async function attemptAutoLogin() {
       const email = data.user.email ? data.user.email.toLowerCase() : null;
       if (email) {
         currentUserEmail = email;
+        currentUserName = data.user.name || currentUserName;
+        currentUserBranch = data.user.branch || currentUserBranch;
         loadSavedResourceSuggestions();
         if (localStorage.getItem('koclukToken')) {
           localStorage.setItem('koclukUserEmail', email);
@@ -421,6 +429,7 @@ async function attemptAutoLogin() {
       sayfaAcs('dashboardApp', false);
       renderStoredOgrenciler();
       updateUserCountLabel();
+      renderKokpitUserCard();
       return true;
     }
   } catch (e) {
@@ -1133,7 +1142,24 @@ function cikisYap() {
   localStorage.removeItem('koclukUserEmail');
   sessionStorage.removeItem('koclukUserEmail');
   currentUserEmail = null;
+  currentUserName = null;
+  currentUserBranch = null;
   sayfaAcs('promoPage');
+}
+
+function renderKokpitUserCard() {
+  const nameEl = document.getElementById('kokpitWelcomeName');
+  const emailEl = document.getElementById('kokpitWelcomeEmail');
+  const branchEl = document.getElementById('kokpitWelcomeBranch');
+  if (!nameEl || !emailEl || !branchEl) return;
+
+  const name = currentUserName || 'Kullanıcı Adı';
+  const email = currentUserEmail || 'E-posta yok';
+  const branch = currentUserBranch || 'Branş seçilmedi';
+
+  nameEl.textContent = name;
+  emailEl.textContent = email;
+  branchEl.textContent = branch;
 }
 
 function createResourceCard(name, level, url, lesson) {

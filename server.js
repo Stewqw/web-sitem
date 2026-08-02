@@ -33,7 +33,7 @@ function normalizeEmail(email) {
 }
 
 app.post('/api/register', async (req, res) => {
-  const { name, email, password, phone } = req.body;
+  const { name, email, password, phone, branch } = req.body;
   if (!name || !email || !password) return res.status(400).json({ error: 'Eksik alanlar' });
 
   const users = readUsers();
@@ -42,7 +42,7 @@ app.post('/api/register', async (req, res) => {
 
   try {
     const hash = await bcryptjs.hash(password, 10);
-    const user = { id: Date.now(), name, email: normalizedEmail, password: hash, phone, isAdmin: false };
+    const user = { id: Date.now(), name, email: normalizedEmail, password: hash, phone, branch: String(branch || '').trim(), isAdmin: false };
     users.push(user);
     writeUsers(users);
     return res.json({ ok: true });
@@ -66,7 +66,7 @@ app.post('/api/login', async (req, res) => {
     if (!ok) return res.status(401).json({ error: 'Hatalı şifre' });
 
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-    return res.json({ token, user: { name: user.name, email: user.email, phone: user.phone } });
+    return res.json({ token, user: { name: user.name, email: user.email, phone: user.phone, branch: user.branch || '' } });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'Sunucu hatası' });
@@ -108,7 +108,7 @@ app.get('/api/me', (req, res) => {
     const users = readUsers();
     const user = users.find(u => normalizeEmail(u.email) === normalizeEmail(payload.email) || u.id === payload.id);
     if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
-    return res.json({ user: { id: user.id, name: user.name, email: user.email, phone: user.phone, isAdmin: !!user.isAdmin } });
+    return res.json({ user: { id: user.id, name: user.name, email: user.email, phone: user.phone, branch: user.branch || '', isAdmin: !!user.isAdmin } });
   } catch (e) {
     return res.status(401).json({ error: 'Token geçersiz' });
   }
@@ -152,7 +152,7 @@ app.get('/api/users', (req, res) => {
     const users = readUsers();
     const requester = users.find(u => u.id === payload.id || normalizeEmail(u.email) === normalizeEmail(payload.email));
     if (!requester || !requester.isAdmin) return res.status(403).json({ error: 'Admin yetkisi gerekli' });
-    const out = users.map(u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, isAdmin: !!u.isAdmin }));
+    const out = users.map(u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, branch: u.branch || '', isAdmin: !!u.isAdmin }));
     return res.json({ users: out });
   } catch (e) {
     return res.status(401).json({ error: 'Token geçersiz' });

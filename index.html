@@ -23,7 +23,7 @@
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; }
-    body, html { height: 100%; width: 100%; background: radial-gradient(circle at top right, #1b325f 0%, var(--color-bg) 45%, #0b1630 100%); color: #1e293b; overflow-x: hidden; }
+    body, html { height: 100%; width: 100%; background: radial-gradient(circle at top right, #27467a 0%, #18345f 45%, #122649 100%); color: #1e293b; overflow-x: hidden; }
 
     /* NAVBAR */
     .top-navbar {
@@ -113,11 +113,11 @@
     }
 
     /* PLATFORM TANITIM SİTESİ (PROMO) */
-    #promoPage { display: none; padding: 120px 20px 60px; max-width: 1100px; margin: 0 auto; }
+    #promoPage { display: none; padding: 110px 20px 60px; max-width: 1100px; margin: 0 auto; }
     .hero-section { display: flex; align-items: center; gap: 40px; }
     .hero-text { flex: 1; }
-    .hero-text h1 { font-size: 2.8rem; font-weight: 800; line-height: 1.2; color: #eaf2ff; margin-bottom: 16px; text-shadow: 0 2px 14px rgba(0,0,0,0.22); }
-    .hero-text h1 span { color: var(--color-coral); background: var(--color-yellow); padding: 0 8px; border-radius: 8px; }
+    .hero-text h1 { font-size: 2.8rem; font-weight: 800; line-height: 1.22; color: #eaf2ff; margin-top: 0; margin-bottom: 16px; text-shadow: 0 2px 14px rgba(0,0,0,0.22); }
+    .hero-text h1 span { display: inline-block; color: var(--color-coral); background: var(--color-yellow); padding: 0 8px; border-radius: 8px; }
     .hero-text p { font-size: 1.05rem; color: #c7d4ea; line-height: 1.6; margin-bottom: 24px; }
     .tag-group { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
     .tag { background: #f2f6ff; color: #13284f; padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
@@ -183,11 +183,14 @@
     }
     .welcome-text h1 { font-size: 1.5rem; font-weight: 800; }
     .welcome-text p { color: var(--color-lightgreen); font-size: 0.85rem; margin-top: 2px; }
+    .welcome-user-line { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:6px; }
+    .welcome-user-branch, .welcome-user-email { font-size:0.72rem; font-weight:800; padding:4px 10px; border-radius:999px; background: rgba(255,255,255,0.12); color:#e2e8f0; }
+    .welcome-user-email { font-weight:700; }
 
     .header-badges { display: flex; gap: 10px; align-items: center; }
     .live-clock-box { background: rgba(255,255,255,0.15); padding: 10px 18px; border-radius: 14px; font-weight: 800; font-size: 1.2rem; color: #fff; border: 1px solid rgba(255,255,255,0.2); }
 
-    .grid-dashboard { display: grid; grid-template-columns: 2.2fr 1fr; gap: 20px; }
+    .grid-dashboard { display: grid; grid-template-columns: 1fr; gap: 20px; }
     .card-panel { background: #ffffff; border-radius: var(--radius-rounded); padding: 20px; border: 1.5px solid #e2e8f0; margin-bottom: 20px; }
     .panel-title { font-size: 1rem; font-weight: 800; color: var(--color-dark-teal); margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
 
@@ -228,16 +231,69 @@
     .muhasebe-empty { border:1px dashed #cbd5e1; border-radius:10px; padding:10px; color:#64748b; font-size:0.8rem; }
 
     .todo-notebook-card {
-      grid-column: 2;
-      background: linear-gradient(180deg, #fff6dd 0%, #f6e8c8 100%);
-      border: 1.5px solid #d8bf92;
+      grid-column: 1;
+      background: linear-gradient(180deg, #f6fbff 0%, #e6effb 100%);
+      border: 1.5px solid #c8d8ee;
       border-radius: 20px;
       padding: 18px;
       min-height: 420px;
-      box-shadow: 0 18px 36px rgba(92, 63, 26, 0.18);
+      box-shadow: 0 18px 36px rgba(16, 32, 64, 0.12);
       display: flex;
       flex-direction: column;
       gap: 14px;
+    }
+    .kokpit-user-card {
+      grid-column: 1;
+      background: linear-gradient(180deg, #f6fbff 0%, #e6effb 100%);
+      border: 1.5px solid #c8d8ee;
+      border-radius: 20px;
+      padding: 18px;
+      min-height: 420px;
+      box-shadow: 0 18px 36px rgba(16, 32, 64, 0.12);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .kokpit-user-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: fit-content;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #dfe9f7;
+      color: #102040;
+      font-size: 0.75rem;
+      font-weight: 800;
+    }
+    .kokpit-user-name {
+      font-size: 1.15rem;
+      font-weight: 900;
+      color: #102040;
+      line-height: 1.2;
+    }
+    .kokpit-user-meta {
+      color: #64748b;
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+    .kokpit-user-field {
+      background: rgba(255, 255, 255, 0.55);
+      border: 1px solid #d6e2f0;
+      border-radius: 14px;
+      padding: 12px 14px;
+    }
+    .kokpit-user-field-label {
+      font-size: 0.72rem;
+      color: #64748b;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .kokpit-user-field-value {
+      font-size: 0.92rem;
+      color: #102040;
+      font-weight: 700;
+      word-break: break-word;
     }
     .todo-notebook-head {
       display: flex;
@@ -258,23 +314,23 @@
     .todo-notebook-date {
       font-size: 0.9rem;
       font-weight: 800;
-      color: #5f4428;
-      background: #fff8e6;
-      border: 1px solid #ddc9a5;
+      color: #102040;
+      background: #dfe9f7;
+      border: 1px solid #c8d8ee;
       border-radius: 12px;
       padding: 10px 12px;
     }
     .todo-list-wrap {
-      border: 1px dashed #c7ab7f;
+      border: 1px dashed #b8cae3;
       border-radius: 14px;
       padding: 10px 12px;
       background:
         repeating-linear-gradient(
           to bottom,
-          #fff8e9 0px,
-          #fff8e9 33px,
-          #dec7a0 33px,
-          #dec7a0 34px
+          #f8fbff 0px,
+          #f8fbff 33px,
+          #c7d7ec 33px,
+          #c7d7ec 34px
         );
       flex: 1;
     }
@@ -287,12 +343,12 @@
       outline: none;
       background: transparent;
       font-size: 0.95rem;
-      color: #4a321b;
+      color: #102040;
       line-height: 34px;
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     }
     .todo-notebook-textarea::placeholder {
-      color: #9a7d54;
+      color: #6f86a8;
     }
 
     .student-card-box { background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 16px; width: 100%; max-width: 280px; position: relative; margin-top: 16px; overflow: hidden; box-shadow: 0 18px 28px rgba(15, 23, 42, 0.08); transition: transform 0.2s ease, box-shadow 0.2s ease; }
@@ -767,6 +823,20 @@
       <form id="formKayit" style="display: none;" onsubmit="event.preventDefault(); kayitOl();">
         <input type="text" class="input-field" id="regName" placeholder="AD SOYAD *" required>
         <input type="email" class="input-field" id="regEmail" placeholder="EMAİL *" required>
+        <select id="regBranch" class="input-field">
+          <option value="">Branş seçin (isteğe bağlı)</option>
+          <option>Matematik</option>
+          <option>Fen Bilimleri</option>
+          <option>Türkçe</option>
+          <option>İngilizce</option>
+          <option>Tarih</option>
+          <option>Coğrafya</option>
+          <option>Fizik</option>
+          <option>Kimya</option>
+          <option>Biyoloji</option>
+          <option>Geometri</option>
+          <option>Rehberlik</option>
+        </select>
         
         <div class="form-row">
           <div class="password-field" style="margin-bottom:0;">
@@ -896,7 +966,11 @@
       <div class="main-content">
         <div class="dashboard-header">
           <div class="welcome-text">
-            <h1>İyi Çalışmalar</h1>
+            <h1 id="kokpitWelcomeName">İyi Çalışmalar</h1>
+            <div class="welcome-user-line">
+              <span class="welcome-user-branch" id="kokpitWelcomeBranch">Branş seçilmedi</span>
+              <span class="welcome-user-email" id="kokpitWelcomeEmail">E-posta yok</span>
+            </div>
             <p id="dateBox"></p>
           </div>
           <div class="header-badges">
@@ -913,7 +987,6 @@
           <div class="grid-dashboard">
             <div class="todo-notebook-card">
               <div class="todo-notebook-head">
-                <div class="todo-notebook-title">Bugün yapılacakları yaz</div>
                 <div class="todo-notebook-nav">
                   <button type="button" class="btn-nav-outline" style="padding:8px 12px;" onclick="changeKokpitTodoDate(-1)">←</button>
                   <button type="button" class="btn-nav-outline" style="padding:8px 14px;" onclick="changeKokpitTodoDate(1)">→</button>
