@@ -153,6 +153,84 @@ function sifreKontrolEt(val) {
   ruleNumber.className = hasNumber ? "valid" : "";
 }
 
+function togglePasswordVisibility(inputId, buttonEl) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  buttonEl.classList.toggle('password-visible', !showing);
+  buttonEl.setAttribute('aria-pressed', String(!showing));
+  buttonEl.setAttribute('aria-label', showing ? 'Şifreyi göster' : 'Şifreyi gizle');
+}
+
+function sifremiUnuttumAc(kaynak) {
+  const forgotEmail = document.getElementById('forgotEmail');
+  const forgotNewPass = document.getElementById('forgotNewPass');
+  const forgotNewPassConfirm = document.getElementById('forgotNewPassConfirm');
+  const forgotErrorBox = document.getElementById('forgotErrorBox');
+
+  const sourceEmailId = kaynak === 'card' ? 'cardEmail' : 'modalEmail';
+  const sourceEmailInput = document.getElementById(sourceEmailId);
+
+  forgotEmail.value = sourceEmailInput ? sourceEmailInput.value.trim() : '';
+  forgotNewPass.value = '';
+  forgotNewPassConfirm.value = '';
+  forgotErrorBox.style.display = 'none';
+  forgotErrorBox.textContent = '';
+
+  modalAc('forgotModal');
+}
+
+function sifreSifirla() {
+  const email = document.getElementById('forgotEmail').value.trim();
+  const newPassword = document.getElementById('forgotNewPass').value;
+  const confirmPassword = document.getElementById('forgotNewPassConfirm').value;
+  const forgotErrorBox = document.getElementById('forgotErrorBox');
+
+  if (!email || !newPassword || !confirmPassword) {
+    forgotErrorBox.textContent = 'Lütfen tüm alanları doldurun.';
+    forgotErrorBox.style.display = 'block';
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    forgotErrorBox.textContent = 'Şifreler birbiriyle eşleşmiyor.';
+    forgotErrorBox.style.display = 'block';
+    return;
+  }
+
+  if (newPassword.length < 8 || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+    forgotErrorBox.textContent = 'Şifre en az 8 karakter olmalı, bir küçük harf ve bir sayı içermeli.';
+    forgotErrorBox.style.display = 'block';
+    return;
+  }
+
+  fetch(API_URL + '/api/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, newPassword })
+  }).then(async res => {
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      forgotErrorBox.style.display = 'none';
+      modalKapat('forgotModal');
+      alert('Şifreniz başarıyla güncellendi. Yeni şifrenizle giriş yapabilirsiniz.');
+      const cardEmail = document.getElementById('cardEmail');
+      const modalEmail = document.getElementById('modalEmail');
+      if (cardEmail) cardEmail.value = email;
+      if (modalEmail) modalEmail.value = email;
+      tabDegistir('giris');
+    } else {
+      forgotErrorBox.textContent = data.error || 'Şifre güncellenemedi.';
+      forgotErrorBox.style.display = 'block';
+    }
+  }).catch(() => {
+    forgotErrorBox.textContent = 'Sunucuya bağlanılamıyor.';
+    forgotErrorBox.style.display = 'block';
+  });
+}
+
 function kayitOl() {
   const name = document.getElementById('regName').value.trim();
   const email = document.getElementById('regEmail').value.trim();

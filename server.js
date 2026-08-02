@@ -67,6 +67,30 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+app.post('/api/forgot-password', async (req, res) => {
+  const { email, newPassword } = req.body;
+  if (!email || !newPassword) return res.status(400).json({ error: 'Eksik alanlar' });
+
+  if (newPassword.length < 8 || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+    return res.status(400).json({ error: 'Şifre kurallara uymuyor' });
+  }
+
+  const users = readUsers();
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const user = users.find(u => String(u.email || '').trim().toLowerCase() === normalizedEmail);
+  if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+
+  try {
+    const hash = await bcryptjs.hash(newPassword, 10);
+    user.password = hash;
+    writeUsers(users);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'Sunucu hatası' });
+  }
+});
+
 app.get('/api/me', (req, res) => {
   const auth = req.headers.authorization;
   if (!auth) return res.status(401).json({ error: 'Yetkisiz' });

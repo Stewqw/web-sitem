@@ -81,9 +81,36 @@
     .login-card { background: #ffffff; padding: 40px 32px; border-radius: var(--radius-rounded); box-shadow: 0 20px 40px rgba(0, 168, 150, 0.1); width: 100%; max-width: 400px; text-align: center; border: 2px solid var(--color-lightgreen); }
     .input-field { width: 100%; padding: 12px 14px; border: 1.5px solid #cbd5e1; border-radius: 12px; margin-bottom: 12px; font-size: 0.9rem; outline: none; background: #f8fafc; }
     .input-field:focus { border-color: var(--color-teal); background: #fff; }
+    .password-field { position: relative; margin-bottom: 12px; }
+    .password-field .input-field { margin-bottom: 0; padding-right: 46px; }
+    .toggle-password-btn {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      width: 30px; height: 30px; border: 1px solid transparent; border-radius: 8px;
+      background: #f1f5f9; color: #475569; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+    .toggle-password-btn:hover { background: #e2e8f0; border-color: #cbd5e1; color: #1e293b; }
+    .toggle-password-btn:focus-visible { outline: 2px solid #94a3b8; outline-offset: 1px; }
+    .toggle-password-btn .eye-off { display: none; }
+    .toggle-password-btn.password-visible .eye-on { display: none; }
+    .toggle-password-btn.password-visible .eye-off { display: block; }
+    .toggle-password-btn svg { width: 16px; height: 16px; }
     .error-box { display: none; background-color: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; padding: 12px 16px; border-radius: var(--radius-rounded); font-size: 0.85rem; font-weight: 700; margin-bottom: 14px; text-align: center; }
     .login-footer { margin-top: 20px; font-size: 0.85rem; color: #64748b; }
     .login-footer a { color: var(--color-dark-teal); font-weight: 800; text-decoration: none; cursor: pointer; }
+    .forgot-link {
+      margin-bottom: 12px;
+      text-align: right;
+      font-size: 0.82rem;
+      color: #475569;
+    }
+    .forgot-link a {
+      color: var(--color-dark-teal);
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+    }
 
     /* PLATFORM TANITIM SİTESİ (PROMO) */
     #promoPage { display: none; padding: 120px 20px 60px; max-width: 1100px; margin: 0 auto; }
@@ -274,10 +301,19 @@
       
       <form onsubmit="event.preventDefault(); paneleGirisYap('card');">
         <input type="email" id="cardEmail" class="input-field" placeholder="E-posta Adresi" required>
-        <input type="password" id="cardPass" class="input-field" placeholder="Şifre" required>
+        <div class="password-field">
+          <input type="password" id="cardPass" class="input-field" placeholder="Şifre" required>
+          <button type="button" class="toggle-password-btn" aria-label="Şifreyi göster" aria-pressed="false" onclick="togglePasswordVisibility('cardPass', this)">
+            <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.8 21.8 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A10.94 10.94 0 0 1 12 5c7 0 11 7 11 7a21.76 21.76 0 0 1-3.17 4.57"></path><path d="M1 1l22 22"></path><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path></svg>
+          </button>
+        </div>
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
           <input type="checkbox" id="rememberCard" />
           <label for="rememberCard" style="font-size:0.85rem; color:#64748b; cursor:pointer;">Beni hatırla</label>
+        </div>
+        <div class="forgot-link">
+          <a onclick="sifremiUnuttumAc('card')">Şifremi Unuttum</a>
         </div>
         <div class="error-box" id="cardErrorBox"></div>
         <button type="submit" class="btn-action btn-coral" style="width:100%;">Giriş Yap</button>
@@ -329,10 +365,19 @@
       <!-- Giriş Formu -->
       <form id="formGiris" onsubmit="event.preventDefault(); paneleGirisYap('modal');">
         <input type="email" id="modalEmail" class="input-field" placeholder="E-Posta Adresiniz" required>
-        <input type="password" id="modalPass" class="input-field" placeholder="Şifreniz" required>
+        <div class="password-field">
+          <input type="password" id="modalPass" class="input-field" placeholder="Şifreniz" required>
+          <button type="button" class="toggle-password-btn" aria-label="Şifreyi göster" aria-pressed="false" onclick="togglePasswordVisibility('modalPass', this)">
+            <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.8 21.8 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A10.94 10.94 0 0 1 12 5c7 0 11 7 11 7a21.76 21.76 0 0 1-3.17 4.57"></path><path d="M1 1l22 22"></path><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path></svg>
+          </button>
+        </div>
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
           <input type="checkbox" id="rememberModal" />
           <label for="rememberModal" style="font-size:0.85rem; color:#64748b; cursor:pointer;">Beni hatırla</label>
+        </div>
+        <div class="forgot-link">
+          <a onclick="sifremiUnuttumAc('modal')">Şifremi Unuttum</a>
         </div>
         <div class="error-box" id="modalErrorBox"></div>
         <button type="submit" class="btn-action btn-coral" style="width:100%; margin-top:10px;">Giriş Yap</button>
@@ -344,8 +389,20 @@
         <input type="email" class="input-field" id="regEmail" placeholder="EMAİL *" required>
         
         <div class="form-row">
-          <input type="password" class="input-field" id="regPass" placeholder="ŞİFRE *" required oninput="sifreKontrolEt(this.value)">
-          <input type="password" class="input-field" id="regPassConfirm" placeholder="ŞİFRE TEKRAR *" required>
+          <div class="password-field" style="margin-bottom:0;">
+            <input type="password" class="input-field" id="regPass" placeholder="ŞİFRE *" required oninput="sifreKontrolEt(this.value)">
+            <button type="button" class="toggle-password-btn" aria-label="Şifreyi göster" aria-pressed="false" onclick="togglePasswordVisibility('regPass', this)">
+              <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.8 21.8 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A10.94 10.94 0 0 1 12 5c7 0 11 7 11 7a21.76 21.76 0 0 1-3.17 4.57"></path><path d="M1 1l22 22"></path><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path></svg>
+            </button>
+          </div>
+          <div class="password-field" style="margin-bottom:0;">
+            <input type="password" class="input-field" id="regPassConfirm" placeholder="ŞİFRE TEKRAR *" required>
+            <button type="button" class="toggle-password-btn" aria-label="Şifreyi göster" aria-pressed="false" onclick="togglePasswordVisibility('regPassConfirm', this)">
+              <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.8 21.8 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A10.94 10.94 0 0 1 12 5c7 0 11 7 11 7a21.76 21.76 0 0 1-3.17 4.57"></path><path d="M1 1l22 22"></path><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path></svg>
+            </button>
+          </div>
         </div>
 
         <!-- Canlı Şifre Kuralları -->
@@ -359,6 +416,37 @@
         <div class="error-box" id="regErrorBox"></div>
 
         <button type="submit" class="btn-action btn-cta" style="width:100%; margin-top:10px;">Kayıt Ol</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="forgotModal">
+    <div class="modal-card" style="max-width:460px;">
+      <button class="modal-close" onclick="modalKapat('forgotModal')">✕</button>
+      <h3 style="margin-bottom:8px; color:#0f172a;">Şifre Sıfırla</h3>
+      <p style="font-size:0.85rem; color:#64748b; margin-bottom:16px;">E-posta adresinizi ve yeni şifrenizi girin.</p>
+
+      <form onsubmit="event.preventDefault(); sifreSifirla();">
+        <input type="email" id="forgotEmail" class="input-field" placeholder="E-Posta Adresiniz" required>
+
+        <div class="password-field">
+          <input type="password" id="forgotNewPass" class="input-field" placeholder="Yeni Şifre" required>
+          <button type="button" class="toggle-password-btn" aria-label="Şifreyi göster" aria-pressed="false" onclick="togglePasswordVisibility('forgotNewPass', this)">
+            <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.8 21.8 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A10.94 10.94 0 0 1 12 5c7 0 11 7 11 7a21.76 21.76 0 0 1-3.17 4.57"></path><path d="M1 1l22 22"></path><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path></svg>
+          </button>
+        </div>
+
+        <div class="password-field">
+          <input type="password" id="forgotNewPassConfirm" class="input-field" placeholder="Yeni Şifre (Tekrar)" required>
+          <button type="button" class="toggle-password-btn" aria-label="Şifreyi göster" aria-pressed="false" onclick="togglePasswordVisibility('forgotNewPassConfirm', this)">
+            <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.8 21.8 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A10.94 10.94 0 0 1 12 5c7 0 11 7 11 7a21.76 21.76 0 0 1-3.17 4.57"></path><path d="M1 1l22 22"></path><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path></svg>
+          </button>
+        </div>
+
+        <div class="error-box" id="forgotErrorBox"></div>
+        <button type="submit" class="btn-action btn-coral" style="width:100%; margin-top:8px;">Şifreyi Güncelle</button>
       </form>
     </div>
   </div>
