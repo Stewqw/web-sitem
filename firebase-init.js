@@ -3,6 +3,7 @@
     apiKey: "AIzaSyAnLmvL1pXi5UiuD-ojA_ICxrOCjpkI55I",
     authDomain: "parabol-kocluk.firebaseapp.com",
     projectId: "parabol-kocluk",
+    databaseURL: "https://parabol-kocluk-default-rtdb.asia-southeast1.firebasedatabase.app",
     storageBucket: "parabol-kocluk.firebasestorage.app",
     messagingSenderId: "252912880544",
     appId: "1:252912880544:web:5b87683ab2191bac18b2c5",
@@ -68,9 +69,12 @@
   const app = window.firebase.apps.length
     ? window.firebase.app()
     : window.firebase.initializeApp(firebaseConfig);
+  const realtimeDatabaseUrl = "https://parabol-kocluk-default-rtdb.asia-southeast1.firebasedatabase.app";
   const auth = window.firebase.auth(app);
   const db = window.firebase.firestore ? window.firebase.firestore(app) : null;
-  const rtdb = window.firebase.database ? window.firebase.database(app) : null;
+  const rtdb = window.firebase.database && typeof app.database === "function"
+    ? app.database(realtimeDatabaseUrl)
+    : null;
 
   const fieldValue = window.firebase.firestore ? window.firebase.firestore.FieldValue : null;
 
@@ -149,7 +153,7 @@
       try {
         await withTimeout(
           rtdb.ref("users/" + credential.user.uid).set(profilePayload),
-          12000,
+          5000,
           "app/realtime-db-timeout",
           "Profil verisi kaydedilirken zaman aşımı oluştu."
         );
