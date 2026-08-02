@@ -191,6 +191,74 @@
     .card-panel { background: #ffffff; border-radius: var(--radius-rounded); padding: 20px; border: 1.5px solid #e2e8f0; margin-bottom: 20px; }
     .panel-title { font-size: 1rem; font-weight: 800; color: var(--color-dark-teal); margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
 
+    .todo-notebook-card {
+      grid-column: 2;
+      background: linear-gradient(180deg, #fff6dd 0%, #f6e8c8 100%);
+      border: 1.5px solid #d8bf92;
+      border-radius: 20px;
+      padding: 18px;
+      min-height: 420px;
+      box-shadow: 0 18px 36px rgba(92, 63, 26, 0.18);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .todo-notebook-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .todo-notebook-title {
+      font-size: 1.05rem;
+      font-weight: 900;
+      color: #5b3b1f;
+    }
+    .todo-notebook-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .todo-notebook-date {
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: #5f4428;
+      background: #fff8e6;
+      border: 1px solid #ddc9a5;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .todo-list-wrap {
+      border: 1px dashed #c7ab7f;
+      border-radius: 14px;
+      padding: 10px 12px;
+      background:
+        repeating-linear-gradient(
+          to bottom,
+          #fff8e9 0px,
+          #fff8e9 33px,
+          #dec7a0 33px,
+          #dec7a0 34px
+        );
+      flex: 1;
+    }
+    .todo-notebook-textarea {
+      width: 100%;
+      height: 100%;
+      min-height: 300px;
+      resize: vertical;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 0.95rem;
+      color: #4a321b;
+      line-height: 34px;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .todo-notebook-textarea::placeholder {
+      color: #9a7d54;
+    }
+
     .student-card-box { background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 16px; width: 100%; max-width: 280px; position: relative; margin-top: 16px; overflow: hidden; box-shadow: 0 18px 28px rgba(15, 23, 42, 0.08); transition: transform 0.2s ease, box-shadow 0.2s ease; }
     .student-card-box:hover { transform: translateY(-2px); box-shadow: 0 22px 36px rgba(15, 23, 42, 0.12); }
     .student-badge-group { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; }
@@ -824,13 +892,18 @@
         <!-- 1. ANA SAYFA KOKPİT -->
         <div id="tabKokpit">
           <div class="grid-dashboard">
-            <div>
-              <div class="card-panel" style="cursor: pointer;" onclick="sekmeAcs('program')">
-                <div class="panel-title">📅 Bugün</div>
-                <div style="background: #ffffff; border: 1px solid #ffd29a; padding: 12px; border-radius: 12px; display: flex; align-items: center; justify-content: space-between;">
-                  <span style="font-size: 0.85rem; font-weight: 700;">1 öğrenciye bugün program atanmamış</span>
-                  <span>→</span>
+            <div class="todo-notebook-card">
+              <div class="todo-notebook-head">
+                <div class="todo-notebook-title">Bugün yapılacakları yaz</div>
+                <div class="todo-notebook-nav">
+                  <button type="button" class="btn-nav-outline" style="padding:8px 12px;" onclick="changeKokpitTodoDate(-1)">←</button>
+                  <button type="button" class="btn-nav-outline" style="padding:8px 14px;" onclick="changeKokpitTodoDate(1)">→</button>
                 </div>
+              </div>
+              <div id="kokpitTodoDate" class="todo-notebook-date">2 Ağustos 2026 Pazar</div>
+
+              <div class="todo-list-wrap">
+                <textarea id="kokpitNotebookText" class="todo-notebook-textarea" oninput="onKokpitNotebookInput()" placeholder="Bugünün notlarını yaz..."></textarea>
               </div>
             </div>
           </div>
@@ -1379,6 +1452,7 @@
                 <h2 style="margin:0; font-size:1.25rem; color: var(--color-dark-teal);">Çözülen Soru Sayısı</h2>
                 <p style="margin:8px 0 0; color:#64748b; font-size:0.9rem;">Ders, ünite, konu ve kaynağa göre soru çözüm takibi.</p>
               </div>
+              <button class="btn-nav-outline" onclick="indirTumCozulenSorularPdf()">PDF indir</button>
             </div>
 
             <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:16px;">

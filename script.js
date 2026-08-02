@@ -1458,6 +1458,8 @@ document.addEventListener('DOMContentLoaded', () => {
   history.replaceState({ sayfaId: 'landingPage' }, "", "#landingPage");
   loadSavedResourceSuggestions();
   startUserCountAutoRefresh();
+  loadKokpitNotebookNotes();
+  renderKokpitTodoDate();
   attemptAutoLogin().then(auto => {
     if (!auto) {
       sayfaAcs('landingPage', false);
@@ -1484,6 +1486,85 @@ function updateClockAndDate() {
     const formatted = dateStr.replace(/(^|\s)\S/g, t => t.toUpperCase());
     dateEl.textContent = formatted;
   }
+}
+
+let kokpitTodoDateOffset = 0;
+let kokpitNotebookNotes = {};
+
+function getKokpitNotebookStorageKey() {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  return `kokpit_notebook_${email}`;
+}
+
+function loadKokpitNotebookNotes() {
+  const raw = localStorage.getItem(getKokpitNotebookStorageKey());
+  try {
+    const parsed = raw ? JSON.parse(raw) : {};
+    kokpitNotebookNotes = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (e) {
+    kokpitNotebookNotes = {};
+  }
+}
+
+function saveKokpitNotebookNotes() {
+  localStorage.setItem(getKokpitNotebookStorageKey(), JSON.stringify(kokpitNotebookNotes));
+}
+
+function getKokpitActiveDate() {
+  const base = new Date();
+  base.setHours(0, 0, 0, 0);
+  base.setDate(base.getDate() + kokpitTodoDateOffset);
+  return base;
+}
+
+function getKokpitDateKey(dateObj) {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function renderKokpitTodoDate() {
+  const dateEl = document.getElementById('kokpitTodoDate');
+  const noteEl = document.getElementById('kokpitNotebookText');
+  if (!dateEl) return;
+
+  const base = getKokpitActiveDate();
+
+  const text = base.toLocaleDateString('tr-TR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    weekday: 'long'
+  });
+
+  dateEl.textContent = text.replace(/(^|\s)\S/g, (t) => t.toUpperCase());
+
+  if (noteEl) {
+    const key = getKokpitDateKey(base);
+    noteEl.value = String(kokpitNotebookNotes[key] || '');
+  }
+}
+
+function changeKokpitTodoDate(step) {
+  kokpitTodoDateOffset += Number(step) || 0;
+  renderKokpitTodoDate();
+}
+
+function onKokpitNotebookInput() {
+  const noteEl = document.getElementById('kokpitNotebookText');
+  if (!noteEl) return;
+
+  const key = getKokpitDateKey(getKokpitActiveDate());
+  const value = noteEl.value || '';
+
+  if (value.trim()) {
+    kokpitNotebookNotes[key] = value;
+  } else {
+    delete kokpitNotebookNotes[key];
+  }
+
+  saveKokpitNotebookNotes();
 }
 
 // Başlangıçta hemen çağır ve sonra her saniye güncelle
@@ -2476,6 +2557,85 @@ function deleteCozulenSoruRecord(recordId) {
   student.cozulenSoruRecords = student.cozulenSoruRecords.filter((item) => item.id !== Number(recordId));
   setStoredOgrenciler(students);
   renderCozulenSoruRecords();
+}
+
+function indirTumCozulenSorularPdf() {
+  if (!activeStudentId) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  const students = getStoredOgrenciler();
+  const student = students.find((s) => s.id === activeStudentId);
+  const records = student && Array.isArray(student.cozulenSoruRecords) ? student.cozulenSoruRecords : [];
+
+  if (!records.length) {
+    alert('İndirilecek çözülen soru kaydı bulunamadı.');
+    return;
+  }
+
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert('PDF kütüphanesi yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin.');
+    return;
+  }
+
+  const studentName = student && student.name ? student.name : 'Ogrenci';
+  const doc = new window.jspdf.jsPDF('p', 'pt', 'a4');
+  const marginLeft = 40;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const maxWidth = 510;
+  let y = 44;
+
+  const ensureSpace = (needed = 80) => {
+    if (y + needed > pageHeight - 40) {
+      doc.addPage();
+      y = 44;
+    }
+  };
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text(pdfSafeText('Cozulen Soru Raporu'), marginLeft, y);
+  y += 24;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.text(pdfSafeText(`Ogrenci: ${studentName}`), marginLeft, y);
+  y += 16;
+  doc.text(pdfSafeText(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`), marginLeft, y);
+  y += 22;
+
+  records.forEach((item, index) => {
+    ensureSpace(120);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text(pdfSafeText(`${index + 1}. Kayit`), marginLeft, y);
+    y += 16;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(pdfSafeText(`Ders: ${item.lesson || '-'}`), marginLeft, y);
+    y += 14;
+    doc.text(pdfSafeText(`Unite: ${item.unit || '-'}`), marginLeft, y);
+    y += 14;
+    doc.text(pdfSafeText(`Konu: ${item.topic || '-'}`), marginLeft, y);
+    y += 14;
+    doc.text(pdfSafeText(`Kaynak: ${item.source || '-'}`), marginLeft, y);
+    y += 14;
+
+    const summaryLine = `Soru: ${Number(item.questionCount || 0)}   Dogru: ${Number(item.correct || 0)}   Yanlis: ${Number(item.wrong || 0)}   Bos: ${Number(item.blank || 0)}`;
+    const wrapped = doc.splitTextToSize(pdfSafeText(summaryLine), maxWidth);
+    doc.text(wrapped, marginLeft, y);
+    y += wrapped.length * 12 + 8;
+
+    doc.setDrawColor(220, 226, 232);
+    doc.line(marginLeft, y, 555, y);
+    y += 14;
+  });
+
+  const safeName = studentName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '');
+  doc.save(`${safeName || 'ogrenci'}_cozulen_soru_raporu.pdf`);
 }
 
 function openStudentCozulenSoruPage() {
