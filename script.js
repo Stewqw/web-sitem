@@ -417,6 +417,8 @@ function sekmeAcs(sekmeAd) {
   document.getElementById('tabProgram').style.display = 'none';
   document.getElementById('tabKaynak').style.display = 'none';
   document.getElementById('tabBrans').style.display = 'none';
+  const genelEl = document.getElementById('tabGenel');
+  if (genelEl) genelEl.style.display = 'none';
 
   const markMenuActive = (menuId) => {
     const el = document.getElementById(menuId);
@@ -457,6 +459,33 @@ function updateBransExamNet() {
   if (netEl) netEl.textContent = net.toFixed(2);
 }
 
+function formatDateInput(inputEl) {
+  if (!inputEl) return;
+  const digits = String(inputEl.value || '').replace(/\D/g, '').slice(0, 8);
+  const day = digits.slice(0, 2);
+  const month = digits.slice(2, 4);
+  const year = digits.slice(4, 8);
+
+  let formatted = day;
+  if (month) formatted += '.' + month;
+  if (year) formatted += '.' + year;
+
+  inputEl.value = formatted;
+}
+
+function isValidTrDate(dateText) {
+  const match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String(dateText || '').trim());
+  if (!match) return false;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+
+  const testDate = new Date(year, month - 1, day);
+  return testDate.getFullYear() === year && testDate.getMonth() === (month - 1) && testDate.getDate() === day;
+}
+
 function getBransExamStorageKey() {
   const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
   const studentKey = activeStudentId ? String(activeStudentId) : 'none';
@@ -480,6 +509,7 @@ function setStoredBransExams(records) {
 
 function formatExamDate(dateText) {
   if (!dateText) return '-';
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(dateText)) return dateText;
   const d = new Date(dateText);
   if (Number.isNaN(d.getTime())) return dateText;
   return d.toLocaleDateString('tr-TR');
@@ -504,6 +534,13 @@ function renderBransExamHistory() {
         <div>
           <strong>${title}</strong>
           <div class="exam-history-meta">${meta}</div>
+          <div class="exam-history-actions">
+            <label class="exam-pdf-btn" for="bransPdf_${item.id}">PDF Yükle</label>
+            <input id="bransPdf_${item.id}" type="file" accept="application/pdf" style="display:none" onchange="uploadBransExamPdf(${item.id}, this)">
+            ${item.pdfData ? '<button type="button" class="exam-pdf-btn" onclick="openExamPdf(\'' + item.id + '\', \"brans\")">PDF Aç</button>' : ''}
+            <button type="button" class="exam-delete-btn" onclick="deleteBransExam(${item.id})">Sil</button>
+          </div>
+          ${item.pdfName ? `<div class="exam-pdf-name">Yüklü: ${item.pdfName}</div>` : ''}
         </div>
         <div class="exam-history-meta">${details}</div>
         <div class="exam-history-net">
@@ -513,6 +550,44 @@ function renderBransExamHistory() {
       </div>
     `;
   }).join('');
+}
+
+function uploadBransExamPdf(recordId, inputEl) {
+  const file = inputEl && inputEl.files && inputEl.files[0];
+  if (!file) return;
+
+  if (file.type !== 'application/pdf') {
+    alert('Lütfen sadece PDF dosyası yükleyin.');
+    inputEl.value = '';
+    return;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    alert('PDF dosyası en fazla 5MB olmalı.');
+    inputEl.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const records = getStoredBransExams();
+    const target = records.find((r) => String(r.id) === String(recordId));
+    if (!target) return;
+    target.pdfName = file.name;
+    target.pdfData = String(reader.result || '');
+    setStoredBransExams(records);
+    renderBransExamHistory();
+  };
+  reader.readAsDataURL(file);
+}
+
+function deleteBransExam(recordId) {
+  if (!confirm('Bu branş denemesi kaydını silmek istiyor musunuz?')) return;
+
+  const records = getStoredBransExams();
+  const filtered = records.filter((r) => String(r.id) !== String(recordId));
+  setStoredBransExams(filtered);
+  renderBransExamHistory();
 }
 
 function kaydetBransDenemesi() {
@@ -531,6 +606,11 @@ function kaydetBransDenemesi() {
 
   if (!lesson || !examDate || !examName) {
     alert('Lütfen ders, deneme tarihi ve deneme adını doldurun.');
+    return;
+  }
+
+  if (!isValidTrDate(examDate)) {
+    alert('Deneme tarihi GG.AA.YYYY formatında ve geçerli olmalı.');
     return;
   }
 
@@ -569,6 +649,221 @@ function kaydetBransDenemesi() {
   document.getElementById('bransExamName').value = '';
   const netEl = document.getElementById('bransExamNet');
   if (netEl) netEl.textContent = '0.00';
+}
+
+const GENEL_LESSON_KEYS = ['Mat', 'Fen', 'Tur', 'Ink', 'Ing', 'Din'];
+
+function getGenelExamStorageKey() {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const studentKey = activeStudentId ? String(activeStudentId) : 'none';
+  return `genel_exam_${email}_${studentKey}`;
+}
+
+function getStoredGenelExams() {
+  const key = getGenelExamStorageKey();
+  const raw = localStorage.getItem(key);
+  try {
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function setStoredGenelExams(records) {
+  const key = getGenelExamStorageKey();
+  localStorage.setItem(key, JSON.stringify(records));
+}
+
+function getGenelLessonValues(shortKey) {
+  const q = Number(document.getElementById('genel' + shortKey + 'Q')?.value) || 0;
+  const d = Number(document.getElementById('genel' + shortKey + 'D')?.value) || 0;
+  const y = Number(document.getElementById('genel' + shortKey + 'Y')?.value) || 0;
+  const b = Number(document.getElementById('genel' + shortKey + 'B')?.value) || 0;
+  const net = d - y * 0.25;
+  return { q, d, y, b, net };
+}
+
+function updateGenelLessonNet(shortKey) {
+  const netEl = document.getElementById('genel' + shortKey + 'Net');
+  if (!netEl) return;
+  const values = getGenelLessonValues(shortKey);
+  netEl.textContent = values.net.toFixed(2);
+  updateGenelTotalNet();
+}
+
+function updateGenelTotalNet() {
+  const totalEl = document.getElementById('genelTotalNet');
+  if (!totalEl) return;
+
+  const total = GENEL_LESSON_KEYS.reduce((sum, key) => {
+    const values = getGenelLessonValues(key);
+    return sum + values.net;
+  }, 0);
+
+  totalEl.textContent = total.toFixed(2);
+}
+
+function clearGenelExamForm() {
+  document.getElementById('genelExamName').value = '';
+  document.getElementById('genelExamDate').value = '';
+
+  GENEL_LESSON_KEYS.forEach((key) => {
+    const q = document.getElementById('genel' + key + 'Q');
+    const d = document.getElementById('genel' + key + 'D');
+    const y = document.getElementById('genel' + key + 'Y');
+    const b = document.getElementById('genel' + key + 'B');
+    const n = document.getElementById('genel' + key + 'Net');
+    if (q) q.value = '';
+    if (d) d.value = '';
+    if (y) y.value = '';
+    if (b) b.value = '';
+    if (n) n.textContent = '0.00';
+  });
+
+  const totalEl = document.getElementById('genelTotalNet');
+  if (totalEl) totalEl.textContent = '0.00';
+}
+
+function renderGenelExamHistory() {
+  const listEl = document.getElementById('genelExamSavedList');
+  if (!listEl) return;
+
+  const records = getStoredGenelExams();
+  if (!records.length) {
+    listEl.innerHTML = '<div class="exam-history-empty">Henüz kayıt yok.</div>';
+    return;
+  }
+
+  listEl.innerHTML = records.map((item) => {
+    const lessonBreakdown = [
+      `Mat ${Number(item.lessons?.Mat?.net || 0).toFixed(2)}`,
+      `Fen ${Number(item.lessons?.Fen?.net || 0).toFixed(2)}`,
+      `Tür ${Number(item.lessons?.Tur?.net || 0).toFixed(2)}`,
+      `İnk ${Number(item.lessons?.Ink?.net || 0).toFixed(2)}`,
+      `İng ${Number(item.lessons?.Ing?.net || 0).toFixed(2)}`,
+      `Din ${Number(item.lessons?.Din?.net || 0).toFixed(2)}`
+    ].join(' · ');
+
+    return `
+      <div class="exam-history-item">
+        <div>
+          <strong>${item.examName}</strong>
+          <div class="exam-history-meta">${formatExamDate(item.examDate)}</div>
+          <div class="exam-history-actions">
+            <label class="exam-pdf-btn" for="genelPdf_${item.id}">PDF Yükle</label>
+            <input id="genelPdf_${item.id}" type="file" accept="application/pdf" style="display:none" onchange="uploadGenelExamPdf(${item.id}, this)">
+            ${item.pdfData ? '<button type="button" class="exam-pdf-btn" onclick="openExamPdf(\'' + item.id + '\', \"genel\")">PDF Aç</button>' : ''}
+            <button type="button" class="exam-delete-btn" onclick="deleteGenelExam(${item.id})">Sil</button>
+          </div>
+          ${item.pdfName ? `<div class="exam-pdf-name">Yüklü: ${item.pdfName}</div>` : ''}
+        </div>
+        <div class="exam-history-meta">${lessonBreakdown}</div>
+        <div class="exam-history-net">
+          <div class="value">${Number(item.totalNet || 0).toFixed(2)}</div>
+          <div class="exam-history-meta">Toplam Net</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function uploadGenelExamPdf(recordId, inputEl) {
+  const file = inputEl && inputEl.files && inputEl.files[0];
+  if (!file) return;
+
+  if (file.type !== 'application/pdf') {
+    alert('Lütfen sadece PDF dosyası yükleyin.');
+    inputEl.value = '';
+    return;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    alert('PDF dosyası en fazla 5MB olmalı.');
+    inputEl.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const records = getStoredGenelExams();
+    const target = records.find((r) => String(r.id) === String(recordId));
+    if (!target) return;
+    target.pdfName = file.name;
+    target.pdfData = String(reader.result || '');
+    setStoredGenelExams(records);
+    renderGenelExamHistory();
+  };
+  reader.readAsDataURL(file);
+}
+
+function openExamPdf(recordId, type) {
+  const records = type === 'brans' ? getStoredBransExams() : getStoredGenelExams();
+  const target = records.find((r) => String(r.id) === String(recordId));
+  if (!target || !target.pdfData) {
+    alert('Bu kayıt için PDF bulunamadı.');
+    return;
+  }
+
+  const win = window.open(target.pdfData, '_blank');
+  if (!win) {
+    alert('PDF açılamadı. Tarayıcı açılır pencereyi engelliyor olabilir.');
+  }
+}
+
+function deleteGenelExam(recordId) {
+  if (!confirm('Bu genel deneme kaydını silmek istiyor musunuz?')) return;
+
+  const records = getStoredGenelExams();
+  const filtered = records.filter((r) => String(r.id) !== String(recordId));
+  setStoredGenelExams(filtered);
+  renderGenelExamHistory();
+}
+
+function kaydetGenelDeneme() {
+  if (!activeStudentId) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  const examName = document.getElementById('genelExamName')?.value.trim() || '';
+  const examDate = document.getElementById('genelExamDate')?.value.trim() || '';
+
+  if (!examName || !examDate) {
+    alert('Lütfen deneme adı ve tarih alanlarını doldurun.');
+    return;
+  }
+
+  if (!isValidTrDate(examDate)) {
+    alert('Deneme tarihi GG.AA.YYYY formatında ve geçerli olmalı.');
+    return;
+  }
+
+  const lessons = {};
+  let totalNet = 0;
+
+  for (const key of GENEL_LESSON_KEYS) {
+    const values = getGenelLessonValues(key);
+    if (values.q > 0 && (values.d + values.y + values.b > values.q)) {
+      alert('Bazı derslerde doğru + yanlış + boş, soru sayısından büyük olamaz.');
+      return;
+    }
+    lessons[key] = values;
+    totalNet += values.net;
+  }
+
+  const records = getStoredGenelExams();
+  records.unshift({
+    id: Date.now(),
+    examName,
+    examDate,
+    lessons,
+    totalNet,
+    savedAt: Date.now()
+  });
+
+  setStoredGenelExams(records);
+  renderGenelExamHistory();
+  clearGenelExamForm();
 }
 
 function cikisYap() {
@@ -936,13 +1231,15 @@ function setStudentDetailSection(section) {
   const detailEl = document.getElementById('tabOgrenciDetay');
   const programEl = document.getElementById('tabProgram');
   const bransEl = document.getElementById('tabBrans');
+  const genelEl = document.getElementById('tabGenel');
   const noteEl = document.getElementById('studentInfoNote');
 
-  if (!detailEl || !programEl || !bransEl) return;
+  if (!detailEl || !programEl || !bransEl || !genelEl) return;
 
   detailEl.style.display = 'block';
   programEl.style.display = 'none';
   bransEl.style.display = 'none';
+  genelEl.style.display = 'none';
 
   if (section === 'program') {
     programEl.style.display = 'block';
@@ -951,7 +1248,8 @@ function setStudentDetailSection(section) {
     bransEl.style.display = 'block';
     if (noteEl) noteEl.textContent = 'Branş denemeleri bölümü aşağıda açıldı. Öğrenciye özel deneme kayıtlarını buradan girebilirsiniz.';
   } else if (section === 'genel') {
-    if (noteEl) noteEl.textContent = 'Genel denemeleri bölümü yakında bu alana eklenecek. Hazır olunca yine aşağıda açılacak.';
+    genelEl.style.display = 'block';
+    if (noteEl) noteEl.textContent = 'Genel denemeler bölümü aşağıda açıldı. Ders bazlı sonuçları girip kaydedebilirsiniz.';
   } else {
     if (noteEl) noteEl.textContent = 'Bu sayfa seçili öğrenci için hızlı geçiş ekranıdır. Buradaki butonlardan öğrenciye özel çalışma programı ve deneme alanlarına geçebilirsiniz.';
   }
@@ -1016,6 +1314,8 @@ function openStudentGenelPage() {
   }
 
   setStudentDetailSection('genel');
+  renderGenelExamHistory();
+  updateGenelTotalNet();
 }
 
 function ogrenciProgramunaGit(card) {
