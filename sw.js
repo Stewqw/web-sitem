@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kocluk-app-v24';
+const CACHE_NAME = 'kocluk-app-v25';
 const ASSETS = [
   './',
   './index.html',

@@ -1335,6 +1335,33 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="kaynakSilModal">
+    <div class="modal-card" style="max-width:520px; border-color:#ff8800;">
+      <button class="modal-close" onclick="modalKapat('kaynakSilModal')">✕</button>
+      <h3 id="kaynakSilModalTitle" style="margin-bottom: 14px; color: var(--color-dark-teal);">Kaynak silme kapsamı</h3>
+      <div class="form-group">
+        <label class="form-label">Silme kapsamı</label>
+        <select id="kaynakSilScope" class="input-field" onchange="onKaynakSilScopeChange()">
+          <option value="all">Hepsinden sil</option>
+          <option value="unit">Sadece bir üniteden sil</option>
+          <option value="topic">Sadece bir konudan sil</option>
+        </select>
+      </div>
+      <div class="form-group" id="kaynakSilUnitWrap" style="display:none;">
+        <label class="form-label">Ünite seçin</label>
+        <select id="kaynakSilUnitSelect" class="input-field" onchange="onKaynakSilUnitChange()"></select>
+      </div>
+      <div class="form-group" id="kaynakSilTopicWrap" style="display:none;">
+        <label class="form-label">Konu seçin</label>
+        <select id="kaynakSilTopicSelect" class="input-field"></select>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+        <button class="btn-nav-outline" type="button" onclick="modalKapat('kaynakSilModal')">İptal</button>
+        <button class="btn-action btn-coral" type="button" onclick="confirmKaynakSilme()">Sil</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="script.js"></script>

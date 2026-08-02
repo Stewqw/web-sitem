@@ -1595,6 +1595,14 @@ function kaynakTopicKey(unit, topic) {
   return `${unit || 'GENEL'}|||${topic || ''}`;
 }
 
+function parseKaynakTopicKey(topicKey) {
+  const parts = String(topicKey || '').split('|||');
+  return {
+    unit: parts[0] || 'GENEL',
+    topic: parts[1] || ''
+  };
+}
+
 function escapeHtml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -1791,8 +1799,125 @@ function renderKaynakGlobalResources(classLevel, lesson) {
 
   const selected = Array.isArray(kaynakIlerlemeState.resourcePool) ? kaynakIlerlemeState.resourcePool : [];
   selectedWrap.innerHTML = selected.length
-    ? selected.map((name, idx) => `<span class="progress-resource-chip">${escapeHtml(name)} <button type="button" class="progress-resource-remove" data-index="${idx}" onclick="removeGlobalKaynakResource(this)">x</button></span>`).join('')
+    ? selected.map((name, idx) => `<span class="progress-resource-chip">${escapeHtml(name)} <button type="button" class="progress-resource-remove" data-index="${idx}" data-resource="${escapeHtml(name)}" onclick="removeGlobalKaynakResource(this)">x</button></span>`).join('')
     : '<span class="progress-resource-muted">Kaynak secilmedi</span>';
+}
+
+let kaynakSilmeState = {
+  resource: '',
+  index: -1
+};
+
+function onKaynakSilScopeChange() {
+  const scopeEl = document.getElementById('kaynakSilScope');
+  const unitWrap = document.getElementById('kaynakSilUnitWrap');
+  const topicWrap = document.getElementById('kaynakSilTopicWrap');
+  if (!scopeEl || !unitWrap || !topicWrap) return;
+
+  const scope = scopeEl.value;
+  unitWrap.style.display = scope === 'unit' || scope === 'topic' ? 'block' : 'none';
+  topicWrap.style.display = scope === 'topic' ? 'block' : 'none';
+
+  if (scope === 'unit' || scope === 'topic') {
+    populateKaynakSilUnitOptions();
+  }
+  if (scope === 'topic') {
+    populateKaynakSilTopicOptions();
+  }
+}
+
+function populateKaynakSilUnitOptions() {
+  const unitSelect = document.getElementById('kaynakSilUnitSelect');
+  if (!unitSelect) return;
+  const classLevel = getActiveStudentClassLevel();
+  const lesson = kaynakIlerlemeState.lesson || '';
+  const units = getUnitOptionsForLesson(classLevel, lesson);
+  const unitList = units.length ? units : ['GENEL'];
+
+  unitSelect.innerHTML = unitList
+    .map((unit) => `<option value="${escapeHtml(unit)}">${escapeHtml(unit)}</option>`)
+    .join('');
+}
+
+function populateKaynakSilTopicOptions() {
+  const unitSelect = document.getElementById('kaynakSilUnitSelect');
+  const topicSelect = document.getElementById('kaynakSilTopicSelect');
+  if (!unitSelect || !topicSelect) return;
+
+  const selectedUnit = unitSelect.value || '';
+  const classLevel = getActiveStudentClassLevel();
+  const lesson = kaynakIlerlemeState.lesson || '';
+  const topics = getTopicOptionsForLesson(classLevel, lesson, selectedUnit === 'GENEL' ? '' : selectedUnit)
+    .filter((topic) => topic && topic !== 'Konu seçiniz');
+
+  topicSelect.innerHTML = topics.length
+    ? topics.map((topic) => `<option value="${escapeHtml(kaynakTopicKey(selectedUnit, topic))}">${escapeHtml(topic)}</option>`).join('')
+    : '<option value="">Konu bulunamadi</option>';
+}
+
+function openKaynakSilmeModal(resource, index) {
+  const titleEl = document.getElementById('kaynakSilModalTitle');
+  const scopeEl = document.getElementById('kaynakSilScope');
+  if (!titleEl || !scopeEl) return;
+
+  kaynakSilmeState.resource = resource || '';
+  kaynakSilmeState.index = index;
+  titleEl.textContent = `"${resource}" kaynagi nereden silinsin?`;
+  scopeEl.value = 'all';
+  onKaynakSilScopeChange();
+  modalAc('kaynakSilModal');
+}
+
+function onKaynakSilUnitChange() {
+  const scopeEl = document.getElementById('kaynakSilScope');
+  if (scopeEl && scopeEl.value === 'topic') {
+    populateKaynakSilTopicOptions();
+  }
+}
+
+function confirmKaynakSilme() {
+  const resource = kaynakSilmeState.resource;
+  const index = Number(kaynakSilmeState.index);
+  const scopeEl = document.getElementById('kaynakSilScope');
+  const unitSelect = document.getElementById('kaynakSilUnitSelect');
+  const topicSelect = document.getElementById('kaynakSilTopicSelect');
+  if (!resource || Number.isNaN(index) || index < 0 || !scopeEl) return;
+
+  const scope = scopeEl.value;
+
+  if (scope === 'all') {
+    if (Array.isArray(kaynakIlerlemeState.resourcePool) && index < kaynakIlerlemeState.resourcePool.length) {
+      kaynakIlerlemeState.resourcePool.splice(index, 1);
+    }
+    Object.keys(kaynakIlerlemeState.data || {}).forEach((topicKey) => {
+      const entry = kaynakIlerlemeState.data[topicKey];
+      if (!entry || !Array.isArray(entry.doneResources)) return;
+      entry.doneResources = entry.doneResources.filter((name) => name !== resource);
+    });
+  }
+
+  if (scope === 'unit') {
+    const selectedUnit = unitSelect ? unitSelect.value : '';
+    Object.keys(kaynakIlerlemeState.data || {}).forEach((topicKey) => {
+      const parsed = parseKaynakTopicKey(topicKey);
+      if (parsed.unit !== selectedUnit) return;
+      const entry = kaynakIlerlemeState.data[topicKey];
+      if (!entry || !Array.isArray(entry.doneResources)) return;
+      entry.doneResources = entry.doneResources.filter((name) => name !== resource);
+    });
+  }
+
+  if (scope === 'topic') {
+    const selectedTopicKey = topicSelect ? topicSelect.value : '';
+    const entry = kaynakIlerlemeState.data[selectedTopicKey];
+    if (entry && Array.isArray(entry.doneResources)) {
+      entry.doneResources = entry.doneResources.filter((name) => name !== resource);
+    }
+  }
+
+  modalKapat('kaynakSilModal');
+  saveKaynakIlerlemeState(false);
+  renderKaynakIlerlemeRows();
 }
 
 function addGlobalKaynakResource() {
@@ -1817,18 +1942,8 @@ function removeGlobalKaynakResource(btnEl) {
   if (!Array.isArray(kaynakIlerlemeState.resourcePool)) kaynakIlerlemeState.resourcePool = [];
 
   const removed = kaynakIlerlemeState.resourcePool[index];
-  kaynakIlerlemeState.resourcePool.splice(index, 1);
-
-  if (removed) {
-    Object.keys(kaynakIlerlemeState.data || {}).forEach((topicKey) => {
-      const entry = kaynakIlerlemeState.data[topicKey];
-      if (!entry || !Array.isArray(entry.doneResources)) return;
-      entry.doneResources = entry.doneResources.filter((name) => name !== removed);
-    });
-  }
-
-  saveKaynakIlerlemeState(false);
-  renderKaynakIlerlemeRows();
+  if (!removed) return;
+  openKaynakSilmeModal(removed, index);
 }
 
 function getKaynakTopicPercent(entry, totalResources) {
