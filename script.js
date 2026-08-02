@@ -1,4 +1,19 @@
-const API_URL = window.location.origin;
+function resolveApiBaseUrl() {
+  const loc = window.location;
+  const isLocalhost = loc.hostname === 'localhost' || loc.hostname === '127.0.0.1';
+
+  if (loc.protocol === 'file:') {
+    return 'http://localhost:3000';
+  }
+
+  if (isLocalhost && loc.port && loc.port !== '3000') {
+    return loc.protocol + '//' + loc.hostname + ':3000';
+  }
+
+  return loc.origin;
+}
+
+const API_URL = resolveApiBaseUrl();
 let activeStudentId = null;
 let programWeekOffset = 0;
 let currentUserEmail = null;
@@ -304,7 +319,14 @@ function paneleGirisYap(nereden) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: eposta, password: sifre })
   }).then(async res => {
-    const data = await res.json().catch(() => ({}));
+    const text = await res.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (e) {
+      data = {};
+    }
+
     if (res.ok && data.token) {
       if (errorBox) errorBox.style.display = 'none';
 
@@ -337,7 +359,7 @@ function paneleGirisYap(nereden) {
       updateUserCountLabel();
     } else {
       if (errorBox) {
-        errorBox.textContent = data.error || 'Giriş başarısız.';
+        errorBox.textContent = data.error || ('Giriş başarısız (HTTP ' + res.status + ').');
         errorBox.style.display = 'block';
       }
     }

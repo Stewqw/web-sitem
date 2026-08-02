@@ -28,16 +28,21 @@ function writeUsers(users) {
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 }
 
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
 app.post('/api/register', async (req, res) => {
   const { name, email, password, phone } = req.body;
   if (!name || !email || !password) return res.status(400).json({ error: 'Eksik alanlar' });
 
   const users = readUsers();
-  if (users.find(u => u.email === email)) return res.status(409).json({ error: 'E-posta zaten kayıtlı' });
+  const normalizedEmail = normalizeEmail(email);
+  if (users.find(u => normalizeEmail(u.email) === normalizedEmail)) return res.status(409).json({ error: 'E-posta zaten kayıtlı' });
 
   try {
     const hash = await bcryptjs.hash(password, 10);
-    const user = { id: Date.now(), name, email, password: hash, phone, isAdmin: false };
+    const user = { id: Date.now(), name, email: normalizedEmail, password: hash, phone, isAdmin: false };
     users.push(user);
     writeUsers(users);
     return res.json({ ok: true });
@@ -52,7 +57,8 @@ app.post('/api/login', async (req, res) => {
   if (!email || !password) return res.status(400).json({ error: 'Eksik alanlar' });
 
   const users = readUsers();
-  const user = users.find(u => u.email === email);
+  const normalizedEmail = normalizeEmail(email);
+  const user = users.find(u => normalizeEmail(u.email) === normalizedEmail);
   if (!user) return res.status(401).json({ error: 'Kullanıcı bulunamadı' });
 
   try {
@@ -76,8 +82,8 @@ app.post('/api/forgot-password', async (req, res) => {
   }
 
   const users = readUsers();
-  const normalizedEmail = String(email).trim().toLowerCase();
-  const user = users.find(u => String(u.email || '').trim().toLowerCase() === normalizedEmail);
+  const normalizedEmail = normalizeEmail(email);
+  const user = users.find(u => normalizeEmail(u.email) === normalizedEmail);
   if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
 
   try {
@@ -100,7 +106,7 @@ app.get('/api/me', (req, res) => {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     const users = readUsers();
-    const user = users.find(u => u.email === payload.email || u.id === payload.id);
+    const user = users.find(u => normalizeEmail(u.email) === normalizeEmail(payload.email) || u.id === payload.id);
     if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     return res.json({ user: { id: user.id, name: user.name, email: user.email, phone: user.phone, isAdmin: !!user.isAdmin } });
   } catch (e) {
@@ -134,7 +140,7 @@ app.get('/api/users', (req, res) => {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     const users = readUsers();
-    const requester = users.find(u => u.id === payload.id || u.email === payload.email);
+    const requester = users.find(u => u.id === payload.id || normalizeEmail(u.email) === normalizeEmail(payload.email));
     if (!requester || !requester.isAdmin) return res.status(403).json({ error: 'Admin yetkisi gerekli' });
     const out = users.map(u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, isAdmin: !!u.isAdmin }));
     return res.json({ users: out });
@@ -153,7 +159,7 @@ app.post('/api/users/:id/admin', (req, res) => {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     const users = readUsers();
-    const requester = users.find(u => u.id === payload.id || u.email === payload.email);
+    const requester = users.find(u => u.id === payload.id || normalizeEmail(u.email) === normalizeEmail(payload.email));
     if (!requester || !requester.isAdmin) return res.status(403).json({ error: 'Admin yetkisi gerekli' });
 
     const targetId = parseInt(req.params.id, 10);
