@@ -413,9 +413,15 @@ async function attemptAutoLogin() {
 function sekmeAcs(sekmeAd) {
   document.getElementById('tabKokpit').style.display = 'none';
   document.getElementById('tabOgrenci').style.display = 'none';
+  document.getElementById('tabOgrenciDetay').style.display = 'none';
   document.getElementById('tabProgram').style.display = 'none';
   document.getElementById('tabKaynak').style.display = 'none';
   document.getElementById('tabBrans').style.display = 'none';
+
+  const markMenuActive = (menuId) => {
+    const el = document.getElementById(menuId);
+    if (el) el.classList.add('active');
+  };
 
   const kaynakMenu = document.getElementById('menu-kaynak');
   if (kaynakMenu && sekmeAd !== 'kaynak') kaynakMenu.classList.remove('submenu-open');
@@ -424,19 +430,22 @@ function sekmeAcs(sekmeAd) {
 
   if (sekmeAd === 'kokpit') {
     document.getElementById('tabKokpit').style.display = 'block';
-    document.getElementById('menu-kokpit').classList.add('active');
+    markMenuActive('menu-kokpit');
   } else if (sekmeAd === 'ogrenci') {
     document.getElementById('tabOgrenci').style.display = 'block';
-    document.getElementById('menu-ogrenci').classList.add('active');
+    markMenuActive('menu-ogrenci');
+  } else if (sekmeAd === 'ogrenci-detay') {
+    document.getElementById('tabOgrenciDetay').style.display = 'block';
+    markMenuActive('menu-ogrenci');
   } else if (sekmeAd === 'program') {
     document.getElementById('tabProgram').style.display = 'block';
-    document.getElementById('menu-program').classList.add('active');
+    markMenuActive('menu-program');
   } else if (sekmeAd === 'brans') {
     document.getElementById('tabBrans').style.display = 'block';
-    document.getElementById('menu-brans').classList.add('active');
+    markMenuActive('menu-brans');
   } else if (sekmeAd === 'kaynak') {
     document.getElementById('tabKaynak').style.display = 'block';
-    document.getElementById('menu-kaynak').classList.add('active');
+    markMenuActive('menu-kaynak');
   }
 }
 
@@ -795,18 +804,108 @@ function saveStudentEdits() {
   modalKapat('ogrenciDuzenleModal');
 }
 
-function ogrenciProgramunaGit(card) {
-  const studentId = card.dataset.id || card.dataset.studentId;
+function setStudentDetailButtonState(activeSection) {
+  const buttonMap = {
+    program: document.getElementById('studentInfoBtnProgram'),
+    brans: document.getElementById('studentInfoBtnBrans'),
+    genel: document.getElementById('studentInfoBtnGenel')
+  };
+
+  Object.keys(buttonMap).forEach((key) => {
+    const btn = buttonMap[key];
+    if (!btn) return;
+    btn.classList.toggle('active', key === activeSection);
+  });
+}
+
+function setStudentDetailSection(section) {
+  const detailEl = document.getElementById('tabOgrenciDetay');
+  const programEl = document.getElementById('tabProgram');
+  const bransEl = document.getElementById('tabBrans');
+  const noteEl = document.getElementById('studentInfoNote');
+
+  if (!detailEl || !programEl || !bransEl) return;
+
+  detailEl.style.display = 'block';
+  programEl.style.display = 'none';
+  bransEl.style.display = 'none';
+
+  if (section === 'program') {
+    programEl.style.display = 'block';
+    if (noteEl) noteEl.textContent = 'Program bölümü aşağıda açıldı. Buradan öğrenci için haftalık planı düzenleyebilirsiniz.';
+  } else if (section === 'brans') {
+    bransEl.style.display = 'block';
+    if (noteEl) noteEl.textContent = 'Branş denemeleri bölümü aşağıda açıldı. Öğrenciye özel deneme kayıtlarını buradan girebilirsiniz.';
+  } else if (section === 'genel') {
+    if (noteEl) noteEl.textContent = 'Genel denemeleri bölümü yakında bu alana eklenecek. Hazır olunca yine aşağıda açılacak.';
+  } else {
+    if (noteEl) noteEl.textContent = 'Bu sayfa seçili öğrenci için hızlı geçiş ekranıdır. Buradaki butonlardan öğrenciye özel çalışma programı ve deneme alanlarına geçebilirsiniz.';
+  }
+
+  setStudentDetailButtonState(section);
+}
+
+function openStudentInfoPage(studentId) {
   const students = getStoredOgrenciler();
-  const student = students.find(s => s.id.toString() === studentId);
+  const student = students.find(s => s.id.toString() === studentId.toString());
   if (!student) {
-    sekmeAcs('program');
+    sekmeAcs('ogrenci');
     return;
   }
 
   activeStudentId = student.id;
-  sekmeAcs('program');
+
+  const nameEl = document.getElementById('studentInfoName');
+  const metaEl = document.getElementById('studentInfoMeta');
+  if (nameEl) nameEl.textContent = student.name || 'Öğrenci Bilgi Sayfası';
+
+  if (metaEl) {
+    const classPart = student.classLevel ? `Sınıf ${student.classLevel}` : 'Sınıf bilgisi yok';
+    const emailPart = student.email ? student.email : 'E-posta yok';
+    metaEl.textContent = `${classPart} · ${emailPart}`;
+  }
+
+  sekmeAcs('ogrenci-detay');
+  setStudentDetailSection('');
+}
+
+function openStudentProgramPage() {
+  const students = getStoredOgrenciler();
+  const student = students.find(s => s.id === activeStudentId);
+  if (!student) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  setStudentDetailSection('program');
   renderProgramForStudent(student);
+}
+
+function openStudentBransPage() {
+  const students = getStoredOgrenciler();
+  const student = students.find(s => s.id === activeStudentId);
+  if (!student) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  setStudentDetailSection('brans');
+}
+
+function openStudentGenelPage() {
+  const students = getStoredOgrenciler();
+  const student = students.find(s => s.id === activeStudentId);
+  if (!student) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  setStudentDetailSection('genel');
+}
+
+function ogrenciProgramunaGit(card) {
+  const studentId = card.dataset.id || card.dataset.studentId;
+  openStudentInfoPage(studentId);
 }
 
 function getWeekStartDate(offset = 0) {

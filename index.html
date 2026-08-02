@@ -243,6 +243,34 @@
     .password-rules { text-align: left; margin: 4px 0 14px 4px; font-size: 0.8rem; color: #dc2626; display: flex; flex-direction: column; gap: 4px; font-weight: 700; }
     .password-rules div.valid { color: #16a34a; }
 
+    .student-info-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .student-info-title { font-size: 1.5rem; font-weight: 900; color: var(--color-dark-teal); }
+    .student-info-subtitle { color: #64748b; font-size: 0.92rem; margin-top: 6px; }
+    .student-info-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+    .student-switch-btn { padding: 10px 18px; }
+    .student-switch-btn.active {
+      background: var(--color-coral);
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 10px 24px rgba(255, 136, 0, 0.28);
+    }
+    .student-info-note {
+      background: #fff8ef;
+      border: 1px solid #ffd7aa;
+      border-radius: 14px;
+      padding: 14px;
+      color: #9a5600;
+      font-size: 0.86rem;
+      font-weight: 600;
+    }
+
     @media(max-width: 900px) {
       .landing-container, .hero-section, .grid-dashboard { grid-template-columns: 1fr; display: flex; flex-direction: column; }
       .weekly-grid { grid-template-columns: 1fr; }
@@ -470,15 +498,6 @@
             <div class="menu-item" id="menu-ogrenci" onclick="sekmeAcs('ogrenci')">
               <span class="icon"></span><span class="menu-title">Öğrenci Yönetimi</span>
             </div>
-            <div class="menu-item" id="menu-program" onclick="sekmeAcs('program')">
-              <span class="icon"></span><span class="menu-title">Çalışma Programı</span>
-            </div>
-            <div class="menu-item" id="menu-brans" onclick="sekmeAcs('brans')">
-              <span class="icon"></span><span class="menu-title">Branş Denemeler</span>
-            </div>
-            <div class="menu-item" id="menu-genel" onclick="alert('Genel Denemeler');">
-              <span class="icon"></span><span class="menu-title">Genel Denemeler</span>
-            </div>
             <div class="menu-item has-submenu" id="menu-kaynak">
               <div class="menu-main" onclick="sekmeAcs('kaynak'); toggleKaynakSubmenu(event)">
                 <span class="icon"></span><span class="menu-title">Kaynaklar</span>
@@ -548,6 +567,28 @@
             <div id="ogrenciListesi"></div>
         </div>
       </div>
+
+        <div id="tabOgrenciDetay" style="display: none;">
+          <div class="card-panel">
+            <div class="student-info-header">
+              <div>
+                <h2 id="studentInfoName" class="student-info-title">Öğrenci Bilgi Sayfası</h2>
+                <p id="studentInfoMeta" class="student-info-subtitle">Detay bilgileri ve öğrenciye özel yönetim alanları</p>
+              </div>
+              <button class="btn-nav-outline" onclick="sekmeAcs('ogrenci')">← Öğrenci Listesine Dön</button>
+            </div>
+
+            <div class="student-info-actions">
+              <button id="studentInfoBtnProgram" class="btn-nav-outline student-switch-btn" onclick="openStudentProgramPage()">Program</button>
+              <button id="studentInfoBtnBrans" class="btn-nav-outline student-switch-btn" onclick="openStudentBransPage()">Branş Denemeleri</button>
+              <button id="studentInfoBtnGenel" class="btn-nav-outline student-switch-btn" onclick="openStudentGenelPage()">Genel Denemeleri</button>
+            </div>
+
+            <div id="studentInfoNote" class="student-info-note" style="margin-top: 16px;">
+              Bu sayfa seçili öğrenci için hızlı geçiş ekranıdır. Buradaki butonlardan öğrenciye özel çalışma programı ve deneme alanlarına geçebilirsiniz.
+            </div>
+          </div>
+        </div>
 
         <!-- 3. ÇALIŞMA PROGRAMI PANELİ -->
         <div id="tabProgram" style="display: none;">
