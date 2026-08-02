@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:3000';
+const API_URL = window.location.origin;
 let activeStudentId = null;
 let programWeekOffset = 0;
 let currentUserEmail = null;
