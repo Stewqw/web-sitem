@@ -22,6 +22,8 @@ let currentUserName = null;
 let currentUserBranch = null;
 let savedResourceSuggestions = [];
 let registerFormOpenedAt = Date.now();
+let studentStorageHydrated = false;
+let studentStorageHydratingPromise = null;
 
 const REGISTER_MIN_SUBMIT_MS = 2500;
 const REGISTER_MAX_TEXT_LEN = 120;
@@ -659,6 +661,7 @@ async function kayitOl() {
       sessionStorage.removeItem('koclukUserEmail');
 
       loadSavedResourceSuggestions();
+      await syncStudentStorageFromCloud();
       renderStoredOgrenciler();
       renderKokpitUserCard();
       updateUserCountLabel();
@@ -757,6 +760,7 @@ async function paneleGirisYap(nereden) {
       currentUserName = session && session.name ? session.name : currentUserName;
       currentUserBranch = session && session.branch ? session.branch : currentUserBranch;
       loadSavedResourceSuggestions();
+      await syncStudentStorageFromCloud();
 
       modalKapat('authModal');
       sayfaAcs('dashboardApp');
@@ -799,6 +803,7 @@ async function paneleGirisYap(nereden) {
     currentUserName = data.user && data.user.name ? data.user.name : currentUserName;
     currentUserBranch = data.user && data.user.branch ? data.user.branch : currentUserBranch;
     loadSavedResourceSuggestions();
+    await syncStudentStorageFromCloud();
 
     modalKapat('authModal');
     sayfaAcs('dashboardApp');
@@ -838,6 +843,7 @@ async function attemptAutoLogin() {
         currentUserName = session.name || currentUserName;
         currentUserBranch = session.branch || currentUserBranch;
         loadSavedResourceSuggestions();
+        await syncStudentStorageFromCloud();
         localStorage.setItem('koclukUserEmail', email);
         sessionStorage.removeItem('koclukUserEmail');
 
@@ -872,6 +878,7 @@ async function attemptAutoLogin() {
         currentUserName = data.user.name || currentUserName;
         currentUserBranch = data.user.branch || currentUserBranch;
         loadSavedResourceSuggestions();
+        await syncStudentStorageFromCloud();
         if (localStorage.getItem('koclukToken')) {
           localStorage.setItem('koclukUserEmail', email);
           sessionStorage.removeItem('koclukUserEmail');
@@ -4775,7 +4782,7 @@ function getUserStorageKey() {
   return email ? `ogrenciler_${email}` : 'ogrenciler_default';
 }
 
-function getStoredOgrenciler() {
+function readLocalStudentRecords() {
   const key = getUserStorageKey();
   const raw = localStorage.getItem(key);
   try {
@@ -4785,9 +4792,133 @@ function getStoredOgrenciler() {
   }
 }
 
-function setStoredOgrenciler(students) {
+function writeLocalStudentRecords(students) {
   const key = getUserStorageKey();
   localStorage.setItem(key, JSON.stringify(students));
+}
+
+function normalizeStudentRecord(student) {
+  const safeStudent = student && typeof student === 'object' ? { ...student } : {};
+  if (safeStudent.id === undefined || safeStudent.id === null || safeStudent.id === '') {
+    safeStudent.id = Date.now() + Math.floor(Math.random() * 1000);
+  }
+  if (!safeStudent.createdAt) {
+    safeStudent.createdAt = safeStudent.updatedAt || Date.now();
+  }
+  if (!safeStudent.updatedAt) {
+    safeStudent.updatedAt = Date.now();
+  }
+  return safeStudent;
+}
+
+function normalizeStudentRecords(students) {
+  return Array.isArray(students) ? students.map(normalizeStudentRecord) : [];
+}
+
+function mergeStudentRecords(localStudents, remoteStudents) {
+  const mergedMap = new Map();
+  const addStudents = (list) => {
+    list.forEach((student) => {
+      const safeStudent = normalizeStudentRecord(student);
+      const key = String(safeStudent.id);
+      const existing = mergedMap.get(key);
+      if (!existing) {
+        mergedMap.set(key, safeStudent);
+        return;
+      }
+      const existingUpdatedAt = Number(existing.updatedAt) || 0;
+      const incomingUpdatedAt = Number(safeStudent.updatedAt) || 0;
+      if (incomingUpdatedAt >= existingUpdatedAt) {
+        mergedMap.set(key, { ...existing, ...safeStudent });
+      }
+    });
+  };
+
+  addStudents(localStudents);
+  addStudents(remoteStudents);
+  return Array.from(mergedMap.values()).sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+}
+
+async function loadStudentRecordsFromCloud() {
+  if (!shouldUseFirebaseAuth()) return null;
+  const services = getFirebaseServices();
+  if (!services || typeof services.loadStudentRecords !== 'function') return null;
+  return await services.loadStudentRecords();
+}
+
+async function saveStudentRecordsToCloud(students) {
+  if (!shouldUseFirebaseAuth()) return;
+  const services = getFirebaseServices();
+  if (!services || typeof services.saveStudentRecords !== 'function') return;
+  await services.saveStudentRecords(normalizeStudentRecords(students));
+}
+
+async function syncStudentStorageFromCloud() {
+  if (!shouldUseFirebaseAuth()) {
+    studentStorageHydrated = true;
+    return readLocalStudentRecords();
+  }
+
+  if (studentStorageHydratingPromise) {
+    return studentStorageHydratingPromise;
+  }
+
+  studentStorageHydratingPromise = (async () => {
+    const localStudents = readLocalStudentRecords();
+    let remoteStudents = [];
+
+    try {
+      const cloudRecords = await loadStudentRecordsFromCloud();
+      remoteStudents = normalizeStudentRecords(cloudRecords);
+    } catch (error) {
+      console.warn('Öğrenci verisi buluttan okunamadı:', error);
+    }
+
+    let mergedStudents = [];
+    if (remoteStudents.length && localStudents.length) {
+      mergedStudents = mergeStudentRecords(localStudents, remoteStudents);
+    } else if (remoteStudents.length) {
+      mergedStudents = remoteStudents;
+    } else {
+      mergedStudents = localStudents;
+    }
+
+    if (!remoteStudents.length && localStudents.length) {
+      try {
+        await saveStudentRecordsToCloud(localStudents);
+      } catch (error) {
+        console.warn('Yerel öğrenci verisi buluta aktarılamadı:', error);
+      }
+    }
+
+    if (remoteStudents.length && !localStudents.length) {
+      writeLocalStudentRecords(remoteStudents);
+    } else if (mergedStudents.length) {
+      writeLocalStudentRecords(mergedStudents);
+    }
+
+    studentStorageHydrated = true;
+    return mergedStudents;
+  })().finally(() => {
+    studentStorageHydratingPromise = null;
+  });
+
+  return studentStorageHydratingPromise;
+}
+
+function getStoredOgrenciler() {
+  return normalizeStudentRecords(readLocalStudentRecords());
+}
+
+function setStoredOgrenciler(students) {
+  const normalizedStudents = normalizeStudentRecords(students);
+  writeLocalStudentRecords(normalizedStudents);
+  studentStorageHydrated = true;
+  if (shouldUseFirebaseAuth()) {
+    Promise.resolve(saveStudentRecordsToCloud(normalizedStudents)).catch(error => {
+      console.warn('Öğrenci verisi buluta kaydedilemedi:', error);
+    });
+  }
 }
 
 function renderStoredOgrenciler() {

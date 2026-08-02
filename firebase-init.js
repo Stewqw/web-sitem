@@ -129,6 +129,7 @@
       phone: payload.phone || "",
       branch: payload.branch || "",
       role: "coach",
+      students: [],
       createdAtIso: nowIso,
       updatedAtIso: nowIso
     };
@@ -229,6 +230,41 @@
       name: (profile && profile.name) || user.displayName || "Kullanici",
       branch: (profile && profile.branch) || ""
     };
+  };
+
+  services.loadStudentRecords = async function loadStudentRecords() {
+    const user = auth.currentUser;
+    if (!user || !db) return [];
+
+    const profile = await getProfileByUid(user.uid);
+    const students = profile && Array.isArray(profile.students) ? profile.students : [];
+    return students;
+  };
+
+  services.saveStudentRecords = async function saveStudentRecords(students) {
+    const user = auth.currentUser;
+    if (!user || !db || !fieldValue) {
+      const missingDbError = new Error("Firestore kullanima hazir degil.");
+      missingDbError.code = "app/firestore-unavailable";
+      throw missingDbError;
+    }
+
+    const safeStudents = Array.isArray(students) ? students : [];
+    await withTimeout(
+      db.collection("users").doc(user.uid).set(
+        {
+          students: safeStudents,
+          studentsUpdatedAtIso: new Date().toISOString(),
+          updatedAt: fieldValue.serverTimestamp()
+        },
+        { merge: true }
+      ),
+      5000,
+      "app/firestore-timeout",
+      "Öğrenci verisi kaydedilirken zaman aşımı oluştu."
+    );
+
+    return safeStudents;
   };
 
   services.isReady = true;
