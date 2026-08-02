@@ -4175,101 +4175,270 @@ async function exportProgramPdf() {
     return;
   }
 
-  const exportArea = document.getElementById('programExportArea');
-  if (!exportArea) {
-    alert('Program alanı bulunamadı.');
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert('PDF kütüphanesi yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin.');
     return;
   }
 
-  const exportClone = exportArea.cloneNode(true);
-  exportClone.id = 'programExportAreaClone';
-  exportClone.style.position = 'fixed';
-  exportClone.style.left = '-10000px';
-  exportClone.style.top = '0';
-  exportClone.style.width = `${exportArea.offsetWidth}px`;
-  exportClone.style.zIndex = '-1';
-  exportClone.style.background = '#ffffff';
-
-  const clonePdfBtn = exportClone.querySelector('#programExportPdfBtn');
-  const cloneDaySelect = exportClone.querySelector('#programTaskDaySelect');
-  const cloneAddBtn = exportClone.querySelector('#programAddTaskBtn');
-  const cloneNav = exportClone.querySelector('.program-calendar-nav');
-  if (clonePdfBtn) clonePdfBtn.style.display = 'none';
-  if (cloneDaySelect) cloneDaySelect.style.display = 'none';
-  if (cloneAddBtn) cloneAddBtn.style.display = 'none';
-  if (cloneNav) cloneNav.style.display = 'none';
-
-  document.body.appendChild(exportClone);
-
   try {
-    const dayColumns = Array.from(exportClone.querySelectorAll('.day-column'));
-    const maxTaskCount = dayColumns.reduce((max, col) => {
-      const count = col.querySelectorAll('.task-card').length;
-      return Math.max(max, count);
-    }, 0);
-
-    const tasksPerPage = 2;
-    const pageCount = Math.max(1, Math.ceil(maxTaskCount / tasksPerPage));
-
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF('l', 'pt', 'a4');
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
+    const marginLeft = 18;
+    const marginRight = 18;
+    const marginTop = 14;
+    const marginBottom = 14;
+    const tableWidth = pdfWidth - marginLeft - marginRight;
+    const dayWidth = 70;
+    const lessonWidth = 120;
+    const unitWidth = 140;
+    const topicWidth = 210;
+    const typeWidth = 120;
+    const sourceWidth = tableWidth - dayWidth - lessonWidth - unitWidth - topicWidth - typeWidth;
+    const weekStart = getWeekStartDate(programWeekOffset);
+    const weekKey = getWeekStorageKey(programWeekOffset);
+    const labels = getWeekDayLabels(weekStart);
+    const dayKeys = ['pzt', 'sal', 'car', 'per', 'cum', 'cmt', 'paz'];
+    const weekProgram = ensureStudentWeekProgram(student, weekKey);
 
-    for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
-      const start = pageIndex * tasksPerPage;
-      const end = start + tasksPerPage;
+    const topHeaderHeight = 78;
+    const tableHeaderHeight = 24;
+    const rowFontSize = 8;
+    const headerFontSize = 10;
+    const rowLineHeight = 10;
+    const normalizeFileName = (value) => String(value || 'ogrenci')
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9\-]/g, '')
+      .slice(0, 40) || 'ogrenci';
 
-      dayColumns.forEach((col) => {
-        const cards = Array.from(col.querySelectorAll('.task-card'));
-        let visibleCount = 0;
+    const loadLogoDataUrl = async () => {
+      try {
+        const response = await fetch('icons/icon.png', { cache: 'no-store' });
+        if (!response.ok) return null;
+        const blob = await response.blob();
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Logo okunamadi'));
+          reader.readAsDataURL(blob);
+        });
+      } catch (error) {
+        return null;
+      }
+    };
 
-        cards.forEach((card, idx) => {
-          const visible = idx >= start && idx < end;
-          card.style.display = visible ? '' : 'none';
-          if (visible) visibleCount += 1;
+    const logoDataUrl = await loadLogoDataUrl();
+
+    const splitText = (text, width) => pdf.splitTextToSize(pdfSafeText(String(text || '')), Math.max(20, width - 8));
+    const getRowHeight = (task) => {
+      if (!task || typeof task !== 'object') return 18;
+      const linesPerCell = [
+        splitText(task.lesson || 'Ders', lessonWidth),
+        splitText(task.unit || '-', unitWidth),
+        splitText(task.topic || 'Konu girilmedi', topicWidth),
+        splitText(task.type || 'Soru Çözümü', typeWidth),
+        splitText(task.source || 'Kaynak yok', sourceWidth)
+      ].map((lines) => Math.max(1, lines.length));
+      return Math.max(18, (Math.max(...linesPerCell) * rowLineHeight) + 8);
+    };
+
+    const drawCell = (x, y, w, h, fillColor, strokeColor) => {
+      pdf.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
+      pdf.setDrawColor(strokeColor[0], strokeColor[1], strokeColor[2]);
+      pdf.rect(x, y, w, h, 'FD');
+    };
+
+    const drawWrappedText = (text, x, y, width, height, options = {}) => {
+      const lines = splitText(text, width);
+      const fontSize = options.fontSize || rowFontSize;
+      const color = options.color || [31, 41, 55];
+      const align = options.align || 'left';
+      const lineGap = options.lineGap || rowLineHeight;
+      const startY = y + 5;
+      const textHeight = lines.length * lineGap;
+      let textY = startY + Math.max(0, (height - 10 - textHeight) / 2);
+
+      pdf.setFont('helvetica', options.bold ? 'bold' : 'normal');
+      pdf.setFontSize(fontSize);
+      pdf.setTextColor(color[0], color[1], color[2]);
+      lines.forEach((line) => {
+        pdf.text(line, x + 4, textY, { align, baseline: 'top' });
+        textY += lineGap;
+      });
+    };
+
+    const drawPageHeader = () => {
+      const boxX = marginLeft;
+      const boxY = marginTop;
+      const boxW = tableWidth;
+      const boxH = topHeaderHeight;
+
+      pdf.setDrawColor(255, 152, 0);
+      pdf.setFillColor(255, 255, 255);
+      pdf.roundedRect(boxX, boxY, boxW, boxH, 10, 10, 'FD');
+
+      pdf.setFillColor(16, 32, 64);
+      pdf.roundedRect(boxX + 8, boxY + 8, 62, 62, 10, 10, 'F');
+      if (logoDataUrl) {
+        try {
+          pdf.addImage(logoDataUrl, 'PNG', boxX + 10, boxY + 10, 58, 58, undefined, 'FAST');
+        } catch (error) {
+          pdf.setTextColor(255, 255, 255);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(10);
+          pdf.text('PARABOL', boxX + 39, boxY + 31, { align: 'center' });
+          pdf.setFontSize(9);
+          pdf.text('KOCLUK', boxX + 39, boxY + 45, { align: 'center' });
+        }
+      } else {
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.text('PARABOL', boxX + 39, boxY + 31, { align: 'center' });
+        pdf.setFontSize(9);
+        pdf.text('KOCLUK', boxX + 39, boxY + 45, { align: 'center' });
+      }
+
+      pdf.setTextColor(16, 32, 64);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text(pdfSafeText('LGS MATEMATIK'), boxX + 86, boxY + 20);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(18);
+      pdf.text(pdfSafeText('HAFTALIK CALISMA PROGRAMI'), boxX + 86, boxY + 40);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(107, 114, 128);
+      pdf.text(pdfSafeText('Bir gune birden fazla ders ve gorev alinabilir.'), boxX + 86, boxY + 56);
+
+      const rightX = boxX + boxW - 250;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.setTextColor(16, 32, 64);
+      pdf.text(pdfSafeText('Ogrenci:'), rightX, boxY + 24);
+      pdf.text(pdfSafeText('Hafta:'), rightX, boxY + 42);
+      pdf.setDrawColor(210, 217, 226);
+      pdf.line(rightX + 46, boxY + 24, boxX + boxW - 16, boxY + 24);
+      pdf.line(rightX + 46, boxY + 42, boxX + boxW - 16, boxY + 42);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.text(pdfSafeText(student.name || '-'), rightX + 52, boxY + 21);
+      pdf.text(pdfSafeText(formatWeekRange(weekStart)), rightX + 52, boxY + 39);
+
+      return boxY + boxH + 10;
+    };
+
+    const drawTableHeader = (startY) => {
+      const headers = [
+        { label: 'GÜN', width: dayWidth },
+        { label: 'DERS', width: lessonWidth },
+        { label: 'ÜNİTE', width: unitWidth },
+        { label: 'KONU', width: topicWidth },
+        { label: 'PROGRAM TİPİ', width: typeWidth },
+        { label: 'KAYNAK', width: sourceWidth }
+      ];
+
+      let x = marginLeft;
+      headers.forEach((header) => {
+        pdf.setFillColor(16, 32, 64);
+        pdf.setDrawColor(16, 32, 64);
+        pdf.rect(x, startY, header.width, tableHeaderHeight, 'FD');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(headerFontSize);
+        pdf.text(pdfSafeText(header.label), x + header.width / 2, startY + 15, { align: 'center' });
+        x += header.width;
+      });
+
+      return startY + tableHeaderHeight;
+    };
+
+    let currentY = drawTableHeader(drawPageHeader());
+    const bottomLimit = pdfHeight - marginBottom;
+    const dayKeysOrder = ['pzt', 'sal', 'car', 'per', 'cum', 'cmt', 'paz'];
+
+    const startNewPage = () => {
+      pdf.addPage();
+      currentY = drawTableHeader(drawPageHeader());
+    };
+
+    dayKeysOrder.forEach((dayKey, index) => {
+      const dayTitle = labels[index] || dayKey.toUpperCase();
+      const tasks = Array.isArray(weekProgram[dayKey]) && weekProgram[dayKey].length
+        ? weekProgram[dayKey]
+        : [{ empty: true }];
+
+      let taskIndex = 0;
+      while (taskIndex < tasks.length) {
+        if (currentY > bottomLimit - 30) {
+          startNewPage();
+        }
+
+        const chunk = [];
+        let chunkHeight = 0;
+        while (taskIndex < tasks.length) {
+          const task = tasks[taskIndex];
+          const rowHeight = task && !task.empty ? getRowHeight(task) : 18;
+          if (currentY + chunkHeight + rowHeight > bottomLimit) {
+            break;
+          }
+          chunk.push({ task, rowHeight });
+          chunkHeight += rowHeight;
+          taskIndex += 1;
+        }
+
+        if (!chunk.length) {
+          startNewPage();
+          continue;
+        }
+
+        const dayCellY = currentY;
+        const dayCellHeight = chunkHeight;
+        let rowY = currentY;
+
+        drawCell(marginLeft, dayCellY, dayWidth, dayCellHeight, [247, 249, 251], [210, 217, 226]);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        pdf.setTextColor(31, 41, 55);
+        pdf.text(pdfSafeText(dayTitle), marginLeft + dayWidth / 2, dayCellY + dayCellHeight / 2 + 3, { align: 'center', baseline: 'middle' });
+
+        chunk.forEach(({ task, rowHeight }) => {
+          const cellY = rowY;
+          const cellX = marginLeft + dayWidth;
+          const cells = [
+            { width: lessonWidth, value: task && !task.empty ? (task.lesson || 'Ders') : '' },
+            { width: unitWidth, value: task && !task.empty ? (task.unit || '-') : '' },
+            { width: topicWidth, value: task && !task.empty ? (task.topic || 'Konu girilmedi') : '' },
+            { width: typeWidth, value: task && !task.empty ? (task.type || 'Soru Çözümü') : '' },
+            { width: sourceWidth, value: task && !task.empty ? (task.source || 'Kaynak yok') : '' }
+          ];
+
+          let x = cellX;
+          cells.forEach((cell) => {
+            drawCell(x, cellY, cell.width, rowHeight, [255, 255, 255], [210, 217, 226]);
+            drawWrappedText(cell.value, x, cellY, cell.width, rowHeight, {
+              fontSize: 8,
+              color: [31, 41, 55],
+              bold: cell.width === lessonWidth,
+              lineGap: 9
+            });
+            x += cell.width;
+          });
+
+          rowY += rowHeight;
         });
 
-        let emptyEl = col.querySelector('.day-empty');
-        if (visibleCount === 0) {
-          if (!emptyEl) {
-            emptyEl = document.createElement('p');
-            emptyEl.className = 'day-empty';
-            emptyEl.textContent = 'Boş';
-            col.appendChild(emptyEl);
-          }
-          emptyEl.style.display = 'block';
-        } else if (emptyEl) {
-          emptyEl.style.display = 'none';
-        }
-      });
+        currentY += chunkHeight;
+      }
+    });
 
-      const canvas = await html2canvas(exportClone, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true
-      });
-
-      const imageData = canvas.toDataURL('image/png');
-      const widthRatio = pdfWidth / canvas.width;
-      const heightRatio = pdfHeight / canvas.height;
-      const ratio = Math.min(widthRatio, heightRatio);
-      const imageWidth = canvas.width * ratio;
-      const imageHeight = canvas.height * ratio;
-      const x = (pdfWidth - imageWidth) / 2;
-      const y = (pdfHeight - imageHeight) / 2;
-
-      if (pageIndex > 0) pdf.addPage();
-      pdf.addImage(imageData, 'PNG', x, y, imageWidth, imageHeight);
-    }
-
-    const filename = `${student.name.replace(/\s+/g, '_')}_Haftalik_Program.pdf`;
+    const filename = `${normalizeFileName(student.name || 'ogrenci')}_Haftalik_Program.pdf`;
     pdf.save(filename);
   } catch (err) {
     console.error(err);
     alert('PDF oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.');
-  } finally {
-    exportClone.remove();
   }
 }
 
