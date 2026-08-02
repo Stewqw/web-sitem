@@ -75,7 +75,6 @@ const initialResourceSuggestions = [
 
 function ekranıGoster(sayfaId) {
   document.getElementById('landingPage').style.display = 'none';
-  document.getElementById('loginPage').style.display = 'none';
   document.getElementById('promoPage').style.display = 'none';
   document.getElementById('dashboardApp').style.display = 'none';
   document.getElementById('mainNavbar').style.display = 'none';
@@ -1676,8 +1675,11 @@ function renderKaynakIlerlemeRows() {
     kaynakIlerlemeState.resourcePool = stored.resourcePool;
   }
 
+  renderKaynakGlobalResources(classLevel, lesson);
+
   const units = getUnitOptionsForLesson(classLevel, lesson);
   const unitList = units.length ? units : ['GENEL'];
+  const availableResources = getResourceOptionsForClass(classLevel, lesson);
 
   const unitBlocks = unitList.map((unit) => {
     const unitTopics = getTopicOptionsForLesson(classLevel, lesson, unit === 'GENEL' ? '' : unit).filter((t) => t && t !== 'Konu seçiniz');
@@ -1685,30 +1687,34 @@ function renderKaynakIlerlemeRows() {
 
     const topicRows = unitTopics.map((topic) => {
       const topicKey = kaynakTopicKey(unit, topic);
-      const entry = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', resources: [] };
+      const entry = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', doneResources: [] };
+      if (!Array.isArray(entry.doneResources)) entry.doneResources = [];
       const selectOptions = KAYNAK_DURUM_OPTIONS
         .map((opt) => `<option value="${escapeHtml(opt)}" ${entry.status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`)
         .join('');
-      const selectedResources = Array.isArray(entry.resources) ? entry.resources : [];
+      const selectedResources = Array.isArray(kaynakIlerlemeState.resourcePool) ? kaynakIlerlemeState.resourcePool : [];
       const chipsHtml = selectedResources.length
-        ? selectedResources.map((res, idx) => `<span class="progress-resource-chip">${escapeHtml(res)} <button type="button" class="progress-resource-remove" data-topic-key="${escapeHtml(topicKey)}" data-index="${idx}" onclick="removeKaynakResource(this)">x</button></span>`).join('')
+        ? selectedResources.map((res) => {
+            const isDone = entry.doneResources.includes(res) ? 'checked' : '';
+            return `<label class="progress-resource-chip progress-resource-checkable"><input type="checkbox" data-topic-key="${escapeHtml(topicKey)}" data-resource="${escapeHtml(res)}" ${isDone} onchange="onKaynakResourceDoneToggle(this)"><span>${escapeHtml(res)}</span></label>`;
+          }).join('')
         : '<span class="progress-resource-muted">Kaynak yok</span>';
-      const rowPercent = entry.status === 'Konu Bitti' ? 100 : entry.status === 'Çalışıyor' ? 50 : 0;
+      const rowPercent = getKaynakTopicPercent(entry, selectedResources.length);
+      const rowColor = getProgressColor(rowPercent);
 
       return `
       <div class="progress-row">
         <div class="progress-topic">${escapeHtml(topic)}</div>
         <div>
-          <select class="input-field" data-topic-key="${escapeHtml(topicKey)}" onchange="onKaynakStatusChange(this)">${selectOptions}</select>
+          <select class="input-field progress-status-select" data-topic-key="${escapeHtml(topicKey)}" onchange="onKaynakStatusChange(this)">${selectOptions}</select>
         </div>
         <div class="progress-resource-cell">
           <div class="progress-resource-list">${chipsHtml}</div>
-          <div class="progress-resource-inline">
-            <input class="input-field progress-resource-input" type="text" placeholder="Kaynak adı" data-topic-key="${escapeHtml(topicKey)}" onkeydown="if(event.key==='Enter'){event.preventDefault();addKaynakResource(this);}">
-            <button type="button" class="btn-action btn-coral progress-resource-add" onclick="addKaynakResource(this)">Ekle</button>
-          </div>
         </div>
-        <div style="font-weight:700; color:#475569;">%${rowPercent}</div>
+        <div class="progress-percent-wrap">
+          <div class="progress-percent-track"><div class="progress-percent-fill" style="width:${rowPercent}%; background:${rowColor};"></div></div>
+          <div class="progress-percent-text">%${rowPercent}</div>
+        </div>
       </div>
     `;
     }).join('');
@@ -1736,71 +1742,126 @@ function renderKaynakIlerlemeRows() {
       .filter((t) => t && t !== 'Konu seçiniz')
       .map((topic) => kaynakTopicKey(unit, topic));
   });
-  updateKaynakProgressMetrics(allTopicKeys);
+  updateKaynakProgressMetrics(allTopicKeys, Array.isArray(kaynakIlerlemeState.resourcePool) ? kaynakIlerlemeState.resourcePool.length : 0);
 }
 
 function onKaynakStatusChange(selectEl) {
   const topicKey = selectEl?.dataset?.topicKey || '';
   if (!topicKey) return;
 
-  const current = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', resources: [] };
+  const current = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', doneResources: [] };
   current.status = selectEl.value;
-  if (!Array.isArray(current.resources)) current.resources = [];
+  if (!Array.isArray(current.doneResources)) current.doneResources = [];
 
   kaynakIlerlemeState.data[topicKey] = current;
   saveKaynakIlerlemeState(false);
   renderKaynakIlerlemeRows();
 }
 
-function addKaynakResource(triggerEl) {
-  const parent = triggerEl?.closest('.progress-resource-inline');
-  const inputEl = parent ? parent.querySelector('input[data-topic-key]') : null;
-  const topicKey = inputEl?.dataset?.topicKey || '';
-  const resource = (inputEl?.value || '').trim();
+function onKaynakResourceDoneToggle(checkEl) {
+  const topicKey = checkEl?.dataset?.topicKey || '';
+  const resource = checkEl?.dataset?.resource || '';
   if (!topicKey || !resource) return;
 
-  const current = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', resources: [] };
-  if (!Array.isArray(current.resources)) current.resources = [];
-  if (!current.resources.includes(resource)) current.resources.push(resource);
+  const current = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', doneResources: [] };
+  if (!Array.isArray(current.doneResources)) current.doneResources = [];
+
+  if (checkEl.checked) {
+    if (!current.doneResources.includes(resource)) current.doneResources.push(resource);
+  } else {
+    current.doneResources = current.doneResources.filter((item) => item !== resource);
+  }
 
   kaynakIlerlemeState.data[topicKey] = current;
+  saveKaynakIlerlemeState(false);
+  renderKaynakIlerlemeRows();
+}
+
+function renderKaynakGlobalResources(classLevel, lesson) {
+  const selectEl = document.getElementById('kaynakIlerlemeResourceSelect');
+  const selectedWrap = document.getElementById('kaynakIlerlemeSelectedResources');
+  if (!selectEl || !selectedWrap) return;
+
+  const options = getResourceOptionsForClass(classLevel, lesson);
+  selectEl.innerHTML = options.length
+    ? ['<option value="">Kaynak secin</option>']
+      .concat(options.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`))
+      .join('')
+    : '<option value="">Kaynak bulunamadi</option>';
+
+  const selected = Array.isArray(kaynakIlerlemeState.resourcePool) ? kaynakIlerlemeState.resourcePool : [];
+  selectedWrap.innerHTML = selected.length
+    ? selected.map((name, idx) => `<span class="progress-resource-chip">${escapeHtml(name)} <button type="button" class="progress-resource-remove" data-index="${idx}" onclick="removeGlobalKaynakResource(this)">x</button></span>`).join('')
+    : '<span class="progress-resource-muted">Kaynak secilmedi</span>';
+}
+
+function addGlobalKaynakResource() {
+  const selectEl = document.getElementById('kaynakIlerlemeResourceSelect');
+  if (!selectEl) return;
+  const resource = (selectEl.value || '').trim();
+  if (!resource) return;
+
+  if (!Array.isArray(kaynakIlerlemeState.resourcePool)) kaynakIlerlemeState.resourcePool = [];
   if (!kaynakIlerlemeState.resourcePool.includes(resource)) {
     kaynakIlerlemeState.resourcePool.push(resource);
   }
 
-  inputEl.value = '';
+  selectEl.value = '';
   saveKaynakIlerlemeState(false);
   renderKaynakIlerlemeRows();
 }
 
-function removeKaynakResource(btnEl) {
-  const topicKey = btnEl?.dataset?.topicKey || '';
+function removeGlobalKaynakResource(btnEl) {
   const index = Number(btnEl?.dataset?.index || -1);
-  if (!topicKey || Number.isNaN(index) || index < 0) return;
+  if (Number.isNaN(index) || index < 0) return;
+  if (!Array.isArray(kaynakIlerlemeState.resourcePool)) kaynakIlerlemeState.resourcePool = [];
 
-  const current = kaynakIlerlemeState.data[topicKey] || { status: 'Konuya Gelinmedi', resources: [] };
-  if (!Array.isArray(current.resources)) current.resources = [];
+  const removed = kaynakIlerlemeState.resourcePool[index];
+  kaynakIlerlemeState.resourcePool.splice(index, 1);
 
-  current.resources.splice(index, 1);
-  kaynakIlerlemeState.data[topicKey] = current;
+  if (removed) {
+    Object.keys(kaynakIlerlemeState.data || {}).forEach((topicKey) => {
+      const entry = kaynakIlerlemeState.data[topicKey];
+      if (!entry || !Array.isArray(entry.doneResources)) return;
+      entry.doneResources = entry.doneResources.filter((name) => name !== removed);
+    });
+  }
+
   saveKaynakIlerlemeState(false);
   renderKaynakIlerlemeRows();
 }
 
-function updateKaynakProgressMetrics(topicKeys) {
+function getKaynakTopicPercent(entry, totalResources) {
+  if (totalResources > 0) {
+    const doneCount = Array.isArray(entry?.doneResources)
+      ? entry.doneResources.filter((name) => Array.isArray(kaynakIlerlemeState.resourcePool) && kaynakIlerlemeState.resourcePool.includes(name)).length
+      : 0;
+    return Math.round((doneCount / totalResources) * 100);
+  }
+  return entry?.status === 'Konu Bitti' ? 100 : entry?.status === 'Çalışıyor' ? 50 : 0;
+}
+
+function getProgressColor(percent) {
+  const clamped = Math.max(0, Math.min(100, Number(percent) || 0));
+  const hue = 8 + Math.round((clamped / 100) * 112);
+  return `hsl(${hue}, 78%, 45%)`;
+}
+
+function updateKaynakProgressMetrics(topicKeys, totalResources) {
   const barEl = document.getElementById('kaynakIlerlemeBar');
   const metaLeft = document.getElementById('kaynakIlerlemeMetaLeft');
   const metaRight = document.getElementById('kaynakIlerlemeMetaRight');
   if (!barEl || !metaLeft || !metaRight) return;
 
   const total = topicKeys.length;
-  const completed = topicKeys.filter((topicKey) => {
+  const percents = topicKeys.map((topicKey) => {
     const e = kaynakIlerlemeState.data[topicKey];
-    return e && e.status === 'Konu Bitti';
-  }).length;
-
-  const percent = total ? Math.round((completed / total) * 100) : 0;
+    return getKaynakTopicPercent(e || { status: 'Konuya Gelinmedi', doneResources: [] }, totalResources);
+  });
+  const completed = percents.filter((p) => p >= 100).length;
+  const percent = total ? Math.round(percents.reduce((sum, p) => sum + p, 0) / total) : 0;
   barEl.style.width = `${percent}%`;
+  barEl.style.background = getProgressColor(percent);
   metaLeft.textContent = `Tamamlanan: ${completed} / ${total}`;
   metaRight.textContent = `%${percent}`;
 }

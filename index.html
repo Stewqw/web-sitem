@@ -360,22 +360,23 @@
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 16px;
-      padding: 14px;
+      padding: 10px;
     }
     .progress-toolbar {
       display: grid;
-      grid-template-columns: 0.9fr 1fr auto;
+      grid-template-columns: 0.75fr 0.9fr 1.3fr auto;
       gap: 10px;
       margin-bottom: 12px;
       align-items: end;
     }
+    .progress-resource-picker { display: flex; gap: 5px; align-items: center; }
     .progress-track {
       width: 100%;
-      height: 8px;
+      height: 6px;
       border-radius: 999px;
       background: #e2e8f0;
       overflow: hidden;
-      margin: 10px 0 6px;
+      margin: 8px 0 4px;
     }
     .progress-track > div {
       height: 100%;
@@ -395,22 +396,22 @@
       border: 1px solid #e2e8f0;
       border-radius: 12px;
       overflow: hidden;
-      max-height: 420px;
+      max-height: 360px;
       overflow-y: auto;
     }
     .progress-row {
       display: grid;
       grid-template-columns: 1.5fr 1fr 1.4fr 0.6fr;
-      gap: 10px;
+      gap: 8px;
       align-items: center;
-      padding: 10px 12px;
+      padding: 7px 10px;
       border-bottom: 1px solid #eef2f7;
-      font-size: 0.84rem;
+      font-size: 0.79rem;
     }
     .progress-row:last-child { border-bottom: none; }
     .progress-head {
       font-weight: 800;
-      font-size: 0.76rem;
+      font-size: 0.72rem;
       color: #64748b;
       text-transform: uppercase;
       letter-spacing: 0.3px;
@@ -422,8 +423,8 @@
     .progress-unit-block { border-top: 1px solid #e5e7eb; }
     .progress-unit-block:first-child { border-top: none; }
     .progress-unit-title {
-      padding: 12px;
-      font-size: 0.98rem;
+      padding: 9px 10px;
+      font-size: 0.86rem;
       font-weight: 900;
       letter-spacing: 0.4px;
       color: #102040;
@@ -432,34 +433,68 @@
       border-bottom: 1px solid #e5e7eb;
     }
     .progress-topic { color: #102040; font-weight: 600; }
-    .progress-resource-cell { display: flex; flex-direction: column; gap: 8px; }
+    .progress-resource-cell { display: flex; flex-direction: column; gap: 4px; }
     .progress-resource-list { display: flex; gap: 6px; flex-wrap: wrap; }
     .progress-resource-chip {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 4px;
       background: #ecfdf5;
       border: 1px solid #10b981;
       border-radius: 999px;
-      padding: 3px 8px;
-      font-size: 0.73rem;
+      padding: 2px 7px;
+      font-size: 0.68rem;
       color: #065f46;
       font-weight: 700;
     }
+    .progress-resource-checkable { cursor: pointer; }
+    .progress-resource-checkable input[type="checkbox"] {
+      width: 12px;
+      height: 12px;
+      accent-color: #16a34a;
+      cursor: pointer;
+      margin: 0;
+    }
+    .progress-resource-checkable span { line-height: 1.1; }
     .progress-resource-remove {
       border: none;
       background: transparent;
       color: #dc2626;
-      font-size: 0.72rem;
+      font-size: 0.66rem;
       cursor: pointer;
       padding: 0;
       line-height: 1;
       font-weight: 800;
     }
-    .progress-resource-inline { display: flex; gap: 6px; align-items: center; }
-    .progress-resource-input { min-width: 130px; }
-    .progress-resource-add { padding: 8px 10px; font-size: 0.76rem; white-space: nowrap; }
-    .progress-resource-muted { color: #94a3b8; font-size: 0.76rem; }
+    .progress-resource-select { min-width: 120px; font-size: 0.74rem; padding: 6px 8px; }
+    .progress-resource-add { padding: 6px 8px; font-size: 0.7rem; white-space: nowrap; }
+    .progress-resource-muted { color: #94a3b8; font-size: 0.7rem; }
+    .progress-status-select { font-size: 0.72rem; padding: 5px 7px; min-height: 32px; }
+    .progress-percent-wrap { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+    .progress-percent-track {
+      width: 72px;
+      height: 7px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      overflow: hidden;
+      border: 1px solid #dbe4ef;
+    }
+    .progress-percent-fill {
+      height: 100%;
+      width: 0%;
+      transition: width 0.2s ease, background 0.2s ease;
+    }
+    .progress-percent-text { font-size: 0.72rem; font-weight: 800; color: #334155; }
+    .progress-global-selected {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+      padding: 6px 8px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
     .progress-empty { padding: 14px; color: #64748b; font-size: 0.85rem; }
 
     @media(max-width: 900px) {
@@ -1059,7 +1094,20 @@
                     <option value="">Ders seçin</option>
                   </select>
                 </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Kaynak Seç</label>
+                  <div class="progress-resource-picker">
+                    <select id="kaynakIlerlemeResourceSelect" class="input-field progress-resource-select">
+                      <option value="">Kaynak secin</option>
+                    </select>
+                    <button type="button" class="btn-action btn-coral progress-resource-add" onclick="addGlobalKaynakResource()">Ekle</button>
+                  </div>
+                </div>
                 <button class="btn-action btn-coral" type="button" style="padding: 10px 16px;" onclick="saveKaynakIlerlemeState(true)">Kaydet</button>
+              </div>
+
+              <div id="kaynakIlerlemeSelectedResources" class="progress-global-selected">
+                <span class="progress-resource-muted">Kaynak secilmedi</span>
               </div>
 
               <div class="progress-track"><div id="kaynakIlerlemeBar"></div></div>
