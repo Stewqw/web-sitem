@@ -415,6 +415,8 @@ function sekmeAcs(sekmeAd) {
   document.getElementById('tabOgrenciDetay').style.display = 'none';
   document.getElementById('tabProgram').style.display = 'none';
   document.getElementById('tabKaynak').style.display = 'none';
+  const uniteKonuEl = document.getElementById('tabUniteKonu');
+  if (uniteKonuEl) uniteKonuEl.style.display = 'none';
   document.getElementById('tabBrans').style.display = 'none';
   const genelEl = document.getElementById('tabGenel');
   if (genelEl) genelEl.style.display = 'none';
@@ -422,6 +424,8 @@ function sekmeAcs(sekmeAd) {
   if (kaynakIlerlemeEl) kaynakIlerlemeEl.style.display = 'none';
   const veliBilgiEl = document.getElementById('tabVeliBilgi');
   if (veliBilgiEl) veliBilgiEl.style.display = 'none';
+  const cozulenSoruEl = document.getElementById('tabCozulenSoru');
+  if (cozulenSoruEl) cozulenSoruEl.style.display = 'none';
 
   const markMenuActive = (menuId) => {
     const el = document.getElementById(menuId);
@@ -430,6 +434,8 @@ function sekmeAcs(sekmeAd) {
 
   const kaynakMenu = document.getElementById('menu-kaynak');
   if (kaynakMenu && sekmeAd !== 'kaynak') kaynakMenu.classList.remove('submenu-open');
+  const uniteKonuMenu = document.getElementById('menu-unite-konu');
+  if (uniteKonuMenu && sekmeAd !== 'unite-konu') uniteKonuMenu.classList.remove('submenu-open');
 
   document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
 
@@ -451,6 +457,10 @@ function sekmeAcs(sekmeAd) {
   } else if (sekmeAd === 'kaynak') {
     document.getElementById('tabKaynak').style.display = 'block';
     markMenuActive('menu-kaynak');
+  } else if (sekmeAd === 'unite-konu') {
+    if (uniteKonuEl) uniteKonuEl.style.display = 'block';
+    markMenuActive('menu-unite-konu');
+    initUniteKonuPanel();
   }
 }
 
@@ -1155,19 +1165,261 @@ function selectKaynakSinif(sinif, element) {
   document.getElementById('kaynakClassTitle').textContent = `${sinif}. Sınıf Kaynakları`;
   document.getElementById('kaynakClassDescription').textContent = `Burada sadece ${sinif}. sınıf için atanmış kaynak önerilerini görür ve yenilerini ekleyebilirsiniz.`;
 
-  document.querySelectorAll('.submenu-item').forEach(item => {
+  document.querySelectorAll('#menu-kaynak .submenu-item').forEach(item => {
     item.classList.toggle('active', item.dataset.sinif === sinif);
   });
-  document.querySelector('.menu-item.has-submenu').classList.add('active');
+  const menu = document.getElementById('menu-kaynak');
+  if (menu) menu.classList.add('active');
 
   renderResourceSuggestions();
 }
 
 function toggleKaynakSubmenu(event) {
   event.stopPropagation();
-  const menu = document.querySelector('.menu-item.has-submenu');
+  const menu = document.getElementById('menu-kaynak');
   if (!menu) return;
   menu.classList.toggle('submenu-open');
+}
+
+let selectedUniteKonuSinif = '8';
+
+function toggleUniteKonuSubmenu(event) {
+  event.stopPropagation();
+  const menu = document.getElementById('menu-unite-konu');
+  if (!menu) return;
+  menu.classList.toggle('submenu-open');
+}
+
+function selectUniteKonuSinif(sinif, element) {
+  sekmeAcs('unite-konu');
+  selectedUniteKonuSinif = String(sinif || '8');
+
+  document.querySelectorAll('#menu-unite-konu .submenu-item').forEach((item) => {
+    item.classList.toggle('active', item.dataset.sinif === selectedUniteKonuSinif);
+  });
+
+  const menu = document.getElementById('menu-unite-konu');
+  if (menu) menu.classList.add('active');
+
+  initUniteKonuPanel();
+}
+
+function initUniteKonuPanel() {
+  const classTitleEl = document.getElementById('uniteKonuClassTitle');
+  const classDescEl = document.getElementById('uniteKonuClassDescription');
+  const classDisplayEl = document.getElementById('uniteKonuClassDisplay');
+  const lessonEl = document.getElementById('uniteKonuLesson');
+  if (!lessonEl) return;
+
+  if (classTitleEl) classTitleEl.textContent = `${selectedUniteKonuSinif}. Sınıf Ünite / Konu Yönetimi`;
+  if (classDescEl) classDescEl.textContent = `Bu alanda ${selectedUniteKonuSinif}. sınıf için ders bazında ünite ve konu ekleyebilirsiniz. Eklenenler mevcut tüm seçim alanlarına entegre edilir.`;
+  if (classDisplayEl) classDisplayEl.value = `Sınıf ${selectedUniteKonuSinif}`;
+
+  const currentLesson = lessonEl.value || '';
+  lessonEl.innerHTML = '<option value="">Ders seçin</option>';
+  getLessonOptionsForClass(selectedUniteKonuSinif).forEach((lesson) => {
+    const opt = document.createElement('option');
+    opt.value = lesson;
+    opt.textContent = lesson;
+    lessonEl.appendChild(opt);
+  });
+
+  if (currentLesson && getLessonOptionsForClass(selectedUniteKonuSinif).includes(currentLesson)) {
+    lessonEl.value = currentLesson;
+  } else if (lessonEl.options.length > 1) {
+    lessonEl.value = lessonEl.options[1].value;
+  }
+
+  onUniteKonuLessonChange();
+}
+
+function onUniteKonuLessonChange() {
+  const lesson = document.getElementById('uniteKonuLesson')?.value || '';
+  const unitSelectEl = document.getElementById('uniteKonuUnitSelect');
+  if (!unitSelectEl) return;
+
+  const previousUnit = unitSelectEl.value || '';
+  const units = lesson ? getUnitOptionsForLesson(selectedUniteKonuSinif, lesson) : [];
+
+  unitSelectEl.innerHTML = '<option value="">Ünite seçin (opsiyonel)</option>';
+  units.forEach((unit) => {
+    const opt = document.createElement('option');
+    opt.value = unit;
+    opt.textContent = unit;
+    unitSelectEl.appendChild(opt);
+  });
+
+  if (previousUnit && units.includes(previousUnit)) {
+    unitSelectEl.value = previousUnit;
+  }
+
+  renderUniteKonuUnitList();
+  renderUniteKonuTopicList();
+}
+
+function onUniteKonuUnitSelectChange() {
+  renderUniteKonuTopicList();
+}
+
+function addUniteKonuUnit() {
+  const lesson = document.getElementById('uniteKonuLesson')?.value || '';
+  const inputEl = document.getElementById('uniteKonuUnitInput');
+  if (!inputEl) return;
+  const unitName = inputEl.value.trim();
+
+  if (!lesson) {
+    alert('Önce ders seçin.');
+    return;
+  }
+  if (!unitName) {
+    alert('Ünite adı girin.');
+    inputEl.focus();
+    return;
+  }
+
+  updateCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson, (lessonData) => {
+    if (!lessonData.units.includes(unitName)) lessonData.units.push(unitName);
+    if (!lessonData.topicsByUnit[unitName]) lessonData.topicsByUnit[unitName] = [];
+  });
+
+  inputEl.value = '';
+  onUniteKonuLessonChange();
+  const unitSelectEl = document.getElementById('uniteKonuUnitSelect');
+  if (unitSelectEl) unitSelectEl.value = unitName;
+  renderUniteKonuTopicList();
+}
+
+function addUniteKonuTopic() {
+  const lesson = document.getElementById('uniteKonuLesson')?.value || '';
+  const unit = document.getElementById('uniteKonuUnitSelect')?.value || '';
+  const inputEl = document.getElementById('uniteKonuTopicInput');
+  if (!inputEl) return;
+  const topicName = inputEl.value.trim();
+
+  if (!lesson) {
+    alert('Önce ders seçin.');
+    return;
+  }
+  if (!topicName) {
+    alert('Konu adı girin.');
+    inputEl.focus();
+    return;
+  }
+
+  updateCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson, (lessonData) => {
+    if (unit) {
+      if (!lessonData.units.includes(unit)) lessonData.units.push(unit);
+      if (!lessonData.topicsByUnit[unit]) lessonData.topicsByUnit[unit] = [];
+      if (!lessonData.topicsByUnit[unit].includes(topicName)) lessonData.topicsByUnit[unit].push(topicName);
+      return;
+    }
+
+    if (!lessonData.generalTopics.includes(topicName)) lessonData.generalTopics.push(topicName);
+  });
+
+  inputEl.value = '';
+  renderUniteKonuTopicList();
+}
+
+function removeCustomUniteKonuUnit(unitName) {
+  const lesson = document.getElementById('uniteKonuLesson')?.value || '';
+  if (!lesson || !unitName) return;
+
+  updateCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson, (lessonData) => {
+    lessonData.units = lessonData.units.filter((name) => name !== unitName);
+    delete lessonData.topicsByUnit[unitName];
+  });
+
+  onUniteKonuLessonChange();
+}
+
+function removeCustomUniteKonuTopic(unitName, topicName) {
+  const lesson = document.getElementById('uniteKonuLesson')?.value || '';
+  if (!lesson || !topicName) return;
+
+  updateCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson, (lessonData) => {
+    if (unitName) {
+      const topics = Array.isArray(lessonData.topicsByUnit[unitName]) ? lessonData.topicsByUnit[unitName] : [];
+      lessonData.topicsByUnit[unitName] = topics.filter((name) => name !== topicName);
+      return;
+    }
+
+    lessonData.generalTopics = lessonData.generalTopics.filter((name) => name !== topicName);
+  });
+
+  renderUniteKonuTopicList();
+}
+
+function renderUniteKonuUnitList() {
+  const listEl = document.getElementById('uniteKonuUnitList');
+  const lesson = document.getElementById('uniteKonuLesson')?.value || '';
+  if (!listEl) return;
+
+  if (!lesson) {
+    listEl.innerHTML = '<div class="exam-history-empty">Önce ders seçin.</div>';
+    return;
+  }
+
+  const units = getUnitOptionsForLesson(selectedUniteKonuSinif, lesson);
+  const customLessonData = getCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson);
+  const customUnits = Array.isArray(customLessonData.units) ? customLessonData.units : [];
+
+  if (!units.length) {
+    listEl.innerHTML = '<div class="exam-history-empty">Henüz ünite yok.</div>';
+    return;
+  }
+
+  listEl.innerHTML = units.map((unit) => {
+    const deletable = customUnits.includes(unit);
+    const removeBtn = deletable
+      ? `<button type="button" class="exam-delete-btn" onclick="removeCustomUniteKonuUnit(decodeURIComponent('${encodeURIComponent(unit)}'))">Sil</button>`
+      : '<span style="font-size:0.73rem; color:#64748b;">Sistem</span>';
+    return `
+      <div class="exam-history-item">
+        <div><strong>${escapeHtml(unit)}</strong></div>
+        <div class="exam-history-actions">${removeBtn}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderUniteKonuTopicList() {
+  const listEl = document.getElementById('uniteKonuTopicList');
+  const lesson = document.getElementById('uniteKonuLesson')?.value || '';
+  const unit = document.getElementById('uniteKonuUnitSelect')?.value || '';
+  if (!listEl) return;
+
+  if (!lesson) {
+    listEl.innerHTML = '<div class="exam-history-empty">Önce ders seçin.</div>';
+    return;
+  }
+
+  const topics = getTopicOptionsForLesson(selectedUniteKonuSinif, lesson, unit).filter((name) => name && name !== 'Konu seçiniz');
+  if (!topics.length) {
+    listEl.innerHTML = '<div class="exam-history-empty">Henüz konu yok.</div>';
+    return;
+  }
+
+  const customLessonData = getCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson);
+  const customTopics = unit
+    ? (Array.isArray(customLessonData.topicsByUnit?.[unit]) ? customLessonData.topicsByUnit[unit] : [])
+    : (Array.isArray(customLessonData.generalTopics) ? customLessonData.generalTopics : []);
+
+  listEl.innerHTML = topics.map((topic) => {
+    const deletable = customTopics.includes(topic);
+    const removeBtn = deletable
+      ? `<button type="button" class="exam-delete-btn" onclick="removeCustomUniteKonuTopic(decodeURIComponent('${encodeURIComponent(unit)}'), decodeURIComponent('${encodeURIComponent(topic)}'))">Sil</button>`
+      : '<span style="font-size:0.73rem; color:#64748b;">Sistem</span>';
+    return `
+      <div class="exam-history-item">
+        <div>
+          <strong>${escapeHtml(topic)}</strong>
+          <div class="exam-history-meta">${unit ? `Ünite: ${escapeHtml(unit)}` : 'Genel konu'}</div>
+        </div>
+        <div class="exam-history-actions">${removeBtn}</div>
+      </div>
+    `;
+  }).join('');
 }
 
 function addKaynakOnerisi() {
@@ -1430,6 +1682,7 @@ function setStudentDetailButtonState(activeSection) {
     brans: document.getElementById('studentInfoBtnBrans'),
     genel: document.getElementById('studentInfoBtnGenel'),
     kaynak: document.getElementById('studentInfoBtnKaynak'),
+    cozulen: document.getElementById('studentInfoBtnCozulen'),
     veli: document.getElementById('studentInfoBtnVeli')
   };
 
@@ -1447,9 +1700,10 @@ function setStudentDetailSection(section) {
   const genelEl = document.getElementById('tabGenel');
   const kaynakIlerlemeEl = document.getElementById('tabKaynakIlerleme');
   const veliBilgiEl = document.getElementById('tabVeliBilgi');
+  const cozulenSoruEl = document.getElementById('tabCozulenSoru');
   const noteEl = document.getElementById('studentInfoNote');
 
-  if (!detailEl || !programEl || !bransEl || !genelEl || !kaynakIlerlemeEl || !veliBilgiEl) return;
+  if (!detailEl || !programEl || !bransEl || !genelEl || !kaynakIlerlemeEl || !veliBilgiEl || !cozulenSoruEl) return;
 
   detailEl.style.display = 'block';
   programEl.style.display = 'none';
@@ -1457,6 +1711,7 @@ function setStudentDetailSection(section) {
   genelEl.style.display = 'none';
   kaynakIlerlemeEl.style.display = 'none';
   veliBilgiEl.style.display = 'none';
+  cozulenSoruEl.style.display = 'none';
 
   if (section === 'program') {
     programEl.style.display = 'block';
@@ -1473,6 +1728,9 @@ function setStudentDetailSection(section) {
   } else if (section === 'veli') {
     veliBilgiEl.style.display = 'block';
     if (noteEl) noteEl.textContent = 'Veli bilgisi bölümü aşağıda açıldı. Veli adı, telefonu ve e-posta bilgisini kaydedebilirsiniz.';
+  } else if (section === 'cozulen') {
+    cozulenSoruEl.style.display = 'block';
+    if (noteEl) noteEl.textContent = 'Çözülen soru sayısı bölümü aşağıda açıldı. Ders, ünite, konu ve kaynağa göre giriş yapabilirsiniz.';
   } else {
     if (noteEl) noteEl.textContent = 'Bu sayfa seçili öğrenci için hızlı geçiş ekranıdır. Buradaki butonlardan öğrenciye özel çalışma programı ve deneme alanlarına geçebilirsiniz.';
   }
@@ -2017,6 +2275,222 @@ function openStudentVeliPage() {
   closeVeliEditMode(2);
 }
 
+function initCozulenSoruPanelForStudent(student) {
+  const classLevel = student && student.classLevel ? String(student.classLevel) : '8';
+  const classEl = document.getElementById('cozulenClassDisplay');
+  const lessonEl = document.getElementById('cozulenLesson');
+  if (classEl) classEl.value = `Sınıf ${classLevel}`;
+  if (!lessonEl) return;
+
+  lessonEl.innerHTML = '<option value="">Ders seçin</option>';
+  getLessonOptionsForClass(classLevel).forEach((lesson) => {
+    const opt = document.createElement('option');
+    opt.value = lesson;
+    opt.textContent = lesson;
+    lessonEl.appendChild(opt);
+  });
+
+  const unitEl = document.getElementById('cozulenUnit');
+  const topicEl = document.getElementById('cozulenTopic');
+  const sourceEl = document.getElementById('cozulenSource');
+  if (unitEl) unitEl.innerHTML = '<option value="">Ünite seçin</option>';
+  if (topicEl) topicEl.innerHTML = '<option value="">Konu seçin</option>';
+  if (sourceEl) sourceEl.innerHTML = '<option value="">Kaynak seçin</option>';
+
+  const qEl = document.getElementById('cozulenQuestion');
+  const cEl = document.getElementById('cozulenCorrect');
+  const wEl = document.getElementById('cozulenWrong');
+  const bEl = document.getElementById('cozulenBlank');
+  if (qEl) qEl.value = '';
+  if (cEl) cEl.value = '';
+  if (wEl) wEl.value = '';
+  if (bEl) bEl.value = '';
+}
+
+function onCozulenLessonChange() {
+  const classLevel = getActiveStudentClassLevel();
+  const lesson = document.getElementById('cozulenLesson')?.value || '';
+  const unitEl = document.getElementById('cozulenUnit');
+  const topicEl = document.getElementById('cozulenTopic');
+  const sourceEl = document.getElementById('cozulenSource');
+  if (!unitEl || !topicEl || !sourceEl) return;
+
+  const units = getUnitOptionsForLesson(classLevel, lesson);
+  if (!lesson) {
+    unitEl.innerHTML = '<option value="">Ünite seçin</option>';
+    topicEl.innerHTML = '<option value="">Konu seçin</option>';
+    sourceEl.innerHTML = '<option value="">Kaynak seçin</option>';
+    return;
+  }
+
+  if (units.length) {
+    unitEl.innerHTML = '<option value="">Ünite seçin</option>';
+    units.forEach((unit) => {
+      const opt = document.createElement('option');
+      opt.value = unit;
+      opt.textContent = unit;
+      unitEl.appendChild(opt);
+    });
+  } else {
+    unitEl.innerHTML = '<option value="">Ünite yok</option>';
+  }
+
+  topicEl.innerHTML = '<option value="">Konu seçin</option>';
+
+  const sources = getResourceOptionsForClass(classLevel, lesson);
+  sourceEl.innerHTML = '<option value="">Kaynak seçin</option>';
+  sources.forEach((name) => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sourceEl.appendChild(opt);
+  });
+
+  if (!units.length) {
+    const topics = getTopicOptionsForLesson(classLevel, lesson, '').filter((item) => item && item !== 'Konu seçiniz');
+    topics.forEach((topic) => {
+      const opt = document.createElement('option');
+      opt.value = topic;
+      opt.textContent = topic;
+      topicEl.appendChild(opt);
+    });
+  }
+}
+
+function onCozulenUnitChange() {
+  const classLevel = getActiveStudentClassLevel();
+  const lesson = document.getElementById('cozulenLesson')?.value || '';
+  const unit = document.getElementById('cozulenUnit')?.value || '';
+  const topicEl = document.getElementById('cozulenTopic');
+  if (!topicEl) return;
+
+  topicEl.innerHTML = '<option value="">Konu seçin</option>';
+  if (!lesson) return;
+
+  const topics = getTopicOptionsForLesson(classLevel, lesson, unit).filter((item) => item && item !== 'Konu seçiniz');
+  topics.forEach((topic) => {
+    const opt = document.createElement('option');
+    opt.value = topic;
+    opt.textContent = topic;
+    topicEl.appendChild(opt);
+  });
+}
+
+function updateCozulenBlank() {
+  const q = Number(document.getElementById('cozulenQuestion')?.value) || 0;
+  const d = Number(document.getElementById('cozulenCorrect')?.value) || 0;
+  const y = Number(document.getElementById('cozulenWrong')?.value) || 0;
+  const b = Math.max(0, q - d - y);
+  const blankEl = document.getElementById('cozulenBlank');
+  if (blankEl) blankEl.value = String(b);
+}
+
+function renderCozulenSoruRecords() {
+  const listEl = document.getElementById('cozulenSavedList');
+  if (!listEl) return;
+
+  const students = getStoredOgrenciler();
+  const student = students.find((s) => s.id === activeStudentId);
+  const records = student && Array.isArray(student.cozulenSoruRecords) ? student.cozulenSoruRecords : [];
+
+  if (!records.length) {
+    listEl.innerHTML = '<div class="exam-history-empty">Henüz kayıt yok.</div>';
+    return;
+  }
+
+  listEl.innerHTML = records.slice().reverse().map((item) => {
+    const summary = [
+      `Soru: ${item.questionCount}`,
+      `Doğru: ${item.correct}`,
+      `Yanlış: ${item.wrong}`,
+      `Boş: ${item.blank}`
+    ].join(' • ');
+
+    return `
+      <div class="exam-history-item">
+        <div>
+          <strong>${item.lesson || '-'}</strong>
+          <div class="exam-history-meta">Ünite: ${item.unit || '-'} • Konu: ${item.topic || '-'} • Kaynak: ${item.source || '-'}</div>
+        </div>
+        <div class="exam-history-meta">${summary}</div>
+        <div class="exam-history-actions">
+          <button type="button" class="exam-delete-btn" onclick="deleteCozulenSoruRecord(${item.id})">Sil</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function saveCozulenSoruRecord() {
+  if (!activeStudentId) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  const lesson = document.getElementById('cozulenLesson')?.value || '';
+  const unit = document.getElementById('cozulenUnit')?.value || '';
+  const topic = document.getElementById('cozulenTopic')?.value || '';
+  const source = document.getElementById('cozulenSource')?.value || '';
+  const questionCount = Number(document.getElementById('cozulenQuestion')?.value) || 0;
+  const correct = Number(document.getElementById('cozulenCorrect')?.value) || 0;
+  const wrong = Number(document.getElementById('cozulenWrong')?.value) || 0;
+  const blank = Math.max(0, questionCount - correct - wrong);
+
+  if (!lesson || !topic || !source) {
+    alert('Ders, konu ve kaynak seçin.');
+    return;
+  }
+
+  const students = getStoredOgrenciler();
+  const student = students.find((s) => s.id === activeStudentId);
+  if (!student) {
+    alert('Öğrenci bulunamadı.');
+    return;
+  }
+
+  if (!Array.isArray(student.cozulenSoruRecords)) student.cozulenSoruRecords = [];
+
+  student.cozulenSoruRecords.push({
+    id: Date.now(),
+    lesson,
+    unit,
+    topic,
+    source,
+    questionCount,
+    correct,
+    wrong,
+    blank
+  });
+
+  setStoredOgrenciler(students);
+  renderCozulenSoruRecords();
+  alert('Çözülen soru kaydı eklendi.');
+}
+
+function deleteCozulenSoruRecord(recordId) {
+  if (!activeStudentId) return;
+  const students = getStoredOgrenciler();
+  const student = students.find((s) => s.id === activeStudentId);
+  if (!student || !Array.isArray(student.cozulenSoruRecords)) return;
+
+  student.cozulenSoruRecords = student.cozulenSoruRecords.filter((item) => item.id !== Number(recordId));
+  setStoredOgrenciler(students);
+  renderCozulenSoruRecords();
+}
+
+function openStudentCozulenSoruPage() {
+  const students = getStoredOgrenciler();
+  const student = students.find(s => s.id === activeStudentId);
+  if (!student) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  setStudentDetailSection('cozulen');
+  initCozulenSoruPanelForStudent(student);
+  renderCozulenSoruRecords();
+}
+
 function getStudentParentList(student) {
   if (Array.isArray(student.parentInfos)) {
     const cloned = student.parentInfos.map((item) => ({
@@ -2387,6 +2861,141 @@ async function exportProgramPdf() {
 
 let pendingTaskDayKey = 'pzt';
 
+const DEFAULT_UNITS_BY_CLASS = {
+  '8': {
+    'Matematik': [
+      '1. Ünite: Çarpanlar ve Katlar',
+      '2. Ünite: Üslü İfadeler',
+      '3. Ünite: Kareköklü İfadeler',
+      '4. Ünite: Veri Analizi',
+      '5. Ünite: Basit Olayların Olma Olasılığı',
+      '6. Ünite: Cebirsel İfadeler ve Özdeşlikler',
+      '7. Ünite: Doğrusal Denklemler',
+      '8. Ünite: Eşitsizlikler',
+      '9. Ünite: Üçgenler',
+      '10. Ünite: Eşlik ve Benzerlik',
+      '11. Ünite: Dönüşüm Geometrisi',
+      '12. Ünite: Geometrik Cisimler'
+    ]
+  }
+};
+
+const DEFAULT_TOPICS_BY_CLASS = {
+  '4': {
+    'Matematik': ['Doğal Sayılar', 'Kesirler', 'Geometrik Şekiller', 'Bölme', 'Uzunluk Ölçme'],
+    'Fen Bilimleri': ['Canlılar ve Hayat', 'Maddenin Halleri', 'Isı ve Sıcaklık', 'Ses', 'Elektrik'],
+    'Türkçe': ['Okuma', 'Yazım Kuralları', 'Dil Bilgisi', 'Sözcükte Anlam', 'Paragraf'],
+    'Sosyal Bilgiler': ['Türkiye ve Komşuları', 'Yerşekilleri', 'Doğal Afetler', 'Çevre'],
+    'İngilizce': ['Hello', 'Family', 'School', 'Numbers', 'Colors']
+  },
+  '5': {
+    'Matematik': ['Bölme', 'Ondalık Kesirler', 'Geometrik Cisimler'],
+    'Fen Bilimleri': ['Madde ve Değişim', 'İnsan ve Çevre'],
+    'Türkçe': ['Okuma', 'Yazım Kuralları', 'Söz Sanatları'],
+    'Sosyal Bilgiler': ['Ekoloji', 'Doğal Kaynaklar'],
+    'İngilizce': ['Daily Routine', 'My School']
+  },
+  '8': {
+    'Matematik': {
+      '1. Ünite: Çarpanlar ve Katlar': ['Çarpanlar ve Katlar', 'EBOB - EKOK (En Büyük Ortak Bölen - En Küçük Ortak Kat)', 'Aralarında Asal Sayılar'],
+      '2. Ünite: Üslü İfadeler': ['Tam Sayıların Kuvvetleri', 'Üslü Sayılarda Temel Kurallar ve İşlemler', 'Ondalık Gösterimlerin ve Çok Büyük/Çok Küçük Sayıların Üslü İfadeyle Yazılımı (Bilimsel Gösterim)'],
+      '3. Ünite: Kareköklü İfadeler': ['Tam Kare Sayılar ve Karekök Arasındaki İlişki', 'Kareköklü İfadelerde Çarpma, Bölme, Toplama ve Çıkarma İşlemleri', 'Kareköklü İfadelerde Tahmin ve Gerçek Değer', 'Verilen Bir Kareköklü İfadenin Hangi İki Doğal Sayı Arasında Olduğunu Belirleme'],
+      '4. Ünite: Veri Analizi': ['Verilerin Sütun, Çizgi ve Daire Grafikleriyle Gösterilmesi ve Yorumlanması'],
+      '5. Ünite: Basit Olayların Olma Olasılığı': ['Olay Çeşitleri (Kesin, İmkânsız, Olası)', 'Basit Bir Olayın Olma Olasılığını Hesaplama'],
+      '6. Ünite: Cebirsel İfadeler ve Özdeşlikler': ['Cebirsel İfadelerle Çarpma İşlemi', 'Özdeşlik Kavramı ve Temel Özdeşlikler (İki Kare Farkı, Tam Kare Özdeşlikleri)', 'Cebirsel İfadeleri Çarpanlarına Ayırma'],
+      '7. Ünite: Doğrusal Denklemler': ['Koordinat Sistemi', 'Birinci Dereceden Bir ve İki Bilinmeyenli Denklemler', 'Doğrusal İlişkiler ve Grafiklerle Gösterimi', 'Doğrunun Eğimi'],
+      '8. Ünite: Eşitsizlikler': ['Birinci Dereceden Bir Bilinmeyenli Eşitsizlikler ve Sayı Doğrusunda Gösterilmesi', 'Eşitlik ve Eşitsizlik Durumları İçeren Problem Çözümleri'],
+      '9. Ünite: Üçgenler': ['Üçgenin Kenar ve Açı İlişkileri', 'Üçgen Çizimleri', 'Pisagor Bağıntısı'],
+      '10. Ünite: Eşlik ve Benzerlik': ['Geometrik Şekillerde Eşlik ve Benzerlik', 'Benzerlik Oranı ve Uygulamaları'],
+      '11. Ünite: Dönüşüm Geometrisi': ['Öteleme, Yansıma ve Dönme Hareketleri', 'Çokgenlerde Dönüşüm Uygulamaları'],
+      '12. Ünite: Geometrik Cisimler': ['Dik Prizmalar (Yüzey Alanı ve Hacim Bağıntıları)', 'Dik Dairesel Silindir ve Dik Piramit']
+    }
+  }
+};
+
+let customUnitTopicCache = null;
+let customUnitTopicCacheKey = '';
+
+function getUnitTopicStorageKey() {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  return `unit_topic_overrides_${email}`;
+}
+
+function readCustomUnitTopicData() {
+  const storageKey = getUnitTopicStorageKey();
+  if (customUnitTopicCache && typeof customUnitTopicCache === 'object' && customUnitTopicCacheKey === storageKey) {
+    return customUnitTopicCache;
+  }
+
+  const raw = localStorage.getItem(storageKey);
+  try {
+    const parsed = raw ? JSON.parse(raw) : {};
+    customUnitTopicCache = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (e) {
+    customUnitTopicCache = {};
+  }
+
+  customUnitTopicCacheKey = storageKey;
+
+  return customUnitTopicCache;
+}
+
+function writeCustomUnitTopicData(data) {
+  const safeData = data && typeof data === 'object' ? data : {};
+  customUnitTopicCache = safeData;
+  customUnitTopicCacheKey = getUnitTopicStorageKey();
+  localStorage.setItem(customUnitTopicCacheKey, JSON.stringify(safeData));
+}
+
+function ensureUniqueList(values) {
+  return Array.from(new Set((Array.isArray(values) ? values : []).map((item) => String(item || '').trim()).filter(Boolean)));
+}
+
+function createEmptyCustomLessonData() {
+  return {
+    units: [],
+    topicsByUnit: {},
+    generalTopics: []
+  };
+}
+
+function normalizeCustomLessonData(raw) {
+  const lessonData = createEmptyCustomLessonData();
+  if (!raw || typeof raw !== 'object') return lessonData;
+
+  lessonData.units = ensureUniqueList(raw.units);
+  lessonData.generalTopics = ensureUniqueList(raw.generalTopics);
+
+  const topicsByUnit = raw.topicsByUnit && typeof raw.topicsByUnit === 'object' ? raw.topicsByUnit : {};
+  Object.keys(topicsByUnit).forEach((unitName) => {
+    lessonData.topicsByUnit[unitName] = ensureUniqueList(topicsByUnit[unitName]);
+  });
+
+  return lessonData;
+}
+
+function getCustomUnitTopicLessonData(classLevel, lesson) {
+  const all = readCustomUnitTopicData();
+  const classData = all[String(classLevel)] && typeof all[String(classLevel)] === 'object' ? all[String(classLevel)] : {};
+  return normalizeCustomLessonData(classData[String(lesson)]);
+}
+
+function updateCustomUnitTopicLessonData(classLevel, lesson, updater) {
+  if (!classLevel || !lesson || typeof updater !== 'function') return;
+
+  const all = readCustomUnitTopicData();
+  const classKey = String(classLevel);
+  const lessonKey = String(lesson);
+
+  if (!all[classKey] || typeof all[classKey] !== 'object') all[classKey] = {};
+
+  const lessonData = normalizeCustomLessonData(all[classKey][lessonKey]);
+  updater(lessonData);
+  all[classKey][lessonKey] = normalizeCustomLessonData(lessonData);
+
+  writeCustomUnitTopicData(all);
+}
+
 function getLessonOptionsForClass(classLevel) {
   const lessonsByClass = {
     '4': ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Sosyal Bilgiler', 'İngilizce'],
@@ -2399,66 +3008,35 @@ function getLessonOptionsForClass(classLevel) {
 }
 
 function getUnitOptionsForLesson(classLevel, lesson) {
-  const unitsByClass = {
-    '8': {
-      'Matematik': [
-        '1. Ünite: Çarpanlar ve Katlar',
-        '2. Ünite: Üslü İfadeler',
-        '3. Ünite: Kareköklü İfadeler',
-        '4. Ünite: Veri Analizi',
-        '5. Ünite: Basit Olayların Olma Olasılığı',
-        '6. Ünite: Cebirsel İfadeler ve Özdeşlikler',
-        '7. Ünite: Doğrusal Denklemler',
-        '8. Ünite: Eşitsizlikler',
-        '9. Ünite: Üçgenler',
-        '10. Ünite: Eşlik ve Benzerlik',
-        '11. Ünite: Dönüşüm Geometrisi',
-        '12. Ünite: Geometrik Cisimler'
-      ]
-    }
-  };
-  return (unitsByClass[classLevel] && unitsByClass[classLevel][lesson]) || [];
+  const defaultUnits = (DEFAULT_UNITS_BY_CLASS[String(classLevel)] && DEFAULT_UNITS_BY_CLASS[String(classLevel)][lesson]) || [];
+  const customLessonData = getCustomUnitTopicLessonData(classLevel, lesson);
+  return ensureUniqueList([].concat(defaultUnits, customLessonData.units));
 }
 
 function getTopicOptionsForLesson(classLevel, lesson, unit) {
-  const topics = {
-    '4': {
-      'Matematik': ['Doğal Sayılar', 'Kesirler', 'Geometrik Şekiller', 'Bölme', 'Uzunluk Ölçme'],
-      'Fen Bilimleri': ['Canlılar ve Hayat', 'Maddenin Halleri', 'Isı ve Sıcaklık', 'Ses', 'Elektrik'],
-      'Türkçe': ['Okuma', 'Yazım Kuralları', 'Dil Bilgisi', 'Sözcükte Anlam', 'Paragraf'],
-      'Sosyal Bilgiler': ['Türkiye ve Komşuları', 'Yerşekilleri', 'Doğal Afetler', 'Çevre'],
-      'İngilizce': ['Hello', 'Family', 'School', 'Numbers', 'Colors']
-    },
-    '5': {
-      'Matematik': ['Bölme', 'Ondalık Kesirler', 'Geometrik Cisimler'],
-      'Fen Bilimleri': ['Madde ve Değişim', 'İnsan ve Çevre'],
-      'Türkçe': ['Okuma', 'Yazım Kuralları', 'Söz Sanatları'],
-      'Sosyal Bilgiler': ['Ekoloji', 'Doğal Kaynaklar'],
-      'İngilizce': ['Daily Routine', 'My School']
-    },
-    '8': {
-      'Matematik': {
-        '1. Ünite: Çarpanlar ve Katlar': ['Çarpanlar ve Katlar', 'EBOB - EKOK (En Büyük Ortak Bölen - En Küçük Ortak Kat)', 'Aralarında Asal Sayılar'],
-        '2. Ünite: Üslü İfadeler': ['Tam Sayıların Kuvvetleri', 'Üslü Sayılarda Temel Kurallar ve İşlemler', 'Ondalık Gösterimlerin ve Çok Büyük/Çok Küçük Sayıların Üslü İfadeyle Yazılımı (Bilimsel Gösterim)'],
-        '3. Ünite: Kareköklü İfadeler': ['Tam Kare Sayılar ve Karekök Arasındaki İlişki', 'Kareköklü İfadelerde Çarpma, Bölme, Toplama ve Çıkarma İşlemleri', 'Kareköklü İfadelerde Tahmin ve Gerçek Değer', 'Verilen Bir Kareköklü İfadenin Hangi İki Doğal Sayı Arasında Olduğunu Belirleme'],
-        '4. Ünite: Veri Analizi': ['Verilerin Sütun, Çizgi ve Daire Grafikleriyle Gösterilmesi ve Yorumlanması'],
-        '5. Ünite: Basit Olayların Olma Olasılığı': ['Olay Çeşitleri (Kesin, İmkânsız, Olası)', 'Basit Bir Olayın Olma Olasılığını Hesaplama'],
-        '6. Ünite: Cebirsel İfadeler ve Özdeşlikler': ['Cebirsel İfadelerle Çarpma İşlemi', 'Özdeşlik Kavramı ve Temel Özdeşlikler (İki Kare Farkı, Tam Kare Özdeşlikleri)', 'Cebirsel İfadeleri Çarpanlarına Ayırma'],
-        '7. Ünite: Doğrusal Denklemler': ['Koordinat Sistemi', 'Birinci Dereceden Bir ve İki Bilinmeyenli Denklemler', 'Doğrusal İlişkiler ve Grafiklerle Gösterimi', 'Doğrunun Eğimi'],
-        '8. Ünite: Eşitsizlikler': ['Birinci Dereceden Bir Bilinmeyenli Eşitsizlikler ve Sayı Doğrusunda Gösterilmesi', 'Eşitlik ve Eşitsizlik Durumları İçeren Problem Çözümleri'],
-        '9. Ünite: Üçgenler': ['Üçgenin Kenar ve Açı İlişkileri', 'Üçgen Çizimleri', 'Pisagor Bağıntısı'],
-        '10. Ünite: Eşlik ve Benzerlik': ['Geometrik Şekillerde Eşlik ve Benzerlik', 'Benzerlik Oranı ve Uygulamaları'],
-        '11. Ünite: Dönüşüm Geometrisi': ['Öteleme, Yansıma ve Dönme Hareketleri', 'Çokgenlerde Dönüşüm Uygulamaları'],
-        '12. Ünite: Geometrik Cisimler': ['Dik Prizmalar (Yüzey Alanı ve Hacim Bağıntıları)', 'Dik Dairesel Silindir ve Dik Piramit']
-      }
-    }
-  };
+  const lessonTopics = DEFAULT_TOPICS_BY_CLASS[String(classLevel)] && DEFAULT_TOPICS_BY_CLASS[String(classLevel)][lesson];
+  const customLessonData = getCustomUnitTopicLessonData(classLevel, lesson);
 
-  if (classLevel === '8' && lesson === 'Matematik') {
-    return (topics[classLevel] && topics[classLevel][lesson] && topics[classLevel][lesson][unit]) || [];
+  let defaultTopics = [];
+  const isNestedTopicMap = lessonTopics && typeof lessonTopics === 'object' && !Array.isArray(lessonTopics);
+
+  if (isNestedTopicMap) {
+    defaultTopics = unit ? (lessonTopics[unit] || []) : [];
+  } else if (Array.isArray(lessonTopics)) {
+    defaultTopics = unit ? [] : lessonTopics;
   }
 
-  return (topics[classLevel] && topics[classLevel][lesson]) || ['Konu seçiniz'];
+  const customTopics = unit
+    ? (Array.isArray(customLessonData.topicsByUnit[unit]) ? customLessonData.topicsByUnit[unit] : [])
+    : customLessonData.generalTopics;
+
+  const merged = ensureUniqueList([].concat(defaultTopics, customTopics));
+
+  if (isNestedTopicMap) {
+    return merged;
+  }
+
+  return merged.length ? merged : ['Konu seçiniz'];
 }
 
 function populateTaskLessonOptions(classLevel) {

@@ -786,6 +786,18 @@
                 <div class="submenu-item active" data-sinif="8" onclick="event.stopPropagation(); selectKaynakSinif('8', this);">8. Sınıf</div>
               </div>
             </div>
+            <div class="menu-item has-submenu" id="menu-unite-konu">
+              <div class="menu-main" onclick="sekmeAcs('unite-konu'); toggleUniteKonuSubmenu(event)">
+                <span class="icon"></span><span class="menu-title">Ünite/Konu</span>
+              </div>
+              <div class="submenu">
+                <div class="submenu-item unite-konu-submenu-item" data-sinif="4" onclick="event.stopPropagation(); selectUniteKonuSinif('4', this);">4. Sınıf</div>
+                <div class="submenu-item unite-konu-submenu-item" data-sinif="5" onclick="event.stopPropagation(); selectUniteKonuSinif('5', this);">5. Sınıf</div>
+                <div class="submenu-item unite-konu-submenu-item" data-sinif="6" onclick="event.stopPropagation(); selectUniteKonuSinif('6', this);">6. Sınıf</div>
+                <div class="submenu-item unite-konu-submenu-item" data-sinif="7" onclick="event.stopPropagation(); selectUniteKonuSinif('7', this);">7. Sınıf</div>
+                <div class="submenu-item unite-konu-submenu-item active" data-sinif="8" onclick="event.stopPropagation(); selectUniteKonuSinif('8', this);">8. Sınıf</div>
+              </div>
+            </div>
             <div class="menu-item" onclick="cikisYap()" style="margin-top: auto; color: #f87171;">
               <span class="icon"></span><span class="menu-title">Çıkış Yap</span>
             </div>
@@ -859,6 +871,7 @@
               <button id="studentInfoBtnBrans" class="btn-nav-outline student-switch-btn" onclick="openStudentBransPage()">Branş Denemeleri</button>
               <button id="studentInfoBtnGenel" class="btn-nav-outline student-switch-btn" onclick="openStudentGenelPage()">Genel Denemeleri</button>
               <button id="studentInfoBtnKaynak" class="btn-nav-outline student-switch-btn" onclick="openStudentKaynakIlerlemePage()">Kaynak/Konu İlerlemesi</button>
+              <button id="studentInfoBtnCozulen" class="btn-nav-outline student-switch-btn" onclick="openStudentCozulenSoruPage()">Çözülen Soru Sayısı</button>
               <button id="studentInfoBtnVeli" class="btn-nav-outline student-switch-btn" onclick="openStudentVeliPage()">Veli Bilgisi</button>
             </div>
 
@@ -1028,6 +1041,63 @@
               </div>
             </div>
             <div id="resourceSuggestionsList" style="margin-top: 20px; display: grid; gap: 14px;"></div>
+          </div>
+        </div>
+
+        <div id="tabUniteKonu" style="display: none;">
+          <div class="card-panel">
+            <div style="margin-bottom: 20px;">
+              <h2 id="uniteKonuClassTitle" style="margin:0; font-size:1.2rem; color: var(--color-dark-teal);">8. Sınıf Ünite / Konu Yönetimi</h2>
+              <p id="uniteKonuClassDescription" style="margin: 10px 0 0; color: #64748b; font-size: 0.9rem; line-height: 1.5;">Bu alanda seçili sınıf için ders bazında ünite ve konu ekleyip mevcut seçim ekranlarıyla entegre şekilde kullanabilirsiniz.</p>
+            </div>
+
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:20px; padding:22px; box-shadow:0 12px 30px rgba(15,23,42,0.05); margin-bottom:16px;">
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Sınıf</label>
+                  <input id="uniteKonuClassDisplay" class="input-field" type="text" readonly value="Sınıf 8" style="margin-bottom:0;">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Ders</label>
+                  <select id="uniteKonuLesson" class="input-field" onchange="onUniteKonuLessonChange()" style="margin-bottom:0;">
+                    <option value="">Ders seçin</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1.2fr 0.8fr; gap:12px; margin-bottom:12px;">
+                <input id="uniteKonuUnitInput" type="text" class="input-field" placeholder="Yeni ünite adı" style="margin-bottom:0;">
+                <button type="button" class="btn-action btn-coral" onclick="addUniteKonuUnit()">Ünite Ekle</button>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr; gap:12px; margin-bottom:12px;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Konu eklenecek ünite</label>
+                  <select id="uniteKonuUnitSelect" class="input-field" onchange="onUniteKonuUnitSelectChange()" style="margin-bottom:0;">
+                    <option value="">Ünite seçin (opsiyonel)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1.2fr 0.8fr; gap:12px;">
+                <input id="uniteKonuTopicInput" type="text" class="input-field" placeholder="Yeni konu adı" style="margin-bottom:0;">
+                <button type="button" class="btn-action btn-coral" onclick="addUniteKonuTopic()">Konu Ekle</button>
+              </div>
+            </div>
+
+            <div class="exam-history-wrap" style="margin-bottom:12px;">
+              <div class="exam-history-title">Üniteler</div>
+              <div id="uniteKonuUnitList" class="exam-history-list">
+                <div class="exam-history-empty">Henüz ünite yok.</div>
+              </div>
+            </div>
+
+            <div class="exam-history-wrap">
+              <div class="exam-history-title">Konular</div>
+              <div id="uniteKonuTopicList" class="exam-history-list">
+                <div class="exam-history-empty">Henüz konu yok.</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1297,6 +1367,81 @@
               <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                 <button class="btn-nav-outline" type="button" onclick="closeVeliEditMode(2)">Vazgeç</button>
                 <button class="btn-action btn-coral" type="button" style="padding:10px 18px;" onclick="saveStudentParentInfo(2)">Kaydet</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="tabCozulenSoru" style="display: none;">
+          <div class="card-panel">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+              <div>
+                <h2 style="margin:0; font-size:1.25rem; color: var(--color-dark-teal);">Çözülen Soru Sayısı</h2>
+                <p style="margin:8px 0 0; color:#64748b; font-size:0.9rem;">Ders, ünite, konu ve kaynağa göre soru çözüm takibi.</p>
+              </div>
+            </div>
+
+            <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:16px;">
+              <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; margin-bottom:12px;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Sınıf</label>
+                  <input id="cozulenClassDisplay" class="input-field" type="text" readonly value="Sınıf -" style="margin-bottom:0;">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Ders</label>
+                  <select id="cozulenLesson" class="input-field" onchange="onCozulenLessonChange()" style="margin-bottom:0;">
+                    <option value="">Ders seçin</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Ünite</label>
+                  <select id="cozulenUnit" class="input-field" onchange="onCozulenUnitChange()" style="margin-bottom:0;">
+                    <option value="">Ünite seçin</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Konu</label>
+                  <select id="cozulenTopic" class="input-field" style="margin-bottom:0;">
+                    <option value="">Konu seçin</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:12px; margin-bottom:12px;">
+                <div class="form-group" style="margin-bottom:0; grid-column: span 2;">
+                  <label class="form-label">Kaynak</label>
+                  <select id="cozulenSource" class="input-field" style="margin-bottom:0;">
+                    <option value="">Kaynak seçin</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Soru Sayısı</label>
+                  <input id="cozulenQuestion" type="number" min="0" class="input-field" oninput="updateCozulenBlank()" style="margin-bottom:0;" placeholder="0">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Doğru</label>
+                  <input id="cozulenCorrect" type="number" min="0" class="input-field" oninput="updateCozulenBlank()" style="margin-bottom:0;" placeholder="0">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Yanlış</label>
+                  <input id="cozulenWrong" type="number" min="0" class="input-field" oninput="updateCozulenBlank()" style="margin-bottom:0;" placeholder="0">
+                </div>
+              </div>
+
+              <div style="max-width:220px;">
+                <label class="form-label">Boş</label>
+                <input id="cozulenBlank" type="number" min="0" class="input-field" readonly placeholder="0">
+              </div>
+
+              <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+                <button class="btn-action btn-coral" type="button" style="padding:10px 18px;" onclick="saveCozulenSoruRecord()">Kaydet</button>
+              </div>
+            </div>
+
+            <div class="exam-history-wrap">
+              <div class="exam-history-title">Kaydedilen Çözülen Soru Kayıtları</div>
+              <div id="cozulenSavedList" class="exam-history-list">
+                <div class="exam-history-empty">Henüz kayıt yok.</div>
               </div>
             </div>
           </div>
