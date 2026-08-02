@@ -463,6 +463,98 @@ function updateBransExamNet() {
   if (netEl) netEl.textContent = net.toFixed(2);
 }
 
+let bransTopicStats = {};
+
+function getActiveStudentClassLevel() {
+  const students = getStoredOgrenciler();
+  const student = students.find(s => s.id === activeStudentId);
+  return student && student.classLevel ? String(student.classLevel) : '8';
+}
+
+function updateBransUnitOptions() {
+  const classLevel = getActiveStudentClassLevel();
+  const lesson = document.getElementById('bransExamLesson')?.value || '';
+  const unitSelect = document.getElementById('bransExamUnit');
+  if (!unitSelect) return;
+
+  const units = getUnitOptionsForLesson(classLevel, lesson);
+  if (!lesson) {
+    unitSelect.innerHTML = '<option value="">Önce ders seçin</option>';
+    renderBransTopicRows();
+    return;
+  }
+
+  if (!units.length) {
+    unitSelect.innerHTML = '<option value="">Ünite listesi yok</option>';
+    renderBransTopicRows();
+    return;
+  }
+
+  unitSelect.innerHTML = '<option value="">Ünite seçin</option>';
+  units.forEach((unit) => {
+    const opt = document.createElement('option');
+    opt.value = unit;
+    opt.textContent = unit;
+    unitSelect.appendChild(opt);
+  });
+
+  renderBransTopicRows();
+}
+
+function renderBransTopicRows() {
+  const container = document.getElementById('bransTopicRows');
+  if (!container) return;
+
+  const classLevel = getActiveStudentClassLevel();
+  const lesson = document.getElementById('bransExamLesson')?.value || '';
+  const unit = document.getElementById('bransExamUnit')?.value || '';
+
+  let topics = [];
+  if (classLevel && lesson) {
+    topics = getTopicOptionsForLesson(classLevel, lesson, unit).filter((t) => t && t !== 'Konu seçiniz');
+  }
+
+  if (!topics.length) {
+    container.innerHTML = '<div class="topic-map-empty">Bu seçim için konu listesi yok.</div>';
+    return;
+  }
+
+  container.innerHTML = topics.map((topic, idx) => {
+    const safeTopic = topic.replace(/"/g, '&quot;');
+    const safeUnit = unit.replace(/"/g, '&quot;');
+    const key = `${unit}__${topic}`;
+    const saved = bransTopicStats[key] || { wrong: 0, blank: 0 };
+    return `<div class="topic-map-row">
+      <div>${topic}</div>
+      <input class="input-field topic-map-input" type="number" min="0" value="${saved.wrong}" data-topic="${safeTopic}" data-unit="${safeUnit}" id="topicWrong_${idx}" oninput="updateBransTopicCount(this, 'wrong')">
+      <input class="input-field topic-map-input" type="number" min="0" value="${saved.blank}" data-topic="${safeTopic}" data-unit="${safeUnit}" id="topicBlank_${idx}" oninput="updateBransTopicCount(this, 'blank')">
+    </div>`;
+  }).join('');
+}
+
+function updateBransTopicCount(inputEl, field) {
+  if (!inputEl) return;
+  const unit = inputEl.dataset.unit || '';
+  const topic = inputEl.dataset.topic || '';
+  if (!unit || !topic) return;
+
+  const key = `${unit}__${topic}`;
+  const current = bransTopicStats[key] || { unit, topic, wrong: 0, blank: 0 };
+  const val = Math.max(0, Number(inputEl.value) || 0);
+  current[field] = val;
+
+  if (current.wrong === 0 && current.blank === 0) {
+    delete bransTopicStats[key];
+  } else {
+    bransTopicStats[key] = current;
+  }
+}
+
+function collectBransTopicSelections() {
+  const topicStats = Object.values(bransTopicStats).filter((t) => (Number(t.wrong) || 0) > 0 || (Number(t.blank) || 0) > 0);
+  return { topicStats };
+}
+
 function formatDateInput(inputEl) {
   if (!inputEl) return;
   const digits = String(inputEl.value || '').replace(/\D/g, '').slice(0, 8);
@@ -531,8 +623,11 @@ function renderBransExamHistory() {
 
   listEl.innerHTML = records.map((item) => {
     const title = item.examName || `${item.lesson || 'Ders'} Denemesi`;
-    const meta = `${item.lesson || '-'} · ${formatExamDate(item.examDate)}`;
+    const meta = `${item.classLevel || '-'}. sınıf · ${item.lesson || '-'} · ${item.unit || 'Ünite yok'} · ${formatExamDate(item.examDate)}`;
     const details = `Soru: ${item.questionCount} · D: ${item.correct} · Y: ${item.wrong} · B: ${item.blank}`;
+    const topicSummary = item.topicStats && item.topicStats.length
+      ? item.topicStats.map((t) => `${t.unit} / ${t.topic} (Y:${t.wrong}, B:${t.blank})`).join(' | ')
+      : '-';
     return `
       <div class="exam-history-item">
         <div>
@@ -542,7 +637,7 @@ function renderBransExamHistory() {
             <button type="button" class="exam-delete-btn" onclick="deleteBransExam(${item.id})">Sil</button>
           </div>
         </div>
-        <div class="exam-history-meta">${details}</div>
+        <div class="exam-history-meta">${details}<br/>Konu Dağılımı: ${topicSummary}</div>
         <div class="exam-history-net">
           <div class="value">${Number(item.net || 0).toFixed(2)}</div>
           <div class="exam-history-meta">Net</div>
@@ -609,7 +704,11 @@ function indirTumBransDenemelerPdf() {
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
+    doc.text(`Sinif: ${item.classLevel || '-'}`, marginLeft, y);
+    y += 14;
     doc.text(`Ders: ${item.lesson || '-'}`, marginLeft, y);
+    y += 14;
+    doc.text(`Unite: ${item.unit || '-'}`, marginLeft, y);
     y += 14;
     doc.text(`Tarih: ${formatExamDate(item.examDate)}`, marginLeft, y);
     y += 14;
@@ -617,6 +716,13 @@ function indirTumBransDenemelerPdf() {
     const details = `Soru: ${item.questionCount || 0}   Dogru: ${item.correct || 0}   Yanlis: ${item.wrong || 0}   Bos: ${item.blank || 0}`;
     doc.text(details, marginLeft, y);
     y += 14;
+
+    const topicSummary = item.topicStats && item.topicStats.length
+      ? item.topicStats.map((t) => `${t.unit} / ${t.topic} (Y:${t.wrong}, B:${t.blank})`).join(' | ')
+      : '-';
+    const topicLines = doc.splitTextToSize(`Konu Dagilimi: ${topicSummary}`, 510);
+    doc.text(topicLines, marginLeft, y);
+    y += topicLines.length * 12 + 4;
 
     doc.setFont('helvetica', 'bold');
     doc.text(`Net: ${Number(item.net || 0).toFixed(2)}`, marginLeft, y);
@@ -637,13 +743,16 @@ function kaydetBransDenemesi() {
     return;
   }
 
+  const classLevel = getActiveStudentClassLevel();
   const lesson = document.getElementById('bransExamLesson')?.value || '';
+  const unit = document.getElementById('bransExamUnit')?.value || '';
   const examDate = document.getElementById('bransExamDate')?.value || '';
   const examName = document.getElementById('bransExamName')?.value.trim() || '';
   const questionCount = Number(document.getElementById('bransExamQuestionCount')?.value) || 0;
   const correct = Number(document.getElementById('bransExamCorrect')?.value) || 0;
   const wrong = Number(document.getElementById('bransExamWrong')?.value) || 0;
   const blank = Math.max(0, questionCount - correct - wrong);
+  const topicSelections = collectBransTopicSelections();
 
   if (!lesson || !examDate || !examName) {
     alert('Lütfen ders, deneme tarihi ve deneme adını doldurun.');
@@ -669,13 +778,16 @@ function kaydetBransDenemesi() {
   const records = getStoredBransExams();
   records.unshift({
     id: Date.now(),
+    classLevel,
     lesson,
+    unit,
     examDate,
     examName,
     questionCount,
     correct,
     wrong,
     blank,
+    topicStats: topicSelections.topicStats,
     net,
     savedAt: Date.now()
   });
@@ -688,6 +800,8 @@ function kaydetBransDenemesi() {
   document.getElementById('bransExamWrong').value = '';
   document.getElementById('bransExamBlank').value = '';
   document.getElementById('bransExamName').value = '';
+  bransTopicStats = {};
+  renderBransTopicRows();
   const netEl = document.getElementById('bransExamNet');
   if (netEl) netEl.textContent = '0.00';
 }
@@ -1375,6 +1489,12 @@ function openStudentBransPage() {
   }
 
   setStudentDetailSection('brans');
+  bransTopicStats = {};
+  const classDisplayEl = document.getElementById('bransExamClassDisplay');
+  if (classDisplayEl) {
+    classDisplayEl.value = `Sınıf ${student.classLevel || '8'}`;
+  }
+  updateBransUnitOptions();
   renderBransExamHistory();
 }
 
