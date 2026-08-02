@@ -1393,28 +1393,69 @@ function renderUniteKonuTopicList() {
     listEl.innerHTML = '<div class="exam-history-empty">Önce ders seçin.</div>';
     return;
   }
+  const customLessonData = getCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson);
+  const rows = [];
 
-  const topics = getTopicOptionsForLesson(selectedUniteKonuSinif, lesson, unit).filter((name) => name && name !== 'Konu seçiniz');
-  if (!topics.length) {
+  if (unit) {
+    const selectedTopics = getTopicOptionsForLesson(selectedUniteKonuSinif, lesson, unit).filter((name) => name && name !== 'Konu seçiniz');
+    const customTopics = Array.isArray(customLessonData.topicsByUnit?.[unit]) ? customLessonData.topicsByUnit[unit] : [];
+    selectedTopics.forEach((topic) => {
+      rows.push({
+        topic,
+        unitName: unit,
+        deletable: customTopics.includes(topic)
+      });
+    });
+  } else {
+    const units = getUnitOptionsForLesson(selectedUniteKonuSinif, lesson);
+
+    if (units.length) {
+      units.forEach((unitName) => {
+        const unitTopics = getTopicOptionsForLesson(selectedUniteKonuSinif, lesson, unitName).filter((name) => name && name !== 'Konu seçiniz');
+        const customTopics = Array.isArray(customLessonData.topicsByUnit?.[unitName]) ? customLessonData.topicsByUnit[unitName] : [];
+        unitTopics.forEach((topic) => {
+          rows.push({
+            topic,
+            unitName,
+            deletable: customTopics.includes(topic)
+          });
+        });
+      });
+    }
+
+    const generalTopics = Array.isArray(customLessonData.generalTopics) ? customLessonData.generalTopics : [];
+    generalTopics.forEach((topic) => {
+      rows.push({
+        topic,
+        unitName: '',
+        deletable: true
+      });
+    });
+  }
+
+  const uniqueRows = [];
+  const seen = new Set();
+  rows.forEach((row) => {
+    const key = `${row.unitName || 'GENEL'}|||${row.topic}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    uniqueRows.push(row);
+  });
+
+  if (!uniqueRows.length) {
     listEl.innerHTML = '<div class="exam-history-empty">Henüz konu yok.</div>';
     return;
   }
 
-  const customLessonData = getCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson);
-  const customTopics = unit
-    ? (Array.isArray(customLessonData.topicsByUnit?.[unit]) ? customLessonData.topicsByUnit[unit] : [])
-    : (Array.isArray(customLessonData.generalTopics) ? customLessonData.generalTopics : []);
-
-  listEl.innerHTML = topics.map((topic) => {
-    const deletable = customTopics.includes(topic);
-    const removeBtn = deletable
-      ? `<button type="button" class="exam-delete-btn" onclick="removeCustomUniteKonuTopic(decodeURIComponent('${encodeURIComponent(unit)}'), decodeURIComponent('${encodeURIComponent(topic)}'))">Sil</button>`
+  listEl.innerHTML = uniqueRows.map((row) => {
+    const removeBtn = row.deletable
+      ? `<button type="button" class="exam-delete-btn" onclick="removeCustomUniteKonuTopic(decodeURIComponent('${encodeURIComponent(row.unitName)}'), decodeURIComponent('${encodeURIComponent(row.topic)}'))">Sil</button>`
       : '<span style="font-size:0.73rem; color:#64748b;">Sistem</span>';
     return `
       <div class="exam-history-item">
         <div>
-          <strong>${escapeHtml(topic)}</strong>
-          <div class="exam-history-meta">${unit ? `Ünite: ${escapeHtml(unit)}` : 'Genel konu'}</div>
+          <strong>${escapeHtml(row.topic)}</strong>
+          <div class="exam-history-meta">${row.unitName ? `Ünite: ${escapeHtml(row.unitName)}` : 'Genel konu'}</div>
         </div>
         <div class="exam-history-actions">${removeBtn}</div>
       </div>
