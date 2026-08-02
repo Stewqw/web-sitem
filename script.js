@@ -45,6 +45,27 @@ function shouldUseFirestoreForms() {
   return !!(isFirebaseReady() && services.settings && services.settings.useFirestoreForms);
 }
 
+function getFirebaseAuthErrorMessage(error, fallbackMessage) {
+  const code = error && error.code ? String(error.code) : '';
+
+  switch (code) {
+    case 'auth/email-already-in-use':
+      return 'Bu e-posta adresi zaten kullanımda.';
+    case 'auth/invalid-email':
+      return 'Geçersiz bir e-posta adresi girdiniz.';
+    case 'auth/weak-password':
+      return 'Şifreniz çok zayıf. En az 6 karakter olmalı.';
+    case 'auth/user-not-found':
+      return 'Bu e-posta adresine ait bir hesap bulunamadı.';
+    case 'auth/wrong-password':
+      return 'Hatalı şifre girdiniz.';
+    case 'auth/too-many-requests':
+      return 'Çok fazla başarısız deneme yaptınız. Lütfen biraz bekleyin.';
+    default:
+      return fallbackMessage || 'Bir hata oluştu. Lütfen tekrar deneyin.';
+  }
+}
+
 const MUHASEBE_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 
 function normalizeClassLevel(value) {
@@ -573,7 +594,7 @@ function kayitOl() {
       alert("Kayıt başarılı! Şimdi giriş yapabilirsiniz.");
       tabDegistir('giris');
     }).catch((error) => {
-      regErrorBox.textContent = error && error.message ? error.message : 'Firebase kayıt sırasında hata oluştu.';
+      regErrorBox.textContent = getFirebaseAuthErrorMessage(error, 'Firebase kayıt sırasında hata oluştu.');
       regErrorBox.style.display = 'block';
     });
     return;
@@ -637,7 +658,7 @@ function paneleGirisYap(nereden) {
       renderKokpitUserCard();
     }).catch((error) => {
       if (errorBox) {
-        errorBox.textContent = error && error.message ? error.message : 'Firebase giriş başarısız.';
+        errorBox.textContent = getFirebaseAuthErrorMessage(error, 'Firebase giriş başarısız.');
         errorBox.style.display = 'block';
       }
     });
