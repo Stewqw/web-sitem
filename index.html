@@ -546,6 +546,114 @@
     .agenda-switch::after { content:''; position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:#fff; transition: transform 0.16s ease; box-shadow: 0 2px 6px rgba(15,23,42,0.16); }
     .agenda-switch:checked::after { transform: translateX(22px); }
 
+    .site-footer {
+      background: linear-gradient(180deg, #0f1f3e 0%, #0a152b 100%);
+      color: #dbeafe;
+      border-top: 1px solid rgba(148, 163, 184, 0.25);
+      margin-top: 26px;
+    }
+    .footer-inner {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 24px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .footer-copy {
+      font-size: 0.86rem;
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+    .footer-links {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .footer-link-btn {
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(15, 23, 42, 0.35);
+      color: #e2e8f0;
+      font-size: 0.8rem;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+    }
+    .footer-link-btn:hover {
+      background: rgba(37, 99, 235, 0.22);
+      border-color: rgba(59, 130, 246, 0.5);
+      transform: translateY(-1px);
+    }
+
+    .legal-modal-card {
+      max-width: 860px;
+      border-color: #c8d8ee;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      padding: 26px;
+    }
+    .legal-modal-head {
+      margin-bottom: 12px;
+      padding-right: 40px;
+    }
+    .legal-modal-title {
+      font-size: 1.25rem;
+      font-weight: 900;
+      color: #102040;
+      line-height: 1.25;
+      margin-bottom: 6px;
+    }
+    .legal-modal-subtitle {
+      color: #64748b;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+    .legal-modal-content {
+      max-height: 62vh;
+      overflow-y: auto;
+      border: 1px solid #d6e2f0;
+      border-radius: 14px;
+      background: #ffffff;
+      padding: 14px;
+      color: #1e293b;
+      line-height: 1.58;
+      font-size: 0.88rem;
+    }
+    .legal-modal-content h4 {
+      margin: 12px 0 6px;
+      color: #102040;
+      font-size: 0.95rem;
+      font-weight: 900;
+    }
+    .legal-modal-content p {
+      margin: 0 0 10px;
+    }
+    .legal-modal-content ul {
+      margin: 0 0 12px 18px;
+      padding: 0;
+    }
+
+    @media (max-width: 720px) {
+      .footer-inner {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .legal-modal-card {
+        padding: 18px;
+      }
+      .legal-modal-title {
+        font-size: 1.06rem;
+      }
+      .legal-modal-content {
+        font-size: 0.83rem;
+        max-height: 58vh;
+      }
+    }
+
     .student-card-box { background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 16px; width: 100%; max-width: 280px; position: relative; margin-top: 16px; overflow: hidden; box-shadow: 0 18px 28px rgba(15, 23, 42, 0.08); transition: transform 0.2s ease, box-shadow 0.2s ease; }
     .student-card-box:hover { transform: translateY(-2px); box-shadow: 0 22px 36px rgba(15, 23, 42, 0.12); }
     .student-badge-group { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; }
@@ -2234,6 +2342,28 @@
         <button class="btn-nav-outline" type="button" onclick="modalKapat('kaynakSilModal')">İptal</button>
         <button class="btn-action btn-coral" type="button" onclick="confirmKaynakSilme()">Sil</button>
       </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-copy">© 2026 Parabol Koçluk. Tüm hakları saklıdır.</div>
+      <div class="footer-links">
+        <button type="button" class="footer-link-btn" onclick="openLegalModal('privacy')">Gizlilik Politikası ve KVKK</button>
+        <button type="button" class="footer-link-btn" onclick="openLegalModal('terms')">Kullanım Koşulları</button>
+        <button type="button" class="footer-link-btn" onclick="openLegalModal('cookies')">Çerez Politikası</button>
+      </div>
+    </div>
+  </footer>
+
+  <div class="modal-overlay" id="legalModal">
+    <div class="modal-card legal-modal-card">
+      <button class="modal-close" onclick="modalKapat('legalModal')">✕</button>
+      <div class="legal-modal-head">
+        <div id="legalModalTitle" class="legal-modal-title">Yasal Bilgilendirme</div>
+        <div class="legal-modal-subtitle">Parabol Koçluk dijital öğrenci koçluğu platformu için bilgilendirme metni</div>
+      </div>
+      <div id="legalModalContent" class="legal-modal-content"></div>
     </div>
   </div>
 

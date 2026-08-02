@@ -151,6 +151,106 @@ function modalKapat(id) {
   document.getElementById(id).style.display = 'none';
 }
 
+const LEGAL_TEXTS = {
+  privacy: {
+    title: 'Gizlilik Politikasi ve KVKK Aydinlatma Metni',
+    html: `
+      <h4>1. Veri Sorumlusu</h4>
+      <p>Bu metin, Parabol Kocluk dijital ogrenci koclugu platformu tarafindan, 6698 sayili Kisisel Verilerin Korunmasi Kanunu (KVKK) kapsaminda hazirlanmistir. Platform uzerinden toplanan veriler, ogrenci koclugu hizmetlerinin planlanmasi ve yurutilmesi amaciyla islenir.</p>
+
+      <h4>2. Islenen Kisisel Veriler</h4>
+      <p>Hizmetin niteligine gore asagidaki veri kategorileri islenebilir:</p>
+      <ul>
+        <li>Kimlik ve iletisim verileri (ad-soyad, e-posta, telefon)</li>
+        <li>Egitim sureci verileri (sinif seviyesi, ders programi, hedefler, deneme ve ilerleme kayitlari)</li>
+        <li>Islem guvenligi verileri (oturum kayitlari, cihaz ve erisim bilgileri)</li>
+        <li>Finansal surec verileri (odeme kayitlari, fatura bilgileri)</li>
+      </ul>
+
+      <h4>3. Veri Isleme Amaclari</h4>
+      <p>Kisisel verileriniz; ogrenci koclugu hizmeti sunulmasi, kullanici hesabi yonetimi, performans takibi, iletisim sureclerinin yurutilmesi, yasal yukumluluklerin yerine getirilmesi ve hizmet kalitesinin artirilmasi amaclariyla islenir.</p>
+
+      <h4>4. Hukuki Sebepler ve Toplama Yontemi</h4>
+      <p>Verileriniz; platform uzerindeki formlar, kullanici giris ekranlari ve dijital kayit alanlari araciligiyla elektronik ortamda toplanir. Isleme faaliyetleri, KVKK madde 5/2 kapsamindaki sozlesmenin kurulmasi/ifasi, hukuki yukumluluklerin yerine getirilmesi ve mesru menfaat hukuki sebeplerine dayanir.</p>
+
+      <h4>5. Veri Aktarimi</h4>
+      <p>Kisisel verileriniz, mevzuata uygun olarak; teknik altyapi ve barindirma hizmeti aldigimiz tedarikcilere, hukuken yetkili kamu kurumlarina ve zorunlu hallerde profesyonel danismanlara aktarilabilir. Aktarim sureclerinde gerekli idari ve teknik guvenlik tedbirleri uygulanir.</p>
+
+      <h4>6. Saklama Suresi ve Guvenlik</h4>
+      <p>Verileriniz, ilgili mevzuatta ongorulen sureler boyunca veya isleme amaci gerekli kildigi surece saklanir. Yetkisiz erisimi onlemek icin erisim kontrolu, sifreleme, yedekleme ve loglama gibi guvenlik onlemleri uygulanir.</p>
+
+      <h4>7. KVKK Kapsamindaki Haklariniz</h4>
+      <p>KVKK madde 11 kapsaminda; verilerinizin islenip islenmedigini ogrenme, duzeltme talep etme, silinmesini isteme, aktarim bilgisi talep etme ve itiraz etme haklarina sahipsiniz. Taleplerinizi iletisim kanallarimiz uzerinden iletebilirsiniz.</p>
+    `
+  },
+  terms: {
+    title: 'Kullanim Kosullari',
+    html: `
+      <h4>1. Hizmetin Kapsami</h4>
+      <p>Parabol Kocluk, YKS ve YDT basta olmak uzere sinav hazirlik surecine yonelik ogrenci koclugu, planlama, takip ve raporlama araclari sunan dijital bir platformdur. Platformu kullanan tum kullanicilar bu kosullari kabul etmis sayilir.</p>
+
+      <h4>2. Hesap Guvenligi</h4>
+      <p>Kullanici, hesap bilgilerinin dogrulugundan ve sifre guvenliginden sorumludur. Hesap bilgilerinin ucuncu kisilerle paylasilmasi sonucu dogabilecek risklerden kullanici sorumludur.</p>
+
+      <h4>3. Kullanici Yukumlulukleri</h4>
+      <ul>
+        <li>Platformu hukuka ve genel ahlaka uygun sekilde kullanmak</li>
+        <li>Baskalarinin haklarini ihlal edecek icerik paylasmamak</li>
+        <li>Sistemi teknik olarak zayiflatacak veya manipule edecek girisimlerde bulunmamak</li>
+      </ul>
+
+      <h4>4. Fikri Mulkiyet</h4>
+      <p>Platformdaki tasarim, metin, grafik, yazilim ve diger unsurlara iliskin tum fikri mulkiyet haklari Parabol Kocluk'a veya ilgili hak sahiplerine aittir. Izinsiz kopyalama, cogaltma ve dagitim yapilamaz.</p>
+
+      <h4>5. Hizmet Degisiklikleri</h4>
+      <p>Parabol Kocluk, hizmet kapsaminda teknik iyilestirme, guncelleme veya icerik degisikligi yapma hakkini sakli tutar. Gerekli durumlarda hizmete gecici sureyle ara verilebilir.</p>
+
+      <h4>6. Sorumlulugun Sinirlandirilmasi</h4>
+      <p>Platform, ogrenci koclugu surecini destekleyici bir arac olup sinav sonucu garantisi vermez. Kullanici karar ve uygulamalarindan dogan sonuclar kullanicinin sorumlulugundadir.</p>
+
+      <h4>7. Uygulanacak Hukuk</h4>
+      <p>Bu kosullar Turk hukukuna tabidir. Uyusmazliklarda ilgili mevzuat cercevesinde yetkili mahkeme ve icra daireleri esas alinir.</p>
+    `
+  },
+  cookies: {
+    title: 'Cerez Politikasi',
+    html: `
+      <h4>1. Cerez Nedir?</h4>
+      <p>Cerezler, web sitesini ziyaret ettiginizde cihaziniza kaydedilen kucuk metin dosyalaridir. Bu dosyalar, platformun daha verimli calismasina ve tercihlerin hatirlanmasina yardimci olur.</p>
+
+      <h4>2. Kullanilan Cerez Turleri</h4>
+      <ul>
+        <li>Zorunlu cerezler: Oturum acma ve temel guvenlik islemleri icin kullanilir.</li>
+        <li>Islevsel cerezler: Kullanici tercihlerini (oturum devam, panel gorunumu vb.) hatirlar.</li>
+        <li>Analitik cerezler: Platform performansini iyilestirmek icin anonim trafik verileri sunar.</li>
+      </ul>
+
+      <h4>3. Cerezlerin Kullanim Amaci</h4>
+      <p>Cerezler; kullanici deneyimini gelistirmek, teknik hatalari azaltmak, guvenligi artirmak ve hizmet kalitesini olcmek amaclariyla kullanilir.</p>
+
+      <h4>4. Cerez Yonetimi</h4>
+      <p>Tarayici ayarlarinizdan cerezleri silebilir veya engelleyebilirsiniz. Ancak cerezleri devre disi birakmaniz durumunda platformun bazi ozellikleri beklenen sekilde calismayabilir.</p>
+
+      <h4>5. Ucuncu Taraf Hizmetler</h4>
+      <p>Platform, teknik barindirma ve performans olcumu amaciyla ucuncu taraf hizmet saglayicilardan yararlanabilir. Bu hizmetlerin kendi gizlilik/cerez politikalarina tabi olabilecegini hatirlatiriz.</p>
+
+      <h4>6. Guncellemeler</h4>
+      <p>Bu politika, mevzuat ve teknik gelismelere gore guncellenebilir. Guncel metin her zaman platform uzerinde yayinlanir.</p>
+    `
+  }
+};
+
+function openLegalModal(type) {
+  const selected = LEGAL_TEXTS[type] || LEGAL_TEXTS.privacy;
+  const titleEl = document.getElementById('legalModalTitle');
+  const contentEl = document.getElementById('legalModalContent');
+  if (!titleEl || !contentEl) return;
+
+  titleEl.textContent = selected.title;
+  contentEl.innerHTML = selected.html;
+  modalAc('legalModal');
+}
+
 function tabDegistir(mod) {
   const tabGiris = document.getElementById('tabGiris');
   const tabKayit = document.getElementById('tabKayit');
