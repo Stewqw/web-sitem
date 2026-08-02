@@ -3,7 +3,6 @@
     apiKey: "AIzaSyAnLmvL1pXi5UiuD-ojA_ICxrOCjpkI55I",
     authDomain: "parabol-kocluk.firebaseapp.com",
     projectId: "parabol-kocluk",
-    databaseURL: "https://parabol-kocluk-default-rtdb.asia-southeast1.firebasedatabase.app",
     storageBucket: "parabol-kocluk.firebasestorage.app",
     messagingSenderId: "252912880544",
     appId: "1:252912880544:web:5b87683ab2191bac18b2c5",
@@ -69,17 +68,13 @@
   const app = window.firebase.apps.length
     ? window.firebase.app()
     : window.firebase.initializeApp(firebaseConfig);
-  const realtimeDatabaseUrl = "https://parabol-kocluk-default-rtdb.asia-southeast1.firebasedatabase.app";
   const auth = window.firebase.auth(app);
   const db = window.firebase.firestore ? window.firebase.firestore(app) : null;
-  const rtdb = window.firebase.database && typeof app.database === "function"
-    ? app.database(realtimeDatabaseUrl)
-    : null;
 
   const fieldValue = window.firebase.firestore ? window.firebase.firestore.FieldValue : null;
 
-  if (!rtdb) {
-    console.warn("Firebase Realtime Database SDK yuklenemedi. Kayit profil yazimi eksik calisabilir.");
+  if (!db) {
+    console.warn("Firebase Firestore SDK yuklenemedi. Profil kaydi ve formlar calismayabilir.");
   }
 
   function withTimeout(promise, timeoutMs, timeoutCode, timeoutMessage) {
@@ -98,17 +93,6 @@
   }
 
   async function getProfileByUid(uid) {
-    if (rtdb) {
-      try {
-        const snapshot = await rtdb.ref("users/" + uid).get();
-        if (snapshot.exists()) {
-          return snapshot.val();
-        }
-      } catch (error) {
-        console.warn("Realtime Database profil okuma hatasi:", error);
-      }
-    }
-
     if (db) {
       const doc = await db.collection("users").doc(uid).get();
       return doc.exists ? doc.data() : null;
@@ -149,40 +133,25 @@
       updatedAtIso: nowIso
     };
 
-    if (rtdb) {
-      try {
-        await withTimeout(
-          rtdb.ref("users/" + credential.user.uid).set(profilePayload),
-          5000,
-          "app/realtime-db-timeout",
-          "Profil verisi kaydedilirken zaman aşımı oluştu."
-        );
-      } catch (error) {
-        console.error("Realtime Database profil yazma hatası:", error);
-      }
-    } else {
-      console.warn("Realtime Database kullanima hazir degil; profil yazimi atlandi.");
+    if (!db || !fieldValue) {
+      const missingDbError = new Error("Firestore kullanima hazir degil.");
+      missingDbError.code = "app/firestore-unavailable";
+      throw missingDbError;
     }
 
-    if (db && fieldValue) {
-      try {
-        await withTimeout(
-          db.collection("users").doc(credential.user.uid).set(
-            {
-              ...profilePayload,
-              createdAt: fieldValue.serverTimestamp(),
-              updatedAt: fieldValue.serverTimestamp()
-            },
-            { merge: true }
-          ),
-          12000,
-          "app/firestore-timeout",
-          "Firestore profil kaydi zaman aşımına uğradı."
-        );
-      } catch (error) {
-        console.warn("Firestore profil yazimi atlandi:", error);
-      }
-    }
+    await withTimeout(
+      db.collection("users").doc(credential.user.uid).set(
+        {
+          ...profilePayload,
+          createdAt: fieldValue.serverTimestamp(),
+          updatedAt: fieldValue.serverTimestamp()
+        },
+        { merge: true }
+      ),
+      5000,
+      "app/firestore-timeout",
+      "Profil verisi kaydedilirken zaman aşımı oluştu."
+    );
 
     return {
       uid: credential.user.uid,
@@ -227,6 +196,12 @@
   };
 
   services.saveLandingApplication = async function saveLandingApplication(payload) {
+    if (!db || !fieldValue) {
+      const missingDbError = new Error("Firestore kullanima hazir degil.");
+      missingDbError.code = "app/firestore-unavailable";
+      throw missingDbError;
+    }
+
     await db.collection("landingApplications").add({
       name: payload.name || "",
       email: payload.email || "",

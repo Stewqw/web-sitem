@@ -108,6 +108,8 @@ function getFirebaseAuthErrorMessage(error, fallbackMessage) {
     case 'app/realtime-db-timeout':
     case 'app/firestore-timeout':
       return 'İşlem beklenenden uzun sürdü. Lütfen tekrar deneyin.';
+    case 'app/firestore-unavailable':
+      return 'Veritabanına bağlanılamadı. Lütfen daha sonra tekrar deneyin.';
     default:
       return fallbackMessage || 'Bir hata oluştu. Lütfen tekrar deneyin.';
   }
