@@ -535,12 +535,8 @@ function renderBransExamHistory() {
           <strong>${title}</strong>
           <div class="exam-history-meta">${meta}</div>
           <div class="exam-history-actions">
-            <label class="exam-pdf-btn" for="bransPdf_${item.id}">PDF Yükle</label>
-            <input id="bransPdf_${item.id}" type="file" accept="application/pdf" style="display:none" onchange="uploadBransExamPdf(${item.id}, this)">
-            ${item.pdfData ? '<button type="button" class="exam-pdf-btn" onclick="openExamPdf(\'' + item.id + '\', \"brans\")">PDF Aç</button>' : ''}
             <button type="button" class="exam-delete-btn" onclick="deleteBransExam(${item.id})">Sil</button>
           </div>
-          ${item.pdfName ? `<div class="exam-pdf-name">Yüklü: ${item.pdfName}</div>` : ''}
         </div>
         <div class="exam-history-meta">${details}</div>
         <div class="exam-history-net">
@@ -552,35 +548,6 @@ function renderBransExamHistory() {
   }).join('');
 }
 
-function uploadBransExamPdf(recordId, inputEl) {
-  const file = inputEl && inputEl.files && inputEl.files[0];
-  if (!file) return;
-
-  if (file.type !== 'application/pdf') {
-    alert('Lütfen sadece PDF dosyası yükleyin.');
-    inputEl.value = '';
-    return;
-  }
-
-  if (file.size > 5 * 1024 * 1024) {
-    alert('PDF dosyası en fazla 5MB olmalı.');
-    inputEl.value = '';
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    const records = getStoredBransExams();
-    const target = records.find((r) => String(r.id) === String(recordId));
-    if (!target) return;
-    target.pdfName = file.name;
-    target.pdfData = String(reader.result || '');
-    setStoredBransExams(records);
-    renderBransExamHistory();
-  };
-  reader.readAsDataURL(file);
-}
-
 function deleteBransExam(recordId) {
   if (!confirm('Bu branş denemesi kaydını silmek istiyor musunuz?')) return;
 
@@ -588,6 +555,76 @@ function deleteBransExam(recordId) {
   const filtered = records.filter((r) => String(r.id) !== String(recordId));
   setStoredBransExams(filtered);
   renderBransExamHistory();
+}
+
+function indirTumBransDenemelerPdf() {
+  const records = getStoredBransExams();
+  if (!records.length) {
+    alert('İndirilecek branş denemesi kaydı bulunamadı.');
+    return;
+  }
+
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert('PDF kütüphanesi yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin.');
+    return;
+  }
+
+  const student = getStoredOgrenciler().find((s) => s.id === activeStudentId);
+  const studentName = student && student.name ? student.name : 'Ogrenci';
+
+  const doc = new window.jspdf.jsPDF('p', 'pt', 'a4');
+  const marginLeft = 40;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  let y = 44;
+
+  const ensureSpace = (needed = 80) => {
+    if (y + needed > pageHeight - 40) {
+      doc.addPage();
+      y = 44;
+    }
+  };
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('Brans Deneme Karnesi', marginLeft, y);
+  y += 24;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.text(`Ogrenci: ${studentName}`, marginLeft, y);
+  y += 16;
+  doc.text(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`, marginLeft, y);
+  y += 22;
+
+  records.forEach((item, index) => {
+    ensureSpace(120);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text(`${index + 1}. ${item.examName || (item.lesson || 'Brans') + ' Denemesi'}`, marginLeft, y);
+    y += 16;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Ders: ${item.lesson || '-'}`, marginLeft, y);
+    y += 14;
+    doc.text(`Tarih: ${formatExamDate(item.examDate)}`, marginLeft, y);
+    y += 14;
+
+    const details = `Soru: ${item.questionCount || 0}   Dogru: ${item.correct || 0}   Yanlis: ${item.wrong || 0}   Bos: ${item.blank || 0}`;
+    doc.text(details, marginLeft, y);
+    y += 14;
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Net: ${Number(item.net || 0).toFixed(2)}`, marginLeft, y);
+    y += 18;
+
+    doc.setDrawColor(220, 226, 232);
+    doc.line(marginLeft, y, 555, y);
+    y += 14;
+  });
+
+  const safeName = studentName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '');
+  doc.save(`${safeName || 'ogrenci'}_brans_deneme_karnesi.pdf`);
 }
 
 function kaydetBransDenemesi() {
@@ -750,12 +787,8 @@ function renderGenelExamHistory() {
           <strong>${item.examName}</strong>
           <div class="exam-history-meta">${formatExamDate(item.examDate)}</div>
           <div class="exam-history-actions">
-            <label class="exam-pdf-btn" for="genelPdf_${item.id}">PDF Yükle</label>
-            <input id="genelPdf_${item.id}" type="file" accept="application/pdf" style="display:none" onchange="uploadGenelExamPdf(${item.id}, this)">
-            ${item.pdfData ? '<button type="button" class="exam-pdf-btn" onclick="openExamPdf(\'' + item.id + '\', \"genel\")">PDF Aç</button>' : ''}
             <button type="button" class="exam-delete-btn" onclick="deleteGenelExam(${item.id})">Sil</button>
           </div>
-          ${item.pdfName ? `<div class="exam-pdf-name">Yüklü: ${item.pdfName}</div>` : ''}
         </div>
         <div class="exam-history-meta">${lessonBreakdown}</div>
         <div class="exam-history-net">
@@ -767,47 +800,81 @@ function renderGenelExamHistory() {
   }).join('');
 }
 
-function uploadGenelExamPdf(recordId, inputEl) {
-  const file = inputEl && inputEl.files && inputEl.files[0];
-  if (!file) return;
-
-  if (file.type !== 'application/pdf') {
-    alert('Lütfen sadece PDF dosyası yükleyin.');
-    inputEl.value = '';
+function indirTumGenelDenemelerPdf() {
+  const records = getStoredGenelExams();
+  if (!records.length) {
+    alert('İndirilecek genel deneme kaydı bulunamadı.');
     return;
   }
 
-  if (file.size > 5 * 1024 * 1024) {
-    alert('PDF dosyası en fazla 5MB olmalı.');
-    inputEl.value = '';
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert('PDF kütüphanesi yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin.');
     return;
   }
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    const records = getStoredGenelExams();
-    const target = records.find((r) => String(r.id) === String(recordId));
-    if (!target) return;
-    target.pdfName = file.name;
-    target.pdfData = String(reader.result || '');
-    setStoredGenelExams(records);
-    renderGenelExamHistory();
+  const student = getStoredOgrenciler().find((s) => s.id === activeStudentId);
+  const studentName = student && student.name ? student.name : 'Ogrenci';
+
+  const doc = new window.jspdf.jsPDF('p', 'pt', 'a4');
+  const marginLeft = 40;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  let y = 44;
+
+  const ensureSpace = (needed = 80) => {
+    if (y + needed > pageHeight - 40) {
+      doc.addPage();
+      y = 44;
+    }
   };
-  reader.readAsDataURL(file);
-}
 
-function openExamPdf(recordId, type) {
-  const records = type === 'brans' ? getStoredBransExams() : getStoredGenelExams();
-  const target = records.find((r) => String(r.id) === String(recordId));
-  if (!target || !target.pdfData) {
-    alert('Bu kayıt için PDF bulunamadı.');
-    return;
-  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('Genel Deneme Karnesi', marginLeft, y);
+  y += 24;
 
-  const win = window.open(target.pdfData, '_blank');
-  if (!win) {
-    alert('PDF açılamadı. Tarayıcı açılır pencereyi engelliyor olabilir.');
-  }
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.text(`Ogrenci: ${studentName}`, marginLeft, y);
+  y += 16;
+  doc.text(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`, marginLeft, y);
+  y += 22;
+
+  records.forEach((item, index) => {
+    ensureSpace(130);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text(`${index + 1}. ${item.examName || 'Genel Deneme'}`, marginLeft, y);
+    y += 16;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Tarih: ${formatExamDate(item.examDate)}`, marginLeft, y);
+    y += 14;
+
+    const breakdown = [
+      `Mat: ${Number(item.lessons?.Mat?.net || 0).toFixed(2)}`,
+      `Fen: ${Number(item.lessons?.Fen?.net || 0).toFixed(2)}`,
+      `Tur: ${Number(item.lessons?.Tur?.net || 0).toFixed(2)}`,
+      `Ink: ${Number(item.lessons?.Ink?.net || 0).toFixed(2)}`,
+      `Ing: ${Number(item.lessons?.Ing?.net || 0).toFixed(2)}`,
+      `Din: ${Number(item.lessons?.Din?.net || 0).toFixed(2)}`
+    ].join('   |   ');
+
+    const wrapped = doc.splitTextToSize(breakdown, 510);
+    doc.text(wrapped, marginLeft, y);
+    y += wrapped.length * 12 + 8;
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Toplam Net: ${Number(item.totalNet || 0).toFixed(2)}`, marginLeft, y);
+    y += 20;
+
+    doc.setDrawColor(220, 226, 232);
+    doc.line(marginLeft, y, 555, y);
+    y += 14;
+  });
+
+  const safeName = studentName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '');
+  doc.save(`${safeName || 'ogrenci'}_genel_deneme_karnesi.pdf`);
 }
 
 function deleteGenelExam(recordId) {

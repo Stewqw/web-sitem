@@ -297,19 +297,6 @@
       transition: all 0.15s ease;
     }
     .exam-delete-btn:hover { background: #fee2e2; border-color: #fda4af; }
-    .exam-pdf-btn {
-      border: 1px solid #cbd5e1;
-      background: #f8fafc;
-      color: #334155;
-      border-radius: 999px;
-      padding: 4px 10px;
-      font-size: 0.74rem;
-      font-weight: 700;
-      cursor: pointer;
-      margin-right: 6px;
-      transition: all 0.15s ease;
-    }
-    .exam-pdf-btn:hover { background: #eef2f7; border-color: #94a3b8; }
     .exam-pdf-name { color: #475569; font-size: 0.74rem; margin-top: 6px; }
     .exam-history-item strong { color: #102040; }
     .exam-history-meta { font-size: 0.82rem; color: #64748b; margin-top: 3px; }
@@ -752,7 +739,7 @@
                 <div style="font-size:1.25rem; font-weight:800; color:#0f172a;">Net<br><span id="bransExamNet" style="font-size:1.75rem; color:#ff8800;">0.00</span></div>
                 <div style="font-size:0.75rem; color:#64748b; margin-top:6px;">Net = Doğru - (Yanlış x 0.25)</div>
               </div>
-              <button class="btn-nav-outline" style="min-width:220px;">Yanlış / Boş Konuları Gir</button>
+              <button class="btn-nav-outline" style="min-width:220px;" onclick="indirTumBransDenemelerPdf()">PDF deneme karnesini indir</button>
             </div>
             <div style="display:flex; justify-content:flex-end;">
               <button class="btn-action btn-coral" style="padding: 12px 24px;" onclick="kaydetBransDenemesi()">Kaydet</button>
@@ -807,7 +794,7 @@
                 <h2 style="margin:0; font-size:1.25rem; color: var(--color-dark-teal);">Deneme Sonucu Ekle</h2>
                 <p style="margin:8px 0 0; color:#64748b; font-size:0.9rem;">Genel deneme için ders bazlı sonuç girişi.</p>
               </div>
-              <button class="btn-nav-outline">PDF deneme karnesini yükle</button>
+              <button class="btn-nav-outline" onclick="indirTumGenelDenemelerPdf()">PDF deneme karnesini indir</button>
             </div>
 
             <div class="form-row" style="margin-bottom:14px;">
