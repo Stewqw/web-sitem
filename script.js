@@ -2463,10 +2463,12 @@ function initCozulenSoruPanelForStudent(student) {
   const cEl = document.getElementById('cozulenCorrect');
   const wEl = document.getElementById('cozulenWrong');
   const bEl = document.getElementById('cozulenBlank');
+  const dateEl = document.getElementById('cozulenDate');
   if (qEl) qEl.value = '';
   if (cEl) cEl.value = '';
   if (wEl) wEl.value = '';
   if (bEl) bEl.value = '';
+  if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
 }
 
 function onCozulenLessonChange() {
@@ -2567,12 +2569,13 @@ function renderCozulenSoruRecords() {
       `Yanlış: ${item.wrong}`,
       `Boş: ${item.blank}`
     ].join(' • ');
+    const solvedDate = item.date ? formatExamDate(item.date) : '-';
 
     return `
       <div class="exam-history-item">
         <div>
           <strong>${item.lesson || '-'}</strong>
-          <div class="exam-history-meta">Ünite: ${item.unit || '-'} • Konu: ${item.topic || '-'} • Kaynak: ${item.source || '-'}</div>
+          <div class="exam-history-meta">Tarih: ${solvedDate} • Ünite: ${item.unit || '-'} • Konu: ${item.topic || '-'} • Kaynak: ${item.source || '-'}</div>
         </div>
         <div class="exam-history-meta">${summary}</div>
         <div class="exam-history-actions">
@@ -2593,6 +2596,7 @@ function saveCozulenSoruRecord() {
   const unit = document.getElementById('cozulenUnit')?.value || '';
   const topic = document.getElementById('cozulenTopic')?.value || '';
   const source = document.getElementById('cozulenSource')?.value || '';
+  const date = document.getElementById('cozulenDate')?.value || new Date().toISOString().slice(0, 10);
   const questionCount = Number(document.getElementById('cozulenQuestion')?.value) || 0;
   const correct = Number(document.getElementById('cozulenCorrect')?.value) || 0;
   const wrong = Number(document.getElementById('cozulenWrong')?.value) || 0;
@@ -2618,6 +2622,7 @@ function saveCozulenSoruRecord() {
     unit,
     topic,
     source,
+    date,
     questionCount,
     correct,
     wrong,
@@ -2696,6 +2701,8 @@ function indirTumCozulenSorularPdf() {
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
+    doc.text(pdfSafeText(`Tarih: ${formatExamDate(item.date || '')}`), marginLeft, y);
+    y += 14;
     doc.text(pdfSafeText(`Ders: ${item.lesson || '-'}`), marginLeft, y);
     y += 14;
     doc.text(pdfSafeText(`Unite: ${item.unit || '-'}`), marginLeft, y);
