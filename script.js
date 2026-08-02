@@ -420,6 +420,8 @@ function sekmeAcs(sekmeAd) {
   if (genelEl) genelEl.style.display = 'none';
   const kaynakIlerlemeEl = document.getElementById('tabKaynakIlerleme');
   if (kaynakIlerlemeEl) kaynakIlerlemeEl.style.display = 'none';
+  const veliBilgiEl = document.getElementById('tabVeliBilgi');
+  if (veliBilgiEl) veliBilgiEl.style.display = 'none';
 
   const markMenuActive = (menuId) => {
     const el = document.getElementById(menuId);
@@ -1427,7 +1429,8 @@ function setStudentDetailButtonState(activeSection) {
     program: document.getElementById('studentInfoBtnProgram'),
     brans: document.getElementById('studentInfoBtnBrans'),
     genel: document.getElementById('studentInfoBtnGenel'),
-    kaynak: document.getElementById('studentInfoBtnKaynak')
+    kaynak: document.getElementById('studentInfoBtnKaynak'),
+    veli: document.getElementById('studentInfoBtnVeli')
   };
 
   Object.keys(buttonMap).forEach((key) => {
@@ -1443,15 +1446,17 @@ function setStudentDetailSection(section) {
   const bransEl = document.getElementById('tabBrans');
   const genelEl = document.getElementById('tabGenel');
   const kaynakIlerlemeEl = document.getElementById('tabKaynakIlerleme');
+  const veliBilgiEl = document.getElementById('tabVeliBilgi');
   const noteEl = document.getElementById('studentInfoNote');
 
-  if (!detailEl || !programEl || !bransEl || !genelEl || !kaynakIlerlemeEl) return;
+  if (!detailEl || !programEl || !bransEl || !genelEl || !kaynakIlerlemeEl || !veliBilgiEl) return;
 
   detailEl.style.display = 'block';
   programEl.style.display = 'none';
   bransEl.style.display = 'none';
   genelEl.style.display = 'none';
   kaynakIlerlemeEl.style.display = 'none';
+  veliBilgiEl.style.display = 'none';
 
   if (section === 'program') {
     programEl.style.display = 'block';
@@ -1465,6 +1470,9 @@ function setStudentDetailSection(section) {
   } else if (section === 'kaynak') {
     kaynakIlerlemeEl.style.display = 'block';
     if (noteEl) noteEl.textContent = 'Kaynak ve konu ilerleme bölümü aşağıda açıldı. Ders ve üniteye göre konu takibi yapabilirsiniz.';
+  } else if (section === 'veli') {
+    veliBilgiEl.style.display = 'block';
+    if (noteEl) noteEl.textContent = 'Veli bilgisi bölümü aşağıda açıldı. Veli adı, telefonu ve e-posta bilgisini kaydedebilirsiniz.';
   } else {
     if (noteEl) noteEl.textContent = 'Bu sayfa seçili öğrenci için hızlı geçiş ekranıdır. Buradaki butonlardan öğrenciye özel çalışma programı ve deneme alanlarına geçebilirsiniz.';
   }
@@ -1992,6 +2000,51 @@ function openStudentKaynakIlerlemePage() {
   kaynakIlerlemeState = { lesson: '', data: {}, resourcePool: [] };
   setStudentDetailSection('kaynak');
   initKaynakIlerlemePanelForStudent(student);
+}
+
+function openStudentVeliPage() {
+  const students = getStoredOgrenciler();
+  const student = students.find(s => s.id === activeStudentId);
+  if (!student) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  setStudentDetailSection('veli');
+  const parent = student.parentInfo || {};
+  const nameEl = document.getElementById('veliNameInput');
+  const phoneEl = document.getElementById('veliPhoneInput');
+  const emailEl = document.getElementById('veliEmailInput');
+  if (nameEl) nameEl.value = parent.name || '';
+  if (phoneEl) phoneEl.value = parent.phone || '';
+  if (emailEl) emailEl.value = parent.email || '';
+}
+
+function saveStudentParentInfo() {
+  if (!activeStudentId) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  const students = getStoredOgrenciler();
+  const student = students.find(s => s.id === activeStudentId);
+  if (!student) {
+    alert('Öğrenci bulunamadı.');
+    return;
+  }
+
+  const name = (document.getElementById('veliNameInput')?.value || '').trim();
+  const phone = (document.getElementById('veliPhoneInput')?.value || '').trim();
+  const email = (document.getElementById('veliEmailInput')?.value || '').trim();
+
+  student.parentInfo = {
+    name,
+    phone,
+    email
+  };
+
+  setStoredOgrenciler(students);
+  alert('Veli bilgisi kaydedildi.');
 }
 
 function ogrenciProgramunaGit(card) {

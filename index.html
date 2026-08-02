@@ -809,6 +809,7 @@
               <button id="studentInfoBtnBrans" class="btn-nav-outline student-switch-btn" onclick="openStudentBransPage()">Branş Denemeleri</button>
               <button id="studentInfoBtnGenel" class="btn-nav-outline student-switch-btn" onclick="openStudentGenelPage()">Genel Denemeleri</button>
               <button id="studentInfoBtnKaynak" class="btn-nav-outline student-switch-btn" onclick="openStudentKaynakIlerlemePage()">Kaynak/Konu İlerlemesi</button>
+              <button id="studentInfoBtnVeli" class="btn-nav-outline student-switch-btn" onclick="openStudentVeliPage()">Veli Bilgisi</button>
             </div>
 
             <div id="studentInfoNote" class="student-info-note" style="margin-top: 16px;">
@@ -1124,6 +1125,37 @@
                   <div>Yüzde</div>
                 </div>
                 <div id="kaynakIlerlemeRows" class="progress-empty">Ders seçildikten sonra konu listesi burada görünecek.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="tabVeliBilgi" style="display: none;">
+          <div class="card-panel">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+              <div>
+                <h2 style="margin:0; font-size:1.25rem; color: var(--color-dark-teal);">Veli Bilgisi</h2>
+                <p style="margin:8px 0 0; color:#64748b; font-size:0.9rem;">Seçili öğrenciye ait veli iletişim alanı.</p>
+              </div>
+            </div>
+
+            <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:16px;">
+              <div class="form-row" style="margin-bottom:10px;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Veli Adı Soyadı</label>
+                  <input id="veliNameInput" type="text" class="input-field" placeholder="Örn: Ayşe Yılmaz" style="margin-bottom:0;">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Veli Telefonu</label>
+                  <input id="veliPhoneInput" type="tel" class="input-field" placeholder="05XXXXXXXXX" style="margin-bottom:0;">
+                </div>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Veli E-Posta</label>
+                <input id="veliEmailInput" type="email" class="input-field" placeholder="veli@mail.com" style="margin-bottom:0;">
+              </div>
+              <div style="display:flex; justify-content:flex-end; margin-top:14px;">
+                <button class="btn-action btn-coral" type="button" style="padding:10px 18px;" onclick="saveStudentParentInfo()">Kaydet</button>
               </div>
             </div>
           </div>
