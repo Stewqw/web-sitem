@@ -1,14 +1,20 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const nodemailer = require('nodemailer');
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_this';
 const USERS_FILE = path.join(__dirname, 'users.json');
+const RESET_CODE_EXPIRE_MS = 10 * 60 * 1000;
+const RESET_CODE_RESEND_MS = 60 * 1000;
+const RESET_CODE_MAX_ATTEMPTS = 5;
+const pendingResetCodes = new Map();
 
 const app = express();
 app.use(cors());
@@ -30,6 +36,54 @@ function writeUsers(users) {
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+function isValidPasswordRule(password) {
+  return typeof password === 'string' && password.length >= 8 && /[a-z]/.test(password) && /[0-9]/.test(password);
+}
+
+function generateResetCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function hashResetCode(code) {
+  return crypto.createHash('sha256').update(String(code)).digest('hex');
+}
+
+function buildMailTransporter() {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (!host || !user || !pass) {
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass }
+  });
+}
+
+async function sendResetCodeEmail(email, code) {
+  const transporter = buildMailTransporter();
+  if (!transporter) {
+    return false;
+  }
+
+  const fromAddress = process.env.MAIL_FROM || process.env.SMTP_USER;
+  await transporter.sendMail({
+    from: fromAddress,
+    to: email,
+    subject: 'Parabol Koçluk Şifre Sıfırlama Kodu',
+    text: `Parabol Koçluk şifre sıfırlama kodunuz: ${code}\n\nBu kod 10 dakika boyunca geçerlidir.`,
+    html: `<p>Parabol Koçluk şifre sıfırlama kodunuz:</p><p style="font-size:22px;font-weight:700;letter-spacing:2px;">${code}</p><p>Bu kod 10 dakika boyunca geçerlidir.</p>`
+  });
+
+  return true;
 }
 
 app.post('/api/register', async (req, res) => {
@@ -73,28 +127,105 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-app.post('/api/forgot-password', async (req, res) => {
-  const { email, newPassword } = req.body;
-  if (!email || !newPassword) return res.status(400).json({ error: 'Eksik alanlar' });
-
-  if (newPassword.length < 8 || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-    return res.status(400).json({ error: 'Şifre kurallara uymuyor' });
+app.post('/api/forgot-password/request-code', async (req, res) => {
+  const email = normalizeEmail(req.body && req.body.email);
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Geçerli bir e-posta adresi girin.' });
   }
 
   const users = readUsers();
-  const normalizedEmail = normalizeEmail(email);
-  const user = users.find(u => normalizeEmail(u.email) === normalizedEmail);
-  if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+  const user = users.find(u => normalizeEmail(u.email) === email);
+  const now = Date.now();
+
+  const existing = pendingResetCodes.get(email);
+  if (existing && (now - existing.lastSentAt) < RESET_CODE_RESEND_MS) {
+    return res.status(429).json({ error: 'Yeni kod istemek için lütfen biraz bekleyin.' });
+  }
+
+  // Kullanıcı var/yok bilgisini dışarı sızdırmamak için her zaman başarılı cevap dön.
+  if (!user) {
+    return res.json({ ok: true, message: 'Eğer e-posta kayıtlıysa doğrulama kodu gönderilecektir.' });
+  }
+
+  const code = generateResetCode();
+  pendingResetCodes.set(email, {
+    codeHash: hashResetCode(code),
+    expiresAt: now + RESET_CODE_EXPIRE_MS,
+    attempts: 0,
+    lastSentAt: now
+  });
+
+  try {
+    const sent = await sendResetCodeEmail(email, code);
+    if (!sent) {
+      pendingResetCodes.delete(email);
+      return res.status(503).json({ error: 'E-posta servisi yapılandırılmamış. SMTP ayarlarını tamamlayın.' });
+    }
+    return res.json({ ok: true, message: 'Doğrulama kodu e-posta adresinize gönderildi.' });
+  } catch (e) {
+    console.error('Reset kod e-postası gönderilemedi:', e);
+    pendingResetCodes.delete(email);
+    return res.status(500).json({ error: 'Doğrulama kodu gönderilemedi. Lütfen tekrar deneyin.' });
+  }
+});
+
+app.post('/api/forgot-password/confirm-code', async (req, res) => {
+  const email = normalizeEmail(req.body && req.body.email);
+  const code = String((req.body && req.body.code) || '').trim();
+  const newPassword = String((req.body && req.body.newPassword) || '');
+
+  if (!email || !code || !newPassword) {
+    return res.status(400).json({ error: 'Eksik alanlar' });
+  }
+
+  if (!isValidPasswordRule(newPassword)) {
+    return res.status(400).json({ error: 'Şifre kurallara uymuyor' });
+  }
+
+  const pending = pendingResetCodes.get(email);
+  if (!pending) {
+    return res.status(400).json({ error: 'Kod geçersiz veya süresi dolmuş.' });
+  }
+
+  if (Date.now() > pending.expiresAt) {
+    pendingResetCodes.delete(email);
+    return res.status(400).json({ error: 'Kodun süresi doldu. Lütfen yeni kod isteyin.' });
+  }
+
+  if (pending.attempts >= RESET_CODE_MAX_ATTEMPTS) {
+    pendingResetCodes.delete(email);
+    return res.status(429).json({ error: 'Çok fazla hatalı deneme. Lütfen yeni kod isteyin.' });
+  }
+
+  const incomingHash = hashResetCode(code);
+  if (incomingHash !== pending.codeHash) {
+    pending.attempts += 1;
+    pendingResetCodes.set(email, pending);
+    return res.status(400).json({ error: 'Doğrulama kodu hatalı.' });
+  }
+
+  const users = readUsers();
+  const user = users.find(u => normalizeEmail(u.email) === email);
+  if (!user) {
+    pendingResetCodes.delete(email);
+    return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+  }
 
   try {
     const hash = await bcryptjs.hash(newPassword, 10);
     user.password = hash;
     writeUsers(users);
+    pendingResetCodes.delete(email);
     return res.json({ ok: true });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'Sunucu hatası' });
   }
+});
+
+// Eski endpoint artık güvenlik nedeniyle devre dışı.
+app.post('/api/forgot-password', async (req, res) => {
+  return res.status(410).json({ error: 'Bu işlem güncellendi. Önce kod isteyip sonra doğrulama yapmalısınız.' });
 });
 
 app.get('/api/me', (req, res) => {

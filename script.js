@@ -112,6 +112,10 @@ function getFirebaseAuthErrorMessage(error, fallbackMessage) {
       return 'İşlem beklenenden uzun sürdü. Lütfen tekrar deneyin.';
     case 'app/firestore-unavailable':
       return 'Veritabanına bağlanılamadı. Lütfen daha sonra tekrar deneyin.';
+    case 'app/email-not-verified':
+      return 'E-posta doğrulaması tamamlanmamış. Mail kutunuzu kontrol edip hesabınızı doğrulayın.';
+    case 'app/email-verification-send-failed':
+      return 'Doğrulama e-postası gönderilemedi. Lütfen daha sonra tekrar deneyin.';
     default:
       return fallbackMessage || 'Bir hata oluştu. Lütfen tekrar deneyin.';
   }
@@ -445,11 +449,25 @@ function isValidRegisterEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
 }
 
+function showModalInfoMessage(message) {
+  const infoBox = document.getElementById('modalInfoBox');
+  if (!infoBox) return;
+  infoBox.textContent = message;
+  infoBox.style.display = 'block';
+}
+
 function tabDegistir(mod) {
   const tabGiris = document.getElementById('tabGiris');
   const tabKayit = document.getElementById('tabKayit');
   const formGiris = document.getElementById('formGiris');
   const formKayit = document.getElementById('formKayit');
+  const regErrorBox = document.getElementById('regErrorBox');
+  const modalErrorBox = document.getElementById('modalErrorBox');
+  const modalInfoBox = document.getElementById('modalInfoBox');
+
+  if (regErrorBox) regErrorBox.style.display = 'none';
+  if (modalErrorBox) modalErrorBox.style.display = 'none';
+  if (modalInfoBox) modalInfoBox.style.display = 'none';
 
   if (mod === 'giris') {
     tabGiris.classList.add('active');
@@ -497,20 +515,92 @@ function togglePasswordVisibility(inputId, buttonEl) {
 
 function sifremiUnuttumAc(kaynak) {
   const forgotEmail = document.getElementById('forgotEmail');
+  const forgotCode = document.getElementById('forgotCode');
   const forgotNewPass = document.getElementById('forgotNewPass');
   const forgotNewPassConfirm = document.getElementById('forgotNewPassConfirm');
+  const forgotNewPassWrap = document.getElementById('forgotNewPassWrap');
+  const forgotNewPassConfirmWrap = document.getElementById('forgotNewPassConfirmWrap');
   const forgotErrorBox = document.getElementById('forgotErrorBox');
+  const forgotFlowInfo = document.getElementById('forgotFlowInfo');
+  const forgotCodeWrap = document.getElementById('forgotCodeWrap');
+  const forgotSubmitBtn = document.getElementById('forgotSubmitBtn');
+  const forgotSendCodeBtn = document.getElementById('forgotSendCodeBtn');
 
   const sourceEmailId = kaynak === 'card' ? 'cardEmail' : 'modalEmail';
   const sourceEmailInput = document.getElementById(sourceEmailId);
 
   forgotEmail.value = sourceEmailInput ? sourceEmailInput.value.trim() : '';
+  if (forgotCode) forgotCode.value = '';
   forgotNewPass.value = '';
   forgotNewPassConfirm.value = '';
   forgotErrorBox.style.display = 'none';
   forgotErrorBox.textContent = '';
 
+  if (shouldUseFirebaseAuth()) {
+    if (forgotFlowInfo) forgotFlowInfo.textContent = 'Güvenlik nedeniyle şifre sıfırlama bağlantısı e-posta adresinize gönderilir. Bağlantıdan yeni şifrenizi belirleyebilirsiniz.';
+    if (forgotCodeWrap) forgotCodeWrap.style.display = 'none';
+    if (forgotNewPassWrap) forgotNewPassWrap.style.display = 'none';
+    if (forgotNewPassConfirmWrap) forgotNewPassConfirmWrap.style.display = 'none';
+    forgotNewPass.required = false;
+    forgotNewPassConfirm.required = false;
+    if (forgotSubmitBtn) forgotSubmitBtn.textContent = 'Sıfırlama Bağlantısı Gönder';
+    if (forgotSendCodeBtn) forgotSendCodeBtn.style.display = 'none';
+  } else {
+    if (forgotFlowInfo) forgotFlowInfo.textContent = 'Önce e-posta adresinize doğrulama kodu gönderin, ardından kodla yeni şifrenizi belirleyin.';
+    if (forgotCodeWrap) forgotCodeWrap.style.display = 'grid';
+    if (forgotNewPassWrap) forgotNewPassWrap.style.display = 'block';
+    if (forgotNewPassConfirmWrap) forgotNewPassConfirmWrap.style.display = 'block';
+    forgotNewPass.required = true;
+    forgotNewPassConfirm.required = true;
+    if (forgotSubmitBtn) forgotSubmitBtn.textContent = 'Kodu Doğrula ve Şifreyi Güncelle';
+    if (forgotSendCodeBtn) forgotSendCodeBtn.style.display = 'inline-flex';
+  }
+
   modalAc('forgotModal');
+}
+
+async function sifreSifirlamaKoduGonder() {
+  const email = document.getElementById('forgotEmail').value.trim();
+  const forgotErrorBox = document.getElementById('forgotErrorBox');
+
+  if (!email) {
+    forgotErrorBox.textContent = 'Lütfen e-posta adresinizi girin.';
+    forgotErrorBox.style.display = 'block';
+    return;
+  }
+
+  if (shouldUseFirebaseAuth()) {
+    try {
+      const services = getFirebaseServices();
+      await services.resetPassword(email);
+      forgotErrorBox.style.display = 'none';
+      alert('Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.');
+      return;
+    } catch (error) {
+      forgotErrorBox.textContent = 'Şifre sıfırlama bağlantısı gönderilemedi. E-posta adresinizi kontrol edin.';
+      forgotErrorBox.style.display = 'block';
+      return;
+    }
+  }
+
+  fetch(API_URL + '/api/forgot-password/request-code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  }).then(async res => {
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      forgotErrorBox.textContent = data.error || 'Doğrulama kodu gönderilemedi.';
+      forgotErrorBox.style.display = 'block';
+      return;
+    }
+
+    forgotErrorBox.style.display = 'none';
+    alert(data.message || 'Doğrulama kodu e-posta adresinize gönderildi.');
+  }).catch(() => {
+    forgotErrorBox.textContent = 'Sunucuya bağlanılamıyor.';
+    forgotErrorBox.style.display = 'block';
+  });
 }
 
 async function sifreSifirla() {
@@ -519,7 +609,30 @@ async function sifreSifirla() {
   const confirmPassword = document.getElementById('forgotNewPassConfirm').value;
   const forgotErrorBox = document.getElementById('forgotErrorBox');
 
-  if (!email || !newPassword || !confirmPassword) {
+  if (!email) {
+    forgotErrorBox.textContent = 'Lütfen e-posta adresinizi girin.';
+    forgotErrorBox.style.display = 'block';
+    return;
+  }
+
+  if (shouldUseFirebaseAuth()) {
+    try {
+      const services = getFirebaseServices();
+      await services.resetPassword(email);
+      forgotErrorBox.style.display = 'none';
+      modalKapat('forgotModal');
+      alert('Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.');
+      return;
+    } catch (error) {
+      forgotErrorBox.textContent = 'Şifre sıfırlama bağlantısı gönderilemedi. E-posta adresinizi kontrol edin.';
+      forgotErrorBox.style.display = 'block';
+      return;
+    }
+  }
+
+  const code = String(document.getElementById('forgotCode')?.value || '').trim();
+
+  if (!newPassword || !confirmPassword) {
     forgotErrorBox.textContent = 'Lütfen tüm alanları doldurun.';
     forgotErrorBox.style.display = 'block';
     return;
@@ -537,25 +650,16 @@ async function sifreSifirla() {
     return;
   }
 
-  if (shouldUseFirebaseAuth()) {
-    try {
-      const services = getFirebaseServices();
-      await services.resetPassword(email);
-      forgotErrorBox.style.display = 'none';
-      modalKapat('forgotModal');
-      alert('Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.');
-      return;
-    } catch (error) {
-      forgotErrorBox.textContent = 'Şifre sıfırlama işlemi yapılamadı. E-posta adresinizi kontrol edin.';
-      forgotErrorBox.style.display = 'block';
-      return;
-    }
+  if (!code || code.length !== 6) {
+    forgotErrorBox.textContent = 'Lütfen e-postanıza gelen 6 haneli doğrulama kodunu girin.';
+    forgotErrorBox.style.display = 'block';
+    return;
   }
 
-  fetch(API_URL + '/api/forgot-password', {
+  fetch(API_URL + '/api/forgot-password/confirm-code', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, newPassword })
+    body: JSON.stringify({ email, code, newPassword })
   }).then(async res => {
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
@@ -651,29 +755,13 @@ async function kayitOl() {
       });
 
       const userEmail = (session && session.email ? session.email : email).toLowerCase();
-      currentUserEmail = userEmail;
-      currentUserName = session && session.name ? session.name : name;
-      currentUserBranch = session && session.branch ? session.branch : branch;
-
-      localStorage.removeItem('koclukToken');
-      sessionStorage.removeItem('koclukToken');
-      localStorage.setItem('koclukUserEmail', userEmail);
-      sessionStorage.removeItem('koclukUserEmail');
-
-      loadSavedResourceSuggestions();
-      await syncStudentStorageFromCloud();
-      renderStoredOgrenciler();
-      renderKokpitUserCard();
-      updateUserCountLabel();
-
       const cardEmail = document.getElementById('cardEmail');
       const modalEmail = document.getElementById('modalEmail');
       if (cardEmail) cardEmail.value = userEmail;
       if (modalEmail) modalEmail.value = userEmail;
 
-      alert('Kayıt başarılı! Panele yönlendiriliyorsunuz.');
-      modalKapat('authModal');
-      sayfaAcs('dashboardApp');
+      tabDegistir('giris');
+      showModalInfoMessage('Kayıt başarılı. Doğrulama e-postası gönderildi. E-postanızı doğruladıktan sonra giriş yapabilirsiniz.');
       return;
     }
 
@@ -688,8 +776,8 @@ async function kayitOl() {
       throw new Error(data.error || 'Kayıt sırasında hata oluştu.');
     }
 
-    alert('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
     tabDegistir('giris');
+    showModalInfoMessage('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
   } catch (error) {
     console.error('Kayıt akışı hatası:', {
       mode: shouldUseFirebaseAuth() ? 'firebase' : 'backend',
@@ -730,6 +818,8 @@ async function paneleGirisYap(nereden) {
 
   try {
     if (errorBox) errorBox.style.display = 'none';
+    const modalInfoBox = document.getElementById('modalInfoBox');
+    if (modalInfoBox) modalInfoBox.style.display = 'none';
 
     // Remember-me kontrolü: localStorage (kalıcı) / sessionStorage (oturum)
     let remember = false;
@@ -1359,12 +1449,17 @@ async function indirBransExamPdf(recordId) {
 
         const lines = wrappedCells[colIndex];
         const lineHeight = fontSize + 2;
-        const textTop = y + 6;
+        const textHeight = lines.length * lineHeight;
+        const textTop = y + Math.max(6, (rowHeight - textHeight) / 2 + lineHeight - 2);
+        const textAlign = col.align || 'left';
+        const textX = textAlign === 'center'
+          ? cellX + (col.width / 2)
+          : cellX + 5;
         doc.setTextColor(20, 28, 45);
         doc.setFont('helvetica', col.bold ? 'bold' : 'normal');
         doc.setFontSize(fontSize);
         lines.forEach((line, lineIdx) => {
-          doc.text(line, cellX + 5, textTop + lineIdx * lineHeight);
+          doc.text(line, textX, textTop + lineIdx * lineHeight, textAlign === 'center' ? { align: 'center' } : {});
         });
 
         cellX += col.width;
@@ -1421,16 +1516,16 @@ async function indirBransExamPdf(recordId) {
   drawSectionTitle('1. DENEME OZETI');
 
   const summaryColumns = [
-    { key: 'examName', label: 'DENEME', width: 125, bold: true },
-    { key: 'classLevel', label: 'SINIF', width: 52, bold: false },
-    { key: 'lesson', label: 'DERS', width: 80, bold: false },
-    { key: 'unit', label: 'UNITE', width: 190, bold: false },
-    { key: 'examDate', label: 'TARIH', width: 78, bold: false },
-    { key: 'questionCount', label: 'SORU', width: 58, bold: false },
-    { key: 'correct', label: 'DOGRU', width: 58, bold: false },
-    { key: 'wrong', label: 'YANLIS', width: 58, bold: false },
-    { key: 'blank', label: 'BOS', width: 50, bold: false },
-    { key: 'net', label: 'NET', width: 64, bold: true }
+    { key: 'examName', label: 'DENEME', width: 125, bold: true, align: 'left' },
+    { key: 'classLevel', label: 'SINIF', width: 52, bold: false, align: 'center' },
+    { key: 'lesson', label: 'DERS', width: 80, bold: false, align: 'center' },
+    { key: 'unit', label: 'UNITE', width: 190, bold: false, align: 'left' },
+    { key: 'examDate', label: 'TARIH', width: 78, bold: false, align: 'center' },
+    { key: 'questionCount', label: 'SORU', width: 58, bold: false, align: 'center' },
+    { key: 'correct', label: 'DOGRU', width: 58, bold: false, align: 'center' },
+    { key: 'wrong', label: 'YANLIS', width: 58, bold: false, align: 'center' },
+    { key: 'blank', label: 'BOS', width: 50, bold: false, align: 'center' },
+    { key: 'net', label: 'NET', width: 64, bold: true, align: 'center' }
   ];
 
   const summaryRows = [{
@@ -1488,12 +1583,12 @@ async function indirBransExamPdf(recordId) {
   });
 
   const topicColumns = [
-    { key: 'topic', label: 'KONU', width: 265, bold: false },
-    { key: 'wrongCount', label: 'YANLIS SAYI', width: 100, bold: true },
-    { key: 'wrongRate', label: 'YANLIS ORAN (%)', width: 110, bold: true },
-    { key: 'blankCount', label: 'BOS SAYI', width: 100, bold: true },
-    { key: 'blankRate', label: 'BOS ORAN (%)', width: 110, bold: true },
-    { key: 'totalTracked', label: 'TOPLAM SORU', width: 128, bold: true }
+    { key: 'topic', label: 'KONU', width: 265, bold: false, align: 'left' },
+    { key: 'wrongCount', label: 'YANLIS SAYI', width: 100, bold: true, align: 'center' },
+    { key: 'wrongRate', label: 'YANLIS ORAN (%)', width: 110, bold: true, align: 'center' },
+    { key: 'blankCount', label: 'BOS SAYI', width: 100, bold: true, align: 'center' },
+    { key: 'blankRate', label: 'BOS ORAN (%)', width: 110, bold: true, align: 'center' },
+    { key: 'totalTracked', label: 'TOPLAM SORU', width: 128, bold: true, align: 'center' }
   ];
 
   drawTable(topicColumns, topicRows, { headerHeight: 22, rowMinHeight: 30, fontSize: 9 });
@@ -1912,9 +2007,9 @@ async function indirGenelExamPdf(recordId) {
 
   const tableColumns = [
     { key: 'lesson', label: 'DERS', width: Math.round(contentWidth * 0.22), align: 'left', bold: true },
-    { key: 'd', label: 'DOGRU (D)', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
-    { key: 'y', label: 'YANLIS (Y)', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
-    { key: 'b', label: 'BOS (B)', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
+    { key: 'd', label: 'DOGRU', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
+    { key: 'y', label: 'YANLIS', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
+    { key: 'b', label: 'BOS', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
     { key: 'net', label: 'NET', width: 0, align: 'center', bold: true }
   ];
   const assignedWidth = tableColumns.slice(0, 4).reduce((sum, c) => sum + c.width, 0);
@@ -1925,17 +2020,17 @@ async function indirGenelExamPdf(recordId) {
     doc.setFont('helvetica', bold ? 'bold' : 'normal');
     doc.setFontSize(11);
     const safe = pdfSafeText(String(text));
-    const textY = baseY + (cellHeight / 2) + 4;
+    const textY = baseY + (cellHeight / 2) + 1;
     if (align === 'center') {
-      doc.text(safe, x + (cellWidth / 2), textY, { align: 'center' });
+      doc.text(safe, x + (cellWidth / 2), textY, { align: 'center', baseline: 'middle' });
     } else if (align === 'right') {
-      doc.text(safe, x + cellWidth - 8, textY, { align: 'right' });
+      doc.text(safe, x + cellWidth - 8, textY, { align: 'right', baseline: 'middle' });
     } else {
-      doc.text(safe, x + 8, textY);
+      doc.text(safe, x + 8, textY, { baseline: 'middle' });
     }
   };
 
-  const tableHeaderHeight = 24;
+  const tableHeaderHeight = 28;
   ensureSpace(40 + ((lessonRows.length + 1) * 30));
 
   let x = margin;
@@ -2194,7 +2289,37 @@ function renderKokpitUserCard() {
   renderKokpitAgenda();
 }
 
-function createResourceCard(name, level, url, lesson) {
+function getResourceSignature(resource) {
+  if (!resource) return '';
+  return [resource.sinif || '', resource.lesson || '', resource.name || '', resource.level || '', resource.url || '']
+    .map((value) => String(value).trim().toLowerCase())
+    .join('|');
+}
+
+function handleResourceCardRemove(resource, cardEl) {
+  if (!resource) return;
+
+  const signature = getResourceSignature(resource);
+  const hiddenResources = getStoredHiddenResourceSuggestions();
+  if (!hiddenResources.includes(signature)) {
+    hiddenResources.unshift(signature);
+    setStoredHiddenResourceSuggestions(hiddenResources);
+  }
+
+  const savedIndex = savedResourceSuggestions.findIndex((item) => getResourceSignature(item) === signature);
+  if (savedIndex !== -1) {
+    savedResourceSuggestions.splice(savedIndex, 1);
+    setStoredResourceSuggestions(savedResourceSuggestions);
+  }
+
+  if (cardEl && typeof cardEl.remove === 'function') {
+    cardEl.remove();
+  }
+
+  renderResourceSuggestions();
+}
+
+function createResourceCard(resource, onRemove) {
   const card = document.createElement('div');
   card.style.background = '#f8fafc';
   card.style.border = '1px solid #e2e8f0';
@@ -2206,9 +2331,9 @@ function createResourceCard(name, level, url, lesson) {
   card.style.alignItems = 'center';
 
   const left = document.createElement('div');
-  left.innerHTML = `<div style="font-weight:700; color:#0f172a; margin-bottom:6px;">${name}</div>` +
-    `${lesson ? `<div style="color:#475569; font-size:0.9rem; margin-bottom:6px;">${lesson}</div>` : ''}` +
-    `${url ? `<div style="color:#475569; font-size:0.92rem;"><a href='${url}' target='_blank' style='color:#1d4ed8; text-decoration:none;'>Link</a></div>` : ''}`;
+  left.innerHTML = `<div style="font-weight:700; color:#0f172a; margin-bottom:6px;">${resource.name || ''}</div>` +
+    `${resource.lesson ? `<div style="color:#475569; font-size:0.9rem; margin-bottom:6px;">${resource.lesson}</div>` : ''}` +
+    `${resource.url ? `<div style="color:#475569; font-size:0.92rem;"><a href='${resource.url}' target='_blank' style='color:#1d4ed8; text-decoration:none;'>Link</a></div>` : ''}`;
 
   const right = document.createElement('div');
   right.style.display = 'flex';
@@ -2216,7 +2341,7 @@ function createResourceCard(name, level, url, lesson) {
   right.style.gap = '10px';
 
   const badge = document.createElement('div');
-  badge.textContent = level;
+  badge.textContent = resource.level || '';
   badge.style.background = '#e0f2fe';
   badge.style.color = '#0369a1';
   badge.style.fontWeight = '700';
@@ -2233,7 +2358,9 @@ function createResourceCard(name, level, url, lesson) {
   removeBtn.style.borderRadius = '12px';
   removeBtn.style.cursor = 'pointer';
   removeBtn.style.fontSize = '1rem';
-  removeBtn.onclick = () => card.remove();
+  removeBtn.onclick = () => {
+    if (typeof onRemove === 'function') onRemove(resource, card);
+  };
 
   right.appendChild(badge);
   right.appendChild(removeBtn);
@@ -2244,16 +2371,61 @@ function createResourceCard(name, level, url, lesson) {
 
 let selectedKaynakSinif = '8';
 
+function normalizeResourceText(value) {
+  return String(value || '').trim().toLocaleLowerCase('tr-TR');
+}
+
+function getSortedVisibleResources() {
+  const hiddenSignatures = new Set(getStoredHiddenResourceSuggestions());
+  const allResources = [...initialResourceSuggestions, ...savedResourceSuggestions];
+
+  return allResources
+    .filter((item) => item.sinif === selectedKaynakSinif && !hiddenSignatures.has(getResourceSignature(item)))
+    .sort((a, b) => {
+      const nameCompare = String(a.name || '').localeCompare(String(b.name || ''), 'tr', { sensitivity: 'base' });
+      if (nameCompare !== 0) return nameCompare;
+      return String(a.lesson || '').localeCompare(String(b.lesson || ''), 'tr', { sensitivity: 'base' });
+    });
+}
+
+function updateResourceNameSuggestions() {
+  const inputEl = document.getElementById('resourceNameInput');
+  const listEl = document.getElementById('resourceNameSuggestions');
+  const lessonEl = document.getElementById('resourceLessonSelect');
+  if (!inputEl || !listEl) return;
+
+  const typed = normalizeResourceText(inputEl.value);
+  const selectedLesson = lessonEl ? String(lessonEl.value || '').trim() : '';
+  const allVisible = getSortedVisibleResources();
+
+  const names = allVisible
+    .filter((item) => !selectedLesson || item.lesson === selectedLesson)
+    .map((item) => String(item.name || '').trim())
+    .filter((name) => !!name);
+
+  const uniqueNames = Array.from(new Set(names));
+  const filteredNames = typed
+    ? uniqueNames.filter((name) => normalizeResourceText(name).startsWith(typed))
+    : uniqueNames;
+
+  listEl.innerHTML = filteredNames
+    .slice(0, 25)
+    .map((name) => `<option value="${escapeHtml(name)}"></option>`)
+    .join('');
+}
+
 function renderResourceSuggestions() {
   const list = document.getElementById('resourceSuggestionsList');
   if (!list) return;
   list.innerHTML = '';
-  const allResources = [...initialResourceSuggestions, ...savedResourceSuggestions];
-  const filtered = allResources.filter(item => item.sinif === selectedKaynakSinif);
+
+  const filtered = getSortedVisibleResources();
   filtered.forEach(item => {
-    const card = createResourceCard(item.name, item.level, item.url || '', item.lesson || 'Matematik');
+    const card = createResourceCard(item, handleResourceCardRemove);
     list.appendChild(card);
   });
+
+  updateResourceNameSuggestions();
 }
 
 function selectKaynakSinif(sinif, element) {
@@ -2588,10 +2760,21 @@ function addKaynakOnerisi() {
   const level = document.getElementById('resourceLevelSelect').value;
   const url = document.getElementById('resourceUrlInput').value.trim();
   const lesson = document.getElementById('resourceLessonSelect').value;
-  const list = document.getElementById('resourceSuggestionsList');
 
   if (!name) {
     alert('Lütfen kaynak adı girin.');
+    document.getElementById('resourceNameInput').focus();
+    return;
+  }
+
+  const normalizedName = normalizeResourceText(name);
+  const duplicateExists = getSortedVisibleResources().some((item) => (
+    normalizeResourceText(item.lesson) === normalizeResourceText(lesson) &&
+    normalizeResourceText(item.name) === normalizedName
+  ));
+
+  if (duplicateExists) {
+    alert('Bu kaynak adı seçili ders için zaten kayıtlı.');
     document.getElementById('resourceNameInput').focus();
     return;
   }
@@ -2606,12 +2789,12 @@ function addKaynakOnerisi() {
   savedResourceSuggestions.unshift(newResource);
   setStoredResourceSuggestions(savedResourceSuggestions);
 
-  const card = createResourceCard(name, level, url, lesson);
-  list.prepend(card);
+  renderResourceSuggestions();
 
   document.getElementById('resourceNameInput').value = '';
   document.getElementById('resourceLevelSelect').value = 'Orta';
   document.getElementById('resourceUrlInput').value = '';
+  updateResourceNameSuggestions();
   document.getElementById('resourceNameInput').focus();
 }
 
@@ -2619,6 +2802,15 @@ document.addEventListener('DOMContentLoaded', () => {
   history.replaceState({ sayfaId: 'promoPage' }, "", "#promoPage");
   refreshRegisterSpamGuards();
   loadSavedResourceSuggestions();
+  const resourceNameInput = document.getElementById('resourceNameInput');
+  const resourceLessonSelect = document.getElementById('resourceLessonSelect');
+  if (resourceNameInput) {
+    resourceNameInput.addEventListener('input', updateResourceNameSuggestions);
+    resourceNameInput.addEventListener('focus', updateResourceNameSuggestions);
+  }
+  if (resourceLessonSelect) {
+    resourceLessonSelect.addEventListener('change', updateResourceNameSuggestions);
+  }
   startUserCountAutoRefresh();
   loadKokpitNotebookNotes();
   renderKokpitTodoDate();
@@ -3033,6 +3225,8 @@ function getAuthToken() {
   return localStorage.getItem('koclukToken') || sessionStorage.getItem('koclukToken');
 }
 
+let userCountIntervalId = null;
+
 function updateUserCountLabel() {
   const labelEl = document.getElementById('userCountLabel');
   if (!labelEl) return;
@@ -3049,8 +3243,6 @@ function updateUserCountLabel() {
       // Ağ hatasında mevcut etiket korunur.
     });
 }
-
-let userCountIntervalId = null;
 
 function startUserCountAutoRefresh() {
   updateUserCountLabel();
@@ -5526,10 +5718,11 @@ function populateTaskTopicOptions(classLevel, lesson, unit) {
 }
 
 function getResourceOptionsForClass(classLevel, lesson = '') {
+  const hiddenSignatures = new Set(getStoredHiddenResourceSuggestions());
   const allResources = [...initialResourceSuggestions, ...savedResourceSuggestions];
   return Array.from(new Set(
     allResources
-      .filter(item => item.sinif === classLevel && (!lesson || item.lesson === lesson))
+      .filter(item => item.sinif === classLevel && (!lesson || item.lesson === lesson) && !hiddenSignatures.has(getResourceSignature(item)))
       .map(item => item.name)
   ));
 }
@@ -5552,6 +5745,26 @@ function getStoredResourceSuggestions() {
 function setStoredResourceSuggestions(resources) {
   const key = getResourceStorageKey();
   localStorage.setItem(key, JSON.stringify(resources));
+}
+
+function getHiddenResourceStorageKey() {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail');
+  return email ? `kaynaklar_hidden_${email}` : 'kaynaklar_hidden_default';
+}
+
+function getStoredHiddenResourceSuggestions() {
+  const key = getHiddenResourceStorageKey();
+  const raw = localStorage.getItem(key);
+  try {
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function setStoredHiddenResourceSuggestions(entries) {
+  const key = getHiddenResourceStorageKey();
+  localStorage.setItem(key, JSON.stringify(entries));
 }
 
 function loadSavedResourceSuggestions() {

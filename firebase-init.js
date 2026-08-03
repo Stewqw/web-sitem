@@ -121,6 +121,13 @@
       );
     }
 
+    await withTimeout(
+      credential.user.sendEmailVerification(),
+      12000,
+      "app/email-verification-send-failed",
+      "Doğrulama e-postası gönderilirken zaman aşımı oluştu."
+    );
+
     const nowIso = new Date().toISOString();
     const profilePayload = {
       uid: credential.user.uid,
@@ -144,6 +151,7 @@
       db.collection("users").doc(credential.user.uid).set(
         {
           ...profilePayload,
+          emailVerified: false,
           createdAt: fieldValue.serverTimestamp(),
           updatedAt: fieldValue.serverTimestamp()
         },
@@ -154,11 +162,14 @@
       "Profil verisi kaydedilirken zaman aşımı oluştu."
     );
 
+    await auth.signOut();
+
     return {
       uid: credential.user.uid,
       email: email,
       name: displayName,
-      branch: payload.branch || ""
+      branch: payload.branch || "",
+      requiresEmailVerification: true
     };
   };
 
@@ -171,6 +182,24 @@
       "app/auth-signin-timeout",
       "Giriş işlemi zaman aşımına uğradı."
     );
+
+    if (!credential.user.emailVerified) {
+      try {
+        await withTimeout(
+          credential.user.sendEmailVerification(),
+          12000,
+          "app/email-verification-send-failed",
+          "Doğrulama e-postası tekrar gönderilemedi."
+        );
+      } catch (error) {
+        console.warn("Doğrulama e-postası yeniden gönderilemedi:", error);
+      }
+
+      await auth.signOut();
+      const err = new Error("E-posta adresinizi doğrulamadan giriş yapamazsınız.");
+      err.code = "app/email-not-verified";
+      throw err;
+    }
 
     let profile = null;
     try {
@@ -222,6 +251,12 @@
   services.getCurrentUserSession = async function getCurrentUserSession() {
     const user = auth.currentUser;
     if (!user) return null;
+
+    if (!user.emailVerified) {
+      await auth.signOut();
+      return null;
+    }
+
     const profile = await getProfileByUid(user.uid);
 
     return {

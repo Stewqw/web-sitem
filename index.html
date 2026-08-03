@@ -1873,6 +1873,7 @@
           <a onclick="sifremiUnuttumAc('modal')">Şifremi Unuttum</a>
         </div>
         <div class="error-box" id="modalErrorBox"></div>
+        <div class="error-box" id="modalInfoBox" style="display:none; background:#ecfdf3; color:#166534; border:1px solid #bbf7d0;"></div>
         <button type="submit" class="btn-action btn-coral" style="width:100%; margin-top:10px;">Giriş Yap</button>
       </form>
 
@@ -1884,6 +1885,7 @@
         </div>
         <input type="text" class="input-field" id="regName" placeholder="AD SOYAD *" required>
         <input type="email" class="input-field" id="regEmail" placeholder="EMAİL *" required>
+        <p style="font-size:0.8rem; color:#64748b; margin:-4px 0 10px; line-height:1.45;">Kayıt sonrası e-posta doğrulaması zorunludur. Doğrulamadan giriş yapılamaz.</p>
         <select id="regBranch" class="input-field">
           <option value="">Branş seçin (isteğe bağlı)</option>
           <option>Matematik</option>
@@ -1935,12 +1937,17 @@
     <div class="modal-card" style="max-width:460px;">
       <button class="modal-close" onclick="modalKapat('forgotModal')">✕</button>
       <h3 style="margin-bottom:8px; color:#0f172a;">Şifre Sıfırla</h3>
-      <p style="font-size:0.85rem; color:#64748b; margin-bottom:16px;">E-posta adresinizi ve yeni şifrenizi girin.</p>
+      <p id="forgotFlowInfo" style="font-size:0.85rem; color:#64748b; margin-bottom:16px;">Önce e-posta adresinize doğrulama kodu gönderin, ardından kodla yeni şifrenizi belirleyin.</p>
 
       <form onsubmit="event.preventDefault(); sifreSifirla();">
         <input type="email" id="forgotEmail" class="input-field" placeholder="E-Posta Adresiniz" required>
 
-        <div class="password-field">
+        <div id="forgotCodeWrap" class="password-field" style="display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; margin-bottom:12px;">
+          <input type="text" id="forgotCode" class="input-field" placeholder="Doğrulama Kodu" maxlength="6" inputmode="numeric" style="margin-bottom:0;">
+          <button type="button" id="forgotSendCodeBtn" class="btn-nav-outline" style="white-space:nowrap;" onclick="sifreSifirlamaKoduGonder()">Kod Gönder</button>
+        </div>
+
+        <div id="forgotNewPassWrap" class="password-field">
           <input type="password" id="forgotNewPass" class="input-field" placeholder="Yeni Şifre" required>
           <button type="button" class="toggle-password-btn" aria-label="Şifreyi göster" aria-pressed="false" onclick="togglePasswordVisibility('forgotNewPass', this)">
             <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -1948,7 +1955,7 @@
           </button>
         </div>
 
-        <div class="password-field">
+        <div id="forgotNewPassConfirmWrap" class="password-field">
           <input type="password" id="forgotNewPassConfirm" class="input-field" placeholder="Yeni Şifre (Tekrar)" required>
           <button type="button" class="toggle-password-btn" aria-label="Şifreyi göster" aria-pressed="false" onclick="togglePasswordVisibility('forgotNewPassConfirm', this)">
             <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -1957,7 +1964,7 @@
         </div>
 
         <div class="error-box" id="forgotErrorBox"></div>
-        <button type="submit" class="btn-action btn-coral" style="width:100%; margin-top:8px;">Şifreyi Güncelle</button>
+        <button type="submit" id="forgotSubmitBtn" class="btn-action btn-coral" style="width:100%; margin-top:8px;">Kodu Doğrula ve Şifreyi Güncelle</button>
       </form>
     </div>
   </div>
@@ -2282,7 +2289,8 @@
             <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 20px; padding: 22px; box-shadow: 0 12px 30px rgba(15,23,42,0.05);">
               <div style="font-weight: 700; color: #0f172a; margin-bottom: 14px;">Öğrenciye Özel Öneri Ekle</div>
               <div style="display: grid; grid-template-columns: 1.3fr 1fr 0.9fr 1.5fr 0.8fr; gap: 12px; align-items: center;">
-                <input id="resourceNameInput" type="text" class="input-field" placeholder="Kaynak adı" style="width:100%;" />
+                <input id="resourceNameInput" type="text" class="input-field" placeholder="Kaynak adı" list="resourceNameSuggestions" style="width:100%;" />
+                <datalist id="resourceNameSuggestions"></datalist>
                 <select id="resourceLessonSelect" class="input-field" style="width:100%;">
                   <option value="Matematik">Matematik</option>
                   <option value="Fen Bilimleri">Fen Bilimleri</option>
@@ -2347,16 +2355,16 @@
             </div>
 
             <div class="exam-history-wrap" style="margin-bottom:12px;">
-              <div class="exam-history-title">Üniteler</div>
-              <div id="uniteKonuUnitList" class="exam-history-list">
-                <div class="exam-history-empty">Henüz ünite yok.</div>
+              <div class="exam-history-title">Konular</div>
+              <div id="uniteKonuTopicList" class="exam-history-list">
+                <div class="exam-history-empty">Henüz konu yok.</div>
               </div>
             </div>
 
             <div class="exam-history-wrap">
-              <div class="exam-history-title">Konular</div>
-              <div id="uniteKonuTopicList" class="exam-history-list">
-                <div class="exam-history-empty">Henüz konu yok.</div>
+              <div class="exam-history-title">Üniteler</div>
+              <div id="uniteKonuUnitList" class="exam-history-list">
+                <div class="exam-history-empty">Henüz ünite yok.</div>
               </div>
             </div>
           </div>
