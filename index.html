@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Parabol Koçluk | Öğrenci Takip ve Eğitim Koçluğu Platformu</title>
-  <meta name="description" content="Parabol Koçluk ile öğrenci takibi, haftalık program planlama, deneme analizi ve koçluk süreçlerini tek panelden yönetin.">
-  <meta name="keywords" content="parabol koçluk, eğitim koçluğu, öğrenci takip sistemi, haftalık çalışma programı, deneme analizi, özelders koçluk">
+  <title>Parabol Koçluk | Öğretmenler İçin Öğrenci Takip ve Yönetim Yazılımı</title>
+  <meta name="description" content="Parabol Koçluk; özel ders öğretmenleri ve eğitim koçları için öğrenci takibi, haftalık ders programı hazırlama ve deneme analizi süreçlerini tek panelde birleştiren profesyonel yönetim yazılımıdır.">
+  <meta name="keywords" content="parabol koçluk, öğrenci takip yazılımı, öğretmen yönetim paneli, eğitim koçu yazılımı, haftalık ders programı, deneme analizi, özel ders öğretmeni aracı">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://parabolkocluk.com/">
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Parabol Koçluk">
-  <meta property="og:title" content="Parabol Koçluk | Öğrenci Takip ve Eğitim Koçluğu Platformu">
-  <meta property="og:description" content="Öğrenci takibi, haftalık planlama ve deneme analizi için modern koçluk paneli.">
+  <meta property="og:title" content="Parabol Koçluk | Öğretmenler İçin Öğrenci Takip ve Yönetim Yazılımı">
+  <meta property="og:description" content="Özel ders öğretmenleri ve eğitim koçları için öğrenci takibi, haftalık planlama ve deneme analizi sunan modern yönetim paneli.">
   <meta property="og:url" content="https://parabolkocluk.com/">
   <meta property="og:locale" content="tr_TR">
   <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
@@ -275,14 +275,27 @@
     .stat-box { background: #ffffff; padding: 12px; border-radius: 12px; text-align: center; border: 1px solid #dbe7f6; }
     .preview-card { background: #ffffff; border-radius: 12px; padding: 14px; border: 1px solid #dbe7f6; }
 
-    .section-head { margin-bottom: 24px; }
-    .process-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .section-head {
+      margin-bottom: 24px;
+      min-height: 96px;
+    }
+    .process-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      align-items: stretch;
+      grid-auto-rows: 1fr;
+    }
     .process-card {
       background: #ffffff;
       border: 1px solid #d8e4f4;
       border-radius: 16px;
       padding: 18px;
       box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+      min-height: 230px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
     }
     .process-step {
       width: 34px;
@@ -300,13 +313,17 @@
     .process-card h3 { font-size: 1.02rem; color: #102040; margin-bottom: 8px; }
     .process-card p { font-size: 0.88rem; color: #64748b; line-height: 1.58; }
 
-    .feature-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .feature-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: stretch; grid-auto-rows: 1fr; }
     .feature-card {
       background: #fff;
       border: 1px solid #dce8f7;
       border-radius: 14px;
       padding: 18px;
       box-shadow: 0 8px 18px rgba(15,23,42,0.06);
+      min-height: 210px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
     }
     .feature-icon {
       width: 40px;
@@ -325,20 +342,24 @@
     .feature-card h3 { color: #102040; font-size: 0.96rem; margin-bottom: 6px; }
     .feature-card p { color: #64748b; font-size: 0.84rem; line-height: 1.55; }
 
-    .testimonial-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .testimonial-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; grid-auto-rows: 1fr; }
     .testimonial-card {
       background: #fff;
       border: 1px solid #dce8f7;
       border-radius: 14px;
       padding: 18px;
       box-shadow: 0 8px 18px rgba(15,23,42,0.06);
+      min-height: 240px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
     }
     .testimonial-quote {
       color: #334155;
       font-size: 0.89rem;
       line-height: 1.6;
       margin-bottom: 14px;
-      min-height: 86px;
+      min-height: 104px;
     }
     .testimonial-meta {
       font-size: 0.8rem;
@@ -1399,6 +1420,10 @@
       .feature-grid,
       .testimonial-grid,
       .stats-row { grid-template-columns: 1fr 1fr; }
+      .section-head { min-height: 0; }
+      .process-card,
+      .feature-card,
+      .testimonial-card { min-height: 0; }
       .hero-title { font-size: 2.15rem; }
     }
 
@@ -1410,6 +1435,10 @@
       .feature-grid,
       .testimonial-grid,
       .stats-row { grid-template-columns: 1fr; }
+      .section-head { min-height: 0; }
+      .process-card,
+      .feature-card,
+      .testimonial-card { min-height: 0; }
     }
 
     @media(max-width: 1200px) {
@@ -1453,6 +1482,10 @@
       .feature-grid,
       .testimonial-grid,
       .stats-row { grid-template-columns: 1fr 1fr; }
+      .section-head { min-height: 0; }
+      .process-card,
+      .feature-card,
+      .testimonial-card { min-height: 0; }
       .hero-title { font-size: 2.15rem; }
       .form-row { flex-direction: column; }
       .muhasebe-detail-columns { grid-template-columns: 1fr; }
@@ -1472,6 +1505,10 @@
       .feature-grid,
       .testimonial-grid,
       .stats-row { grid-template-columns: 1fr; }
+      .section-head { min-height: 0; }
+      .process-card,
+      .feature-card,
+      .testimonial-card { min-height: 0; }
       .dashboard-header { padding: 16px; }
       .header-badges { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
       .nav-buttons { width: 100%; justify-content: stretch; }
@@ -1626,12 +1663,12 @@
         <div class="promo-container hero-grid">
           <div>
             <div class="tag-group">
-              <span class="tag">YKS (TYT-AYT)</span>
-              <span class="tag">YDT</span>
-              <span class="tag">LGS ve Ara Sınıflar</span>
+              <span class="tag">Özel Ders Öğretmenleri</span>
+              <span class="tag">Eğitim Koçları</span>
+              <span class="tag">Öğrenci Takibi</span>
             </div>
-            <h1 class="hero-title">Hedefini <span>Parabol Koçluk</span> ile plana, nete ve başarıya dönüştür.</h1>
-            <p class="promo-subtext light">Her öğrenciye özel yol haritası, haftalık takip sistemi ve sürekli geri bildirimle sınav hazırlık sürecini disiplinli ve sürdürülebilir hale getiriyoruz.</p>
+            <h1 class="hero-title">Öğrencilerinizi <span>Parabol Koçluk</span> ile tek panelde yönetin, planlayın ve takip edin.</h1>
+            <p class="promo-subtext light">Özel ders öğretmenleri ve eğitim koçları için geliştirilmiş bu platformla haftalık ders programı hazırlayın, ilerlemeyi izleyin ve deneme sonuçlarını tek ekranda yönetin.</p>
             <div class="hero-actions">
               <button class="btn-action btn-coral" onclick="scrollToLandingSection('landingApply')">Hemen Başvur</button>
               <button class="btn-ghost-light" onclick="scrollToLandingSection('landingProcess')">Nasıl Çalışıyoruz?</button>
@@ -1656,23 +1693,23 @@
         <div class="promo-container">
           <div class="section-head">
             <h2 class="promo-heading">Süreç / Nasıl Çalışıyoruz?</h2>
-            <p class="promo-subtext">İlk görüşmeden haftalık kontrole kadar net bir metodolojiyle ilerliyoruz. Her adım ölçülebilir ve öğrenciye özel tasarlanıyor.</p>
+            <p class="promo-subtext">Öğrencilerinizle ilk analizden haftalık takibe kadar süreci tek panelden, net bir metodolojiyle yönetin.</p>
           </div>
           <div class="process-grid">
             <article class="process-card">
               <div class="process-step">1</div>
               <h3>Analiz</h3>
-              <p>Mevcut net seviyesi, ders bazlı durum ve hedef bölüm analiziyle öğrencinin başlangıç profilini çıkarıyoruz.</p>
+              <p>Öğrencinin mevcut net seviyesini, ders bazlı durumunu ve hedef analizini tek tıkla sisteme girin, başlangıç profilini çıkarın.</p>
             </article>
             <article class="process-card">
               <div class="process-step">2</div>
               <h3>Program</h3>
-              <p>Günlük-saatlik çalışma planı, kaynak sıralaması ve deneme takvimi oluşturarak öğrencinin rutine girmesini sağlıyoruz.</p>
+              <p>Günlük-saatlik çalışma planı, kaynak sıralaması ve deneme takvimi oluşturarak öğrencinin rutine girmesini sağlayın.</p>
             </article>
             <article class="process-card">
               <div class="process-step">3</div>
               <h3>Haftalık Takip</h3>
-              <p>Her hafta rapor, geri bildirim ve revizyonla planı canlı tutuyor; motivasyon ve sürekliliği destekliyoruz.</p>
+              <p>Her hafta rapor, geri bildirim ve revizyonla planı canlı tutun; öğrencinizin disiplinini ölçülebilir hale getirin.</p>
             </article>
           </div>
         </div>
@@ -1682,28 +1719,28 @@
         <div class="promo-container">
           <div class="section-head">
             <h2 class="promo-heading">Neden Parabol Koçluk?</h2>
-            <p class="promo-subtext">Tek bir alana değil, sınav başarısını oluşturan tüm bileşenlere odaklanan bütüncül bir koçluk modeli sunuyoruz.</p>
+            <p class="promo-subtext">Öğrenci takibi, program planlama ve deneme analizini öğretmenlerin günlük iş akışına uygun, hızlı ve düzenli bir yönetim panelinde topluyoruz.</p>
           </div>
           <div class="feature-grid">
             <article class="feature-card">
               <div class="feature-icon">KÖ</div>
-              <h3>Kişiye Özel Strateji</h3>
-              <p>Her öğrenciye hedef, tempo ve eksiklerine göre ayarlanan esnek çalışma modeli.</p>
+              <h3>Öğrenciye Özel Planlama</h3>
+              <p>Öğrencilerinize saniyeler içinde hedef, tempo ve eksiklerine göre haftalık çalışma programı hazırlayın.</p>
             </article>
             <article class="feature-card">
               <div class="feature-icon">NA</div>
-              <h3>Net Analizi</h3>
-              <p>Ders ve konu bazlı net değişimlerini takip ederek doğru zamanda doğru hamleler.</p>
+              <h3>Detaylı Net Analizi</h3>
+              <p>Tek tıkla ders ve konu bazlı net değişimlerini görün, hangi alanda müdahale edeceğinizi hızlıca belirleyin.</p>
             </article>
             <article class="feature-card">
               <div class="feature-icon">ST</div>
-              <h3>Soru Takibi</h3>
-              <p>Günlük çözüm adetleri ve tekrar düzeniyle öğrencinin disiplinini ölçülebilir hale getirme.</p>
+              <h3>Soru ve Tekrar Takibi</h3>
+              <p>Günlük çözülen soru sayılarını ve tekrar düzenini kayıt altına alarak öğrencinin çalışma disiplinini görünür hale getirin.</p>
             </article>
             <article class="feature-card">
               <div class="feature-icon">SP</div>
-              <h3>Sınav Psikolojisi</h3>
-              <p>Stres yönetimi, sınav anında odak ve motivasyon sürekliliği için psikolojik destek rutini.</p>
+              <h3>Takip ve Geri Bildirim</h3>
+              <p>Haftalık değerlendirme, not paylaşımı ve anlık geri bildirimlerle öğrenciyi dağılmadan sürecin içinde tutun.</p>
             </article>
           </div>
         </div>
@@ -1712,21 +1749,21 @@
       <section class="promo-section" id="landingTestimonials">
         <div class="promo-container">
           <div class="section-head">
-            <h2 class="promo-heading">Öğrenci ve Veli Değerlendirmeleri</h2>
-            <p class="promo-subtext">Parabol Koçluk sürecinden geçen öğrenciler ve velilerden gelen geri bildirimler.</p>
+            <h2 class="promo-heading">Öğretmen ve Koç Geri Bildirimleri</h2>
+            <p class="promo-subtext">Parabol Koçluk sistemini kullanan öğretmenlerin, eğitim koçlarının ve onların öğrencileri/velilerinden aldığı geri bildirimler.</p>
           </div>
           <div class="testimonial-grid">
             <article class="testimonial-card">
-              <p class="testimonial-quote">"Kızımın çalışma düzeni ilk kez bu kadar net oldu. Haftalık takip görüşmeleriyle hem motivasyonu hem netleri yükselmeye başladı."</p>
-              <div class="testimonial-meta">Ayşe T. - Veli</div>
+              <p class="testimonial-quote">"Öğrencilerimin haftalık programı artık çok daha hızlı hazırlanıyor. Takip ekranı sayesinde hangi öğrencinin nerede aksadığını anında görüyorum."</p>
+              <div class="testimonial-meta">Ayşe T. - Eğitim Koçu</div>
             </article>
             <article class="testimonial-card">
-              <p class="testimonial-quote">"YDT sürecinde hangi konuya ne kadar zaman ayırmam gerektiğini öğrenince deneme netlerim 3 ayda belirgin şekilde arttı."</p>
-              <div class="testimonial-meta">Berk D. - 12. Sınıf Öğrencisi</div>
+              <p class="testimonial-quote">"Net analizi ve soru takibi aynı yerde olunca öğrencilerimin gelişimini daha düzenli raporluyorum. Velilere de çok daha net geri bildirim veriyorum."</p>
+              <div class="testimonial-meta">Berk D. - Özel Ders Öğretmeni</div>
             </article>
             <article class="testimonial-card">
-              <p class="testimonial-quote">"Programın sürekli revize edilmesi ve soru takibi, öğrencimizin dağınık çalışma alışkanlığını tamamen değiştirdi."</p>
-              <div class="testimonial-meta">Mehmet K. - Veli</div>
+              <p class="testimonial-quote">"Tek panelden ilerleme görmek hem düzeni koruyor hem de deneme sonrası revizyonu hızlandırıyor. Öğrencilerde net artışı daha izlenebilir hale geldi."</p>
+              <div class="testimonial-meta">Mehmet K. - Eğitim Koçu</div>
             </article>
           </div>
         </div>
@@ -1741,31 +1778,31 @@
           <div class="faq-wrap">
             <article class="faq-item">
               <button type="button" class="faq-btn" onclick="toggleLandingFaq(this)">
-                Koçluk süreci ne kadar sürer?
+                Parabol Koçluk tam olarak kimler için tasarlanmıştır?
                 <span class="faq-arrow">+</span>
               </button>
-              <div class="faq-answer">Süreç, öğrencinin hedefine ve sınav takvimine göre değişir. Genellikle en az 8-12 haftalık planlı takipte gözle görülür ilerleme elde edilir.</div>
+              <div class="faq-answer">Özel ders öğretmenleri, eğitim koçları ve danışmanlık veren eğitimciler için geliştirilmiş yeni nesil bir öğrenci takip, program hazırlama ve analiz platformudur.</div>
             </article>
             <article class="faq-item">
               <button type="button" class="faq-btn" onclick="toggleLandingFaq(this)">
-                Haftalık görüşmeler nasıl yapılıyor?
+                Öğrencilerimin programlarını hazırlamak ne kadar sürer?
                 <span class="faq-arrow">+</span>
               </button>
-              <div class="faq-answer">Haftalık görüşmelerde tamamlanan çalışma planı, deneme sonuçları ve soru hedefleri değerlendirilir. Sonraki haftanın programı aynı görüşmede netleştirilir.</div>
+              <div class="faq-answer">Akıllı panel ve şablonlar sayesinde her öğrenciye özel haftalık ders ve soru programını dakikalar içinde hazırlayabilir, tek tıkla güncelleyebilirsiniz.</div>
             </article>
             <article class="faq-item">
               <button type="button" class="faq-btn" onclick="toggleLandingFaq(this)">
-                Veli olarak süreci takip edebilir miyim?
+                Veliler süreç hakkında nasıl bilgilendiriliyor?
                 <span class="faq-arrow">+</span>
               </button>
-              <div class="faq-answer">Evet. Veli bilgilendirme yapısı sayesinde ilerleme ve haftalık hedef durumları belirli periyotlarda veli ile paylaşılır.</div>
+              <div class="faq-answer">Sistem içerisindeki veli bilgilendirme yapıları ve otomatik raporlama özetleri sayesinde, veliler öğrencilerin gelişimini ve çalışma disiplinini düzenli olarak takip edebilir.</div>
             </article>
             <article class="faq-item">
               <button type="button" class="faq-btn" onclick="toggleLandingFaq(this)">
-                Hangi sınıf seviyeleri için uygun?
+                Hangi sınıf seviyeleri ve sınav grupları için kullanılabilir?
                 <span class="faq-arrow">+</span>
               </button>
-              <div class="faq-answer">YKS, YDT, LGS ve ara sınıf öğrencileri için ihtiyaca uygun planlama ve takip modeli uygulanır.</div>
+              <div class="faq-answer">YKS (TYT-AYT), YDT, LGS ve tüm ara sınıflardaki öğrencilerinizin akademik takibini, net analizlerini ve program yönetimini tek panelden yapabilirsiniz.</div>
             </article>
           </div>
         </div>
@@ -1774,33 +1811,33 @@
       <section class="promo-section" id="landingApply">
         <div class="promo-container apply-grid">
           <article class="apply-card">
-            <h3>Kapanış ve Başvuru</h3>
-            <p class="promo-subtext" style="max-width:none; margin-bottom:14px;">Hedefinize uygun koçluk sürecini başlatmak için formu doldurun. Ekibimiz en kısa sürede sizinle iletişime geçer.</p>
+            <h3>Demo ve Kurulum Talebi</h3>
+            <p class="promo-subtext" style="max-width:none; margin-bottom:14px;">Öğrenci takibi, program hazırlama ve deneme analizi için Parabol Koçluk'u kullanmaya başlamak istiyorsanız formu doldurun. Ekibimiz size uygun kurulum akışıyla dönüş yapar.</p>
             <form id="landingApplyForm" onsubmit="submitLandingApplyForm(event)">
               <input type="text" id="landingApplyName" class="input-field" placeholder="Ad Soyad" required>
               <input type="email" id="landingApplyEmail" class="input-field" placeholder="E-posta" required>
               <input type="tel" id="landingApplyPhone" class="input-field" placeholder="Telefon" required>
               <select id="landingApplyLevel" class="input-field" required>
-                <option value="">Seviye seçin</option>
-                <option>YKS</option>
-                <option>YDT</option>
-                <option>LGS</option>
-                <option>Ara Sınıf</option>
+                <option value="">Kullanım tipini seçin</option>
+                <option>Özel Ders Öğretmeni</option>
+                <option>Eğitim Koçu</option>
+                <option>Rehberlik / Danışmanlık</option>
+                <option>Kurum / Ofis</option>
               </select>
-              <textarea id="landingApplyNote" class="input-field" rows="3" style="resize:vertical; min-height:100px;" placeholder="Kısa notunuz (opsiyonel)"></textarea>
-              <button type="submit" class="btn-action btn-coral" style="width:100%;">Hemen Başvur</button>
-              <div class="apply-note">Formu göndererek tarafınızla iletişime geçilmesini kabul etmiş olursunuz.</div>
-              <div id="landingApplySuccess" class="apply-success">Başvurunuz alındı. En kısa sürede sizinle iletişime geçeceğiz.</div>
+              <textarea id="landingApplyNote" class="input-field" rows="3" style="resize:vertical; min-height:100px;" placeholder="Kısa notunuz (örn. öğrenci sayısı, takip ihtiyacı, demo talebi)"></textarea>
+              <button type="submit" class="btn-action btn-coral" style="width:100%;">Demo Talep Et</button>
+              <div class="apply-note">Formu göndererek sizinle kurulum ve demo planlaması için iletişime geçilmesini kabul etmiş olursunuz.</div>
+              <div id="landingApplySuccess" class="apply-success">Talebiniz alındı. Demo ve kurulum için en kısa sürede sizinle iletişime geçeceğiz.</div>
             </form>
           </article>
 
           <article class="contact-card">
             <h3>İletişim</h3>
-            <p class="promo-subtext" style="max-width:none; margin-bottom:14px;">Sorularınız için bize ulaşın. Öğrenciye özel süreç planlaması hakkında detaylı bilgilendirme sağlıyoruz.</p>
+            <p class="promo-subtext" style="max-width:none; margin-bottom:14px;">Platform demo, kurulum ve kullanım detayları için bize ulaşın. Öğretmen ve koçlara özel bilgilendirme sağlıyoruz.</p>
             <div style="display:grid; gap:10px;">
               <div style="border:1px solid #dbe7f6; border-radius:12px; padding:10px 12px; background:#f8fbff;"><strong style="color:#102040;">E-posta:</strong> <span style="color:#334155;">info@parabolkocluk.com</span></div>
               <div style="border:1px solid #dbe7f6; border-radius:12px; padding:10px 12px; background:#f8fbff;"><strong style="color:#102040;">Telefon:</strong> <span style="color:#334155;">+90 (5xx) xxx xx xx</span></div>
-              <div style="border:1px solid #dbe7f6; border-radius:12px; padding:10px 12px; background:#f8fbff;"><strong style="color:#102040;">Çalışma Modeli:</strong> <span style="color:#334155;">Online ve yüz yüze hibrit takip</span></div>
+              <div style="border:1px solid #dbe7f6; border-radius:12px; padding:10px 12px; background:#f8fbff;"><strong style="color:#102040;">Destek Modeli:</strong> <span style="color:#334155;">Online demo, kurulum ve kullanım desteği</span></div>
             </div>
           </article>
         </div>
