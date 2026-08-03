@@ -1992,6 +1992,9 @@
             <div class="menu-item" id="menu-ogrenci" onclick="sekmeAcs('ogrenci')">
               <span class="icon"></span><span class="menu-title">Öğrenci Yönetimi</span>
             </div>
+            <div class="menu-item" id="menu-raporlama" onclick="sekmeAcs('raporlama')">
+              <span class="icon"></span><span class="menu-title">Raporlama</span>
+            </div>
             <div class="menu-item" id="menu-muhasebe" onclick="sekmeAcs('muhasebe')">
               <span class="icon"></span><span class="menu-title">Muhasebe</span>
             </div>
@@ -2111,6 +2114,18 @@
             <div id="ogrenciListesi"></div>
         </div>
       </div>
+
+        <div id="tabRaporlama" style="display:none;">
+          <div class="card-panel">
+            <div style="margin-bottom:14px;">
+              <h2 style="margin:0; font-size:1.2rem; color:var(--color-dark-teal);">Raporlama</h2>
+              <p style="margin:8px 0 0; color:#64748b; font-size:0.88rem; line-height:1.5;">Kayıtlı öğrencileriniz için toplu performans raporu oluşturun. "Raporla" butonuna tıklayarak branş denemeleri, genel denemeler, kaynak/konu ilerlemesi ve çözülen soru özetini PDF olarak indirin.</p>
+            </div>
+            <div id="raporlamaStudentList" class="exam-history-list">
+              <div class="exam-history-empty">Henüz öğrenci yok.</div>
+            </div>
+          </div>
+        </div>
 
         <div id="tabMuhasebe" style="display:none;">
           <div class="card-panel">

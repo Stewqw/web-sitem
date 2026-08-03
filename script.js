@@ -992,6 +992,8 @@ async function attemptAutoLogin() {
 function sekmeAcs(sekmeAd) {
   document.getElementById('tabKokpit').style.display = 'none';
   document.getElementById('tabOgrenci').style.display = 'none';
+  const raporlamaEl = document.getElementById('tabRaporlama');
+  if (raporlamaEl) raporlamaEl.style.display = 'none';
   const muhasebeEl = document.getElementById('tabMuhasebe');
   if (muhasebeEl) muhasebeEl.style.display = 'none';
   document.getElementById('tabOgrenciDetay').style.display = 'none';
@@ -1027,6 +1029,10 @@ function sekmeAcs(sekmeAd) {
   } else if (sekmeAd === 'ogrenci') {
     document.getElementById('tabOgrenci').style.display = 'block';
     markMenuActive('menu-ogrenci');
+  } else if (sekmeAd === 'raporlama') {
+    if (raporlamaEl) raporlamaEl.style.display = 'block';
+    markMenuActive('menu-raporlama');
+    renderRaporlamaStudentList();
   } else if (sekmeAd === 'muhasebe') {
     if (muhasebeEl) muhasebeEl.style.display = 'block';
     markMenuActive('menu-muhasebe');
@@ -6130,6 +6136,535 @@ function setStoredOgrenciler(students) {
       console.warn('Öğrenci verisi buluta kaydedilemedi:', error);
     });
   }
+}
+
+function getStorageOwnerEmail() {
+  return currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+}
+
+function safeJsonParse(value, fallbackValue) {
+  try {
+    return value ? JSON.parse(value) : fallbackValue;
+  } catch (e) {
+    return fallbackValue;
+  }
+}
+
+function getStoredBransExamsForStudent(studentId) {
+  const email = getStorageOwnerEmail();
+  const key = `brans_exam_${email}_${String(studentId)}`;
+  const parsed = safeJsonParse(localStorage.getItem(key), []);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+function getStoredGenelExamsForStudent(studentId) {
+  const email = getStorageOwnerEmail();
+  const key = `genel_exam_${email}_${String(studentId)}`;
+  const parsed = safeJsonParse(localStorage.getItem(key), []);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+function getKaynakKonuSummaryForStudent(studentId) {
+  const email = getStorageOwnerEmail();
+  const prefix = `kaynak_ilerleme_${email}_${String(studentId)}_`;
+  const finishedTopics = new Set();
+  const finishedResources = new Set();
+  const finishedTopicDetails = [];
+
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(prefix)) continue;
+
+    const lesson = key.slice(prefix.length) || 'none';
+    const parsed = safeJsonParse(localStorage.getItem(key), null);
+    if (!parsed || typeof parsed !== 'object') continue;
+
+    const dataMap = (Object.prototype.hasOwnProperty.call(parsed, 'data') && parsed.data && typeof parsed.data === 'object')
+      ? parsed.data
+      : parsed;
+
+    Object.entries(dataMap).forEach(([topicKey, entry]) => {
+      if (!entry || typeof entry !== 'object') return;
+
+      const parsedTopic = parseKaynakTopicKey(topicKey);
+      const doneResources = Array.isArray(entry.doneResources)
+        ? entry.doneResources.map((name) => String(name || '').trim()).filter(Boolean)
+        : [];
+
+      if (String(entry.status || '').toLocaleLowerCase('tr-TR') === 'konu bitti') {
+        finishedTopics.add(`${lesson}|||${topicKey}`);
+        finishedTopicDetails.push({
+          lesson,
+          unit: parsedTopic.unit || 'GENEL',
+          topic: parsedTopic.topic || '-',
+          resources: doneResources,
+          finishedDate: entry.finishedDate ? formatExamDate(String(entry.finishedDate)) : '-'
+        });
+      }
+
+      doneResources.forEach((resourceName) => {
+        finishedResources.add(resourceName.toLocaleLowerCase('tr-TR'));
+      });
+    });
+  }
+
+  finishedTopicDetails.sort((a, b) => {
+    const lessonDiff = String(a.lesson || '').localeCompare(String(b.lesson || ''), 'tr', { sensitivity: 'base' });
+    if (lessonDiff !== 0) return lessonDiff;
+    const unitDiff = String(a.unit || '').localeCompare(String(b.unit || ''), 'tr', { sensitivity: 'base' });
+    if (unitDiff !== 0) return unitDiff;
+    return String(a.topic || '').localeCompare(String(b.topic || ''), 'tr', { sensitivity: 'base' });
+  });
+
+  return {
+    finishedTopicCount: finishedTopics.size,
+    finishedResourceCount: finishedResources.size,
+    finishedTopicDetails
+  };
+}
+
+function getCozulenSummaryForStudent(student) {
+  const records = Array.isArray(student?.cozulenSoruRecords) ? student.cozulenSoruRecords : [];
+  const totals = records.reduce((acc, item) => {
+    acc.question += Number(item?.questionCount || 0);
+    acc.correct += Number(item?.correct || 0);
+    acc.wrong += Number(item?.wrong || 0);
+    acc.blank += Number(item?.blank || 0);
+    return acc;
+  }, { question: 0, correct: 0, wrong: 0, blank: 0 });
+
+  return {
+    recordCount: records.length,
+    ...totals
+  };
+}
+
+function getCozulenBreakdownForStudent(student) {
+  const records = Array.isArray(student?.cozulenSoruRecords) ? student.cozulenSoruRecords : [];
+  const grouped = new Map();
+
+  records.forEach((item) => {
+    const lesson = String(item?.lesson || '-').trim() || '-';
+    const unit = String(item?.unit || '-').trim() || '-';
+    const topic = String(item?.topic || '-').trim() || '-';
+    const source = String(item?.source || '-').trim() || '-';
+    const key = `${lesson}|||${unit}|||${topic}|||${source}`;
+
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        lesson,
+        unit,
+        topic,
+        source,
+        recordCount: 0,
+        question: 0,
+        correct: 0,
+        wrong: 0,
+        blank: 0
+      });
+    }
+
+    const target = grouped.get(key);
+    target.recordCount += 1;
+    target.question += Number(item?.questionCount || 0);
+    target.correct += Number(item?.correct || 0);
+    target.wrong += Number(item?.wrong || 0);
+    target.blank += Number(item?.blank || 0);
+  });
+
+  return Array.from(grouped.values()).sort((a, b) => {
+    if (b.question !== a.question) return b.question - a.question;
+    const lessonDiff = a.lesson.localeCompare(b.lesson, 'tr', { sensitivity: 'base' });
+    if (lessonDiff !== 0) return lessonDiff;
+    return a.unit.localeCompare(b.unit, 'tr', { sensitivity: 'base' });
+  });
+}
+
+function renderRaporlamaStudentList() {
+  const container = document.getElementById('raporlamaStudentList');
+  if (!container) return;
+
+  const students = getStoredOgrenciler();
+  if (!students.length) {
+    container.innerHTML = '<div class="exam-history-empty">Henüz öğrenci yok.</div>';
+    return;
+  }
+
+  container.innerHTML = students.map((student) => {
+    const bransCount = getStoredBransExamsForStudent(student.id).length;
+    const genelCount = getStoredGenelExamsForStudent(student.id).length;
+    const solvedSummary = getCozulenSummaryForStudent(student);
+
+    return `
+      <div class="exam-history-item">
+        <div>
+          <strong>${escapeHtml(student.name || 'Öğrenci')}</strong>
+          <div class="exam-history-meta">${escapeHtml(getClassDisplayLabel(student.classLevel))} · Branş Deneme: ${bransCount} · Genel Deneme: ${genelCount} · Çözülen Kayıt: ${solvedSummary.recordCount}</div>
+        </div>
+        <div class="exam-history-actions">
+          <button type="button" class="exam-delete-btn exam-pdf-btn" onclick="indirOgrenciGenelRaporPdf(${Number(student.id)})">Raporla (PDF)</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function indirOgrenciGenelRaporPdf(studentId) {
+  const students = getStoredOgrenciler();
+  const student = students.find((s) => String(s.id) === String(studentId));
+  if (!student) {
+    alert('Öğrenci bulunamadı.');
+    return;
+  }
+
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert('PDF kütüphanesi yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin.');
+    return;
+  }
+
+  const bransRecords = getStoredBransExamsForStudent(student.id).slice().sort((a, b) => Number(b.savedAt || 0) - Number(a.savedAt || 0));
+  const genelRecords = getStoredGenelExamsForStudent(student.id).slice().sort((a, b) => Number(b.savedAt || 0) - Number(a.savedAt || 0));
+  const kaynakSummary = getKaynakKonuSummaryForStudent(student.id);
+  const solvedSummary = getCozulenSummaryForStudent(student);
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('l', 'pt', 'a4');
+  const logoDataUrl = await getPdfLogoDataUrl();
+  const margin = 22;
+  const marginBottom = 22;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const contentWidth = pageWidth - margin * 2;
+  const solvedBreakdown = getCozulenBreakdownForStudent(student);
+  const genelLessonLabelMap = {
+    Mat: 'Mat',
+    Fen: 'Fen',
+    Tur: 'Turkce',
+    Ink: 'Inkilap',
+    Ing: 'Ingilizce',
+    Din: 'Din'
+  };
+  let y = margin;
+
+  const ensureSpace = (needed = 20, onAddPage = null) => {
+    if (y + needed > pageHeight - marginBottom) {
+      doc.addPage();
+      y = margin;
+      if (typeof onAddPage === 'function') onAddPage();
+    }
+  };
+
+  const writeLine = (text, opts = {}) => {
+    const size = opts.size || 10;
+    const weight = opts.weight || 'normal';
+    const color = opts.color || [30, 41, 59];
+    const lineGap = opts.gap || 15;
+    const lines = doc.splitTextToSize(pdfSafeText(String(text || '')), contentWidth);
+
+    doc.setFont('helvetica', weight);
+    doc.setFontSize(size);
+    doc.setTextColor(color[0], color[1], color[2]);
+
+    lines.forEach((line) => {
+      ensureSpace(lineGap + 2);
+      doc.text(line, margin, y);
+      y += lineGap;
+    });
+  };
+
+  const writeSectionTitle = (title) => {
+    ensureSpace(26);
+    doc.setFillColor(18, 47, 92);
+    doc.roundedRect(margin, y - 12, Math.min(340, contentWidth), 24, 10, 10, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text(pdfSafeText(title), margin + 12, y + 5);
+    y += 22;
+  };
+
+  const drawSummaryGrid = (items) => {
+    const cols = 4;
+    const gap = 10;
+    const cardWidth = (contentWidth - gap * (cols - 1)) / cols;
+    const cardHeight = 54;
+
+    for (let i = 0; i < items.length; i += cols) {
+      ensureSpace(cardHeight + 4);
+      const rowItems = items.slice(i, i + cols);
+      rowItems.forEach((item, colIdx) => {
+        const x = margin + (colIdx * (cardWidth + gap));
+        doc.setFillColor(247, 250, 252);
+        doc.setDrawColor(221, 227, 235);
+        doc.roundedRect(x, y, cardWidth, cardHeight, 9, 9, 'FD');
+
+        doc.setTextColor(71, 85, 105);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text(pdfSafeText(item.label), x + 10, y + 17);
+
+        doc.setTextColor(15, 23, 42);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text(pdfSafeText(String(item.value)), x + 10, y + 39);
+      });
+      y += cardHeight + 10;
+    }
+  };
+
+  const drawTable = (sectionTitle, columns, rows, emptyMessage = 'Kayıt bulunamadı.', options = {}) => {
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const opts = options || {};
+
+    const inputTotalWidth = columns.reduce((sum, col) => sum + Math.max(1, Number(col.width) || 0), 0);
+    const fittedColumns = columns.map((col) => ({
+      ...col,
+      width: Math.max(34, Math.floor((Math.max(1, Number(col.width) || 0) / inputTotalWidth) * contentWidth))
+    }));
+    const usedWidth = fittedColumns.reduce((sum, col) => sum + col.width, 0);
+    const diff = contentWidth - usedWidth;
+    if (fittedColumns.length) {
+      fittedColumns[fittedColumns.length - 1].width += diff;
+    }
+
+    const headerHeight = 26;
+    const sectionTitleHeight = 24;
+    const sectionBottomGap = 10;
+
+    const getCellLines = (rawText, col) => {
+      const maxLineCount = Number(col.maxLines || 3);
+      const lines = doc.splitTextToSize(pdfSafeText(rawText), Math.max(16, col.width - 10));
+      if (lines.length <= maxLineCount) return lines;
+      const trimmed = lines.slice(0, Math.max(1, maxLineCount));
+      const lastIndex = trimmed.length - 1;
+      trimmed[lastIndex] = String(trimmed[lastIndex] || '').replace(/\s+$/, '') + '...';
+      return trimmed;
+    };
+
+    const estimateRowHeight = (row) => {
+      const lineCounts = fittedColumns.map((col) => {
+        const raw = row[col.key] == null ? '-' : String(row[col.key]);
+        const lines = getCellLines(raw, col);
+        return Math.max(1, lines.length);
+      });
+      return Math.max(24, (Math.max(...lineCounts) * 11) + 10);
+    };
+
+    if (opts.startOnNewPage && y > margin + 2) {
+      doc.addPage();
+      y = margin;
+    }
+
+    if (!safeRows.length) {
+      ensureSpace(sectionTitleHeight + 20);
+      writeSectionTitle(sectionTitle);
+      writeLine(emptyMessage, { size: 10, gap: 14 });
+      y += 4;
+      return;
+    }
+
+    const firstRowHeight = estimateRowHeight(safeRows[0]);
+    const minRequiredAtSectionStart = sectionTitleHeight + headerHeight + firstRowHeight + sectionBottomGap;
+
+    if (opts.keepTogether) {
+      const allRowsHeight = safeRows.reduce((sum, row) => sum + estimateRowHeight(row), 0);
+      const wholeSectionHeight = sectionTitleHeight + headerHeight + allRowsHeight + sectionBottomGap;
+      const availablePageHeight = pageHeight - margin - marginBottom;
+      if (wholeSectionHeight <= availablePageHeight) {
+        ensureSpace(wholeSectionHeight);
+      } else {
+        ensureSpace(minRequiredAtSectionStart);
+      }
+    } else {
+      ensureSpace(minRequiredAtSectionStart);
+    }
+
+    writeSectionTitle(sectionTitle);
+
+    const drawHeader = () => {
+      let x = margin;
+      doc.setDrawColor(214, 224, 234);
+      doc.setFillColor(225, 234, 245);
+      fittedColumns.forEach((col) => {
+        doc.rect(x, y, col.width, headerHeight, 'FD');
+        doc.setTextColor(30, 41, 59);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.8);
+        doc.text(pdfSafeText(col.label), x + col.width / 2, y + 17, { align: 'center' });
+        x += col.width;
+      });
+      y += headerHeight;
+    };
+
+    ensureSpace(headerHeight + 6);
+    drawHeader();
+
+    safeRows.forEach((row) => {
+      const rowHeight = estimateRowHeight(row);
+
+      ensureSpace(rowHeight + 2, () => {
+        drawHeader();
+      });
+
+      let x = margin;
+      fittedColumns.forEach((col, colIndex) => {
+        const raw = row[col.key] == null ? '-' : String(row[col.key]);
+        const lines = getCellLines(raw, col);
+
+        doc.setDrawColor(226, 232, 240);
+        if (colIndex % 2 === 0) {
+          doc.setFillColor(255, 255, 255);
+        } else {
+          doc.setFillColor(251, 253, 255);
+        }
+        doc.rect(x, y, col.width, rowHeight, 'FD');
+
+        doc.setTextColor(30, 41, 59);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+
+        const textYStart = y + 15;
+        lines.forEach((line, idx) => {
+          const textY = textYStart + (idx * 11);
+          if (col.align === 'center') {
+            doc.text(line, x + col.width / 2, textY, { align: 'center' });
+          } else if (col.align === 'right') {
+            doc.text(line, x + col.width - 6, textY, { align: 'right' });
+          } else {
+            doc.text(line, x + 5, textY);
+          }
+        });
+
+        x += col.width;
+      });
+
+      y += rowHeight;
+    });
+
+    y += 10;
+  };
+
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, 'PNG', margin, y, 76, 56, undefined, 'FAST');
+    } catch (error) {
+      // no-op
+    }
+  }
+
+  doc.setTextColor(18, 47, 92);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(24);
+  doc.text(pdfSafeText('OGRENCI PERFORMANS RAPORU'), margin + 92, y + 26);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.text(pdfSafeText(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`), margin + 92, y + 46);
+  doc.text(pdfSafeText(`Ogrenci: ${student.name || '-'}`), pageWidth - 240, y + 46);
+  y += 74;
+
+  writeSectionTitle('1. OGRENCI OZETI');
+  drawSummaryGrid([
+    { label: 'SINIF', value: getClassDisplayLabel(student.classLevel) },
+    { label: 'BRANS DENEME', value: bransRecords.length },
+    { label: 'GENEL DENEME', value: genelRecords.length },
+    { label: 'COZULEN KAYIT', value: solvedSummary.recordCount },
+    { label: 'TOPLAM SORU', value: solvedSummary.question },
+    { label: 'BITIRILEN KONU', value: kaynakSummary.finishedTopicCount },
+    { label: 'BITIRILEN KAYNAK', value: kaynakSummary.finishedResourceCount },
+    { label: 'COZULEN DOGRU', value: solvedSummary.correct }
+  ]);
+
+  const bransRows = bransRecords.map((item) => ({
+    examDate: formatExamDate(item.examDate || ''),
+    examName: item.examName || 'Brans Denemesi',
+    lesson: item.lesson || '-',
+    unit: item.unit || '-',
+    questionCount: Number(item.questionCount || 0),
+    correct: Number(item.correct || 0),
+    wrong: Number(item.wrong || 0),
+    blank: Number(item.blank || 0),
+    net: Number(item.net || 0).toFixed(2)
+  }));
+
+  drawTable('2. BRANS DENEMELERI', [
+    { key: 'examDate', label: 'TARIH', width: 70, align: 'center' },
+    { key: 'examName', label: 'DENEME', width: 205, align: 'left', maxLines: 2 },
+    { key: 'lesson', label: 'DERS', width: 96, align: 'left' },
+    { key: 'unit', label: 'UNITE', width: 112, align: 'left', maxLines: 2 },
+    { key: 'questionCount', label: 'SORU', width: 54, align: 'center' },
+    { key: 'correct', label: 'D', width: 42, align: 'center' },
+    { key: 'wrong', label: 'Y', width: 42, align: 'center' },
+    { key: 'blank', label: 'BOS', width: 50, align: 'center' },
+    { key: 'net', label: 'NET', width: 56, align: 'center' }
+  ], bransRows, 'Kayitli brans denemesi bulunamadi.');
+
+  const genelRows = genelRecords.map((item) => {
+    const lessonValues = item.lessons || {};
+    const row = {
+      examDate: formatExamDate(item.examDate || ''),
+      examName: item.examName || 'Genel Deneme',
+      totalNet: Number(item.totalNet || 0).toFixed(2)
+    };
+    Object.keys(genelLessonLabelMap).forEach((key) => {
+      row[key] = Number(lessonValues[key]?.net || 0).toFixed(2);
+    });
+    return row;
+  });
+
+  drawTable('3. GENEL DENEMELER', [
+    { key: 'examDate', label: 'TARIH', width: 72, align: 'center' },
+    { key: 'examName', label: 'DENEME', width: 230, align: 'left', maxLines: 2 },
+    { key: 'totalNet', label: 'TOPLAM NET', width: 88, align: 'center' },
+    { key: 'Mat', label: 'MAT', width: 56, align: 'center' },
+    { key: 'Fen', label: 'FEN', width: 56, align: 'center' },
+    { key: 'Tur', label: 'TUR', width: 56, align: 'center' },
+    { key: 'Ink', label: 'INK', width: 56, align: 'center' },
+    { key: 'Ing', label: 'ING', width: 56, align: 'center' },
+    { key: 'Din', label: 'DIN', width: 56, align: 'center' }
+  ], genelRows, 'Kayitli genel deneme bulunamadi.');
+
+  const kaynakRows = kaynakSummary.finishedTopicDetails.map((item) => ({
+    lesson: item.lesson || '-',
+    unit: item.unit || '-',
+    topic: item.topic || '-',
+    resources: item.resources && item.resources.length ? item.resources.join(', ') : '-',
+    finishedDate: item.finishedDate || '-'
+  }));
+
+  drawTable('4. KAYNAK / KONU ILERLEMESI', [
+    { key: 'lesson', label: 'DERS', width: 120, align: 'left' },
+    { key: 'unit', label: 'UNITE', width: 148, align: 'left', maxLines: 2 },
+    { key: 'topic', label: 'KONU', width: 220, align: 'left', maxLines: 2 },
+    { key: 'resources', label: 'BITEN KAYNAKLAR', width: 230, align: 'left', maxLines: 3 },
+    { key: 'finishedDate', label: 'BITIS TARIHI', width: 76, align: 'center' }
+  ], kaynakRows, 'Konu bitti statulu kayit bulunamadi.', { startOnNewPage: true, keepTogether: true });
+
+  const solvedRows = solvedBreakdown.map((item) => ({
+    lesson: item.lesson,
+    unit: item.unit,
+    topic: item.topic,
+    source: item.source,
+    recordCount: item.recordCount,
+    question: item.question,
+    correct: item.correct,
+    wrong: item.wrong,
+    blank: item.blank
+  }));
+
+  drawTable('5. COZULEN SORU DETAYI', [
+    { key: 'lesson', label: 'DERS', width: 88, align: 'left' },
+    { key: 'unit', label: 'UNITE', width: 132, align: 'left', maxLines: 2 },
+    { key: 'topic', label: 'KONU', width: 168, align: 'left', maxLines: 2 },
+    { key: 'source', label: 'KAYNAK', width: 176, align: 'left', maxLines: 2 },
+    { key: 'recordCount', label: 'KAYIT', width: 52, align: 'center' },
+    { key: 'question', label: 'SORU', width: 54, align: 'center' },
+    { key: 'correct', label: 'D', width: 38, align: 'center' },
+    { key: 'wrong', label: 'Y', width: 38, align: 'center' },
+    { key: 'blank', label: 'BOS', width: 38, align: 'center' }
+  ], solvedRows, 'Cozulen soru kaydi bulunamadi.');
+
+  const safeStudent = normalizeFileName(student.name || 'ogrenci');
+  doc.save(`${safeStudent}_performans_raporu.pdf`);
 }
 
 function renderStoredOgrenciler() {
