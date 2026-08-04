@@ -38,6 +38,23 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function getAuthUserFromRequest(req) {
+  const auth = req.headers.authorization;
+  if (!auth) return null;
+
+  const parts = auth.split(' ');
+  if (parts.length !== 2) return null;
+
+  const token = parts[1];
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const users = readUsers();
+    return users.find((u) => u.id === payload.id || normalizeEmail(u.email) === normalizeEmail(payload.email)) || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function isValidPasswordRule(password) {
   return typeof password === 'string' && password.length >= 8 && /[a-z]/.test(password) && /[0-9]/.test(password);
 }
