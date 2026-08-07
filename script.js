@@ -5219,10 +5219,11 @@ async function exportProgramPdf() {
     const tableWidth = pdfWidth - marginLeft - marginRight;
     const dayWidth = 70;
     const lessonWidth = 120;
-    const unitWidth = 140;
-    const topicWidth = 210;
-    const typeWidth = 120;
-    const sourceWidth = tableWidth - dayWidth - lessonWidth - unitWidth - topicWidth - typeWidth;
+    const unitWidth = 130;
+    const topicWidth = 180;
+    const typeWidth = 110;
+    const sourceWidth = 90;
+    const noteWidth = tableWidth - dayWidth - lessonWidth - unitWidth - topicWidth - typeWidth - sourceWidth;
     const weekStart = getWeekStartDate(programWeekOffset);
     const weekKey = getWeekStorageKey(programWeekOffset);
     const labels = getWeekDayLabels(weekStart);
@@ -5266,7 +5267,8 @@ async function exportProgramPdf() {
         splitText(task.unit || '-', unitWidth),
         splitText(task.topic || 'Konu girilmedi', topicWidth),
         splitText(task.type || 'Soru Çözümü', typeWidth),
-        splitText(task.source || 'Kaynak yok', sourceWidth)
+        splitText(task.source || 'Kaynak yok', sourceWidth),
+        splitText(task.note || '-', noteWidth)
       ].map((lines) => Math.max(1, lines.length));
       return Math.max(18, (Math.max(...linesPerCell) * rowLineHeight) + 8);
     };
@@ -5306,13 +5308,11 @@ async function exportProgramPdf() {
       pdf.setFillColor(255, 255, 255);
       pdf.roundedRect(boxX, boxY, boxW, boxH, 10, 10, 'FD');
 
-      pdf.setFillColor(16, 32, 64);
-      pdf.roundedRect(boxX + 8, boxY + 8, 62, 62, 10, 10, 'F');
       if (logoDataUrl) {
         try {
           pdf.addImage(logoDataUrl, 'PNG', boxX + 10, boxY + 10, 58, 58, undefined, 'FAST');
         } catch (error) {
-          pdf.setTextColor(255, 255, 255);
+          pdf.setTextColor(16, 32, 64);
           pdf.setFont('helvetica', 'bold');
           pdf.setFontSize(10);
           pdf.text('PARABOL', boxX + 39, boxY + 31, { align: 'center' });
@@ -5320,7 +5320,7 @@ async function exportProgramPdf() {
           pdf.text('KOCLUK', boxX + 39, boxY + 45, { align: 'center' });
         }
       } else {
-        pdf.setTextColor(255, 255, 255);
+        pdf.setTextColor(16, 32, 64);
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(10);
         pdf.text('PARABOL', boxX + 39, boxY + 31, { align: 'center' });
@@ -5346,9 +5346,11 @@ async function exportProgramPdf() {
       pdf.setTextColor(16, 32, 64);
       pdf.text(pdfSafeText('Ogrenci:'), rightX, boxY + 24);
       pdf.text(pdfSafeText('Hafta:'), rightX, boxY + 42);
-      pdf.setDrawColor(210, 217, 226);
+      pdf.setDrawColor(186, 198, 214);
+      pdf.setLineWidth(1.15);
       pdf.line(rightX + 46, boxY + 24, boxX + boxW - 16, boxY + 24);
       pdf.line(rightX + 46, boxY + 42, boxX + boxW - 16, boxY + 42);
+      pdf.setLineWidth(0.2);
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(8);
       pdf.text(pdfSafeText(student.name || '-'), rightX + 52, boxY + 21);
@@ -5364,7 +5366,8 @@ async function exportProgramPdf() {
         { label: 'ÜNİTE', width: unitWidth },
         { label: 'KONU', width: topicWidth },
         { label: 'PROGRAM TİPİ', width: typeWidth },
-        { label: 'KAYNAK', width: sourceWidth }
+        { label: 'KAYNAK', width: sourceWidth },
+        { label: 'ÖĞRETMEN NOTU', width: noteWidth }
       ];
 
       let x = marginLeft;
@@ -5439,7 +5442,8 @@ async function exportProgramPdf() {
             { width: unitWidth, value: task && !task.empty ? (task.unit || '-') : '' },
             { width: topicWidth, value: task && !task.empty ? (task.topic || 'Konu girilmedi') : '' },
             { width: typeWidth, value: task && !task.empty ? (task.type || 'Soru Çözümü') : '' },
-            { width: sourceWidth, value: task && !task.empty ? (task.source || 'Kaynak yok') : '' }
+            { width: sourceWidth, value: task && !task.empty ? (task.source || 'Kaynak yok') : '' },
+            { width: noteWidth, value: task && !task.empty ? (task.note || '-') : '' }
           ];
 
           let x = cellX;
@@ -5823,6 +5827,7 @@ function openTaskModal(dayKey) {
   document.getElementById('taskUnit').value = '';
   document.getElementById('taskTopic').value = '';
   document.getElementById('taskSource').value = '';
+  document.getElementById('taskTeacherNote').value = '';
   const taskLessonSelect = document.getElementById('taskLesson');
   const taskUnitSelect = document.getElementById('taskUnit');
   taskLessonSelect.onchange = function() {
@@ -5871,6 +5876,7 @@ function openTaskEditModal(dayKey, taskIndex) {
   populateTaskTopicOptions(classLevel, task.lesson || '', task.unit || '');
   document.getElementById('taskTopic').value = task.topic || '';
   populateTaskSourceOptions(classLevel, task.lesson || '', task.source || '');
+  document.getElementById('taskTeacherNote').value = task.note || '';
   const taskLessonSelect = document.getElementById('taskLesson');
   const taskUnitSelect = document.getElementById('taskUnit');
   taskLessonSelect.onchange = function() {
@@ -5899,7 +5905,9 @@ function formatTaskHtml(task, dayKey, taskIndex) {
   const topic = task.topic || 'Konu girilmedi';
   const type = task.type || 'Soru Çözümü';
   const source = task.source || 'Kaynak yok';
+  const note = task.note || '';
   const typeClass = getTaskCardTypeClass(type);
+  const noteHtml = note ? `<div class="task-card-note">Not: ${escapeHtml(note)}</div>` : '';
 
   return `
     <div class="task-card ${typeClass}">
@@ -5918,6 +5926,7 @@ function formatTaskHtml(task, dayKey, taskIndex) {
       <div class="task-card-footer">
         <span class="task-card-badge">${source}</span>
       </div>
+      ${noteHtml}
     </div>
   `;
 }
@@ -5960,6 +5969,7 @@ function saveTaskFromModal() {
   const unit = document.getElementById('taskUnit').value.trim();
   const topic = document.getElementById('taskTopic').value.trim();
   const source = document.getElementById('taskSource').value.trim();
+  const note = document.getElementById('taskTeacherNote').value.trim();
 
   const students = getStoredOgrenciler();
   const student = students.find(s => s.id === activeStudentId);
@@ -5978,6 +5988,7 @@ function saveTaskFromModal() {
     unit,
     topic,
     source,
+    note,
     savedAt: Date.now()
   };
 

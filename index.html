@@ -1076,6 +1076,7 @@
     .task-card.type-konu-anlatimi .task-card-type { background: rgba(255,255,255,0.14); color: #cbd5e1; }
     .task-card-footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
     .task-card-badge { background: rgba(255,255,255,0.16); color: #dbeafe; border: 1px solid rgba(255,255,255,0.18); padding: 6px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; max-width: 100%; overflow-wrap: anywhere; }
+    .task-card-note { font-size: 0.76rem; line-height: 1.4; color: rgba(248, 251, 255, 0.92); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); border-radius: 12px; padding: 9px 10px; overflow-wrap: anywhere; white-space: pre-wrap; }
     .task-card.type-deneme .task-card-badge { background: rgba(255,255,255,0.12); color: #ffe4fd; }
     .task-card.type-konu-anlatimi .task-card-badge { background: rgba(255,255,255,0.10); color: #cbd5e1; }
     .task-card-status { font-size: 0.78rem; color: #fff; font-weight: 700; background: #ff8800; padding: 8px 12px; border-radius: 999px; }
@@ -3063,6 +3064,10 @@
           <select id="taskSource" class="input-field">
             <option value="">Kaynak seçiniz</option>
           </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Öğretmen Notu</label>
+          <textarea id="taskTeacherNote" class="input-field" rows="3" style="resize: vertical; min-height: 96px;" placeholder="Öğrenci için kısa not yazın"></textarea>
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 10px;">
           <button class="btn-nav-outline" onclick="modalKapat('taskAddModal')">İptal</button>
