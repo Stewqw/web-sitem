@@ -101,6 +101,100 @@
     return null;
   }
 
+  const generatedLoginDomain = "parabol.kocluk";
+  const generatedLoginChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+  function normalizeLoginIdentifier(value) {
+    const rawValue = String(value || "").trim().toLowerCase();
+    if (!rawValue) return "";
+    if (rawValue.includes("@")) return rawValue;
+    return `${rawValue}@${generatedLoginDomain}`;
+  }
+
+  function generateLoginCode(prefix) {
+    const randomValues = new Uint8Array(6);
+    window.crypto.getRandomValues(randomValues);
+    const suffix = Array.from(randomValues, (value) => generatedLoginChars[value % generatedLoginChars.length]).join("");
+    return `${prefix}-${suffix}`;
+  }
+
+  async function createFirebaseAuthAccount({
+    loginCode,
+    displayName,
+    role,
+    linkedStudentIds,
+    studentId,
+    branch,
+    classLevel,
+  }) {
+    const email = normalizeLoginIdentifier(loginCode);
+    const signUpUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`;
+
+    const response = await fetch(signUpUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        password: loginCode,
+        returnSecureToken: true,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(data?.error?.message || "Firebase kullanici olusturulamadi.");
+      error.code = data?.error?.message || "app/firebase-account-create-failed";
+      throw error;
+    }
+
+    if (!db || !fieldValue) {
+      const missingDbError = new Error("Firestore kullanima hazir degil.");
+      missingDbError.code = "app/firestore-unavailable";
+      throw missingDbError;
+    }
+
+    const profilePayload = {
+      uid: data.localId,
+      email,
+      loginCode,
+      displayName,
+      role,
+      linkedStudentIds: Array.isArray(linkedStudentIds) ? linkedStudentIds : [],
+      studentId: studentId || "",
+      branch: branch || "",
+      classLevel: classLevel || "",
+      emailVerified: false,
+      createdAtIso: new Date().toISOString(),
+      updatedAtIso: new Date().toISOString(),
+    };
+
+    await withTimeout(
+      db.collection("users").doc(data.localId).set(
+        {
+          ...profilePayload,
+          createdAt: fieldValue.serverTimestamp(),
+          updatedAt: fieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      ),
+      5000,
+      "app/firestore-timeout",
+      "Profil verisi kaydedilirken zaman aşımı oluştu."
+    );
+
+    return {
+      uid: data.localId,
+      email,
+      loginCode,
+      displayName,
+      role,
+      linkedStudentIds: profilePayload.linkedStudentIds,
+      studentId: profilePayload.studentId,
+      branch: profilePayload.branch,
+      classLevel: profilePayload.classLevel,
+    };
+  }
+
   services.registerWithEmail = async function registerWithEmail(payload) {
     const email = String(payload.email || "").trim().toLowerCase();
     const password = String(payload.password || "");
@@ -173,8 +267,70 @@
     };
   };
 
+  services.provisionStudentAccounts = async function provisionStudentAccounts(payload) {
+    if (!auth.currentUser) {
+      const error = new Error("Ogretmen oturumu bulunamadi.");
+      error.code = "app/teacher-session-missing";
+      throw error;
+    }
+
+    const studentName = String(payload.studentName || "").trim();
+    if (!studentName) {
+      throw new Error("Ogrenci adi gerekli.");
+    }
+
+    const studentId = String(payload.studentId || "").trim();
+    const branch = String(payload.branch || "").trim();
+    const classLevel = String(payload.classLevel || "").trim();
+    const parentDisplayName = String(payload.parentDisplayName || `${studentName} Velisi`).trim();
+
+    const studentLoginCode = generateLoginCode("OG");
+    const parentLoginCode = generateLoginCode("VL");
+    const studentPassword = generatePassword();
+    const parentPassword = generatePassword();
+
+    const studentAccount = await createFirebaseAuthAccount({
+      loginCode: studentLoginCode,
+      displayName: studentName,
+      role: "student",
+      linkedStudentIds: [studentId],
+      studentId,
+      branch,
+      classLevel,
+    });
+
+    const parentAccount = await createFirebaseAuthAccount({
+      loginCode: parentLoginCode,
+      displayName: parentDisplayName,
+      role: "parent",
+      linkedStudentIds: [studentAccount.uid],
+      studentId: studentAccount.uid,
+      branch,
+      classLevel,
+    });
+
+    await withTimeout(
+      db.collection("users").doc(studentAccount.uid).set(
+        {
+          linkedStudentIds: [studentAccount.uid],
+          parentUid: parentAccount.uid,
+          updatedAt: fieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      ),
+      5000,
+      "app/firestore-timeout",
+      "Ogrenci profili guncellenemedi."
+    );
+
+    return {
+      student: studentAccount,
+      parent: parentAccount,
+    };
+  };
+
   services.loginWithEmail = async function loginWithEmail(payload) {
-    const email = String(payload.email || "").trim().toLowerCase();
+    const email = normalizeLoginIdentifier(payload.email || payload.loginCode || "");
     const password = String(payload.password || "");
     const credential = await withTimeout(
       auth.signInWithEmailAndPassword(email, password),
@@ -213,11 +369,34 @@
       console.warn("Profil okuma zamanında tamamlanamadı:", error);
     }
 
+    const role = profile && profile.role ? String(profile.role) : "";
+    const requiresVerification = role !== "student" && role !== "parent";
+
+    if (requiresVerification && !credential.user.emailVerified) {
+      try {
+        await withTimeout(
+          credential.user.sendEmailVerification(),
+          12000,
+          "app/email-verification-send-failed",
+          "Doğrulama e-postası tekrar gönderilemedi."
+        );
+      } catch (error) {
+        console.warn("Doğrulama e-postası yeniden gönderilemedi:", error);
+      }
+
+      await auth.signOut();
+      const err = new Error("E-posta adresinizi doğrulamadan giriş yapamazsınız.");
+      err.code = "app/email-not-verified";
+      throw err;
+    }
+
     return {
       uid: credential.user.uid,
       email: credential.user.email || email,
-      name: (profile && profile.name) || credential.user.displayName || "Kullanici",
-      branch: (profile && profile.branch) || ""
+      name: (profile && (profile.displayName || profile.name)) || credential.user.displayName || "Kullanici",
+      branch: (profile && profile.branch) || "",
+      role,
+      linkedStudentIds: (profile && profile.linkedStudentIds) || [],
     };
   };
 

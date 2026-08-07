@@ -27,9 +27,17 @@ let studentStorageHydratingPromise = null;
 
 const REGISTER_MIN_SUBMIT_MS = 2500;
 const REGISTER_MAX_TEXT_LEN = 120;
+const GENERATED_LOGIN_DOMAIN = 'parabol.kocluk';
 
 function getFirebaseServices() {
   return window.firebaseServices || null;
+}
+
+function normalizeLoginIdentifier(value) {
+  const rawValue = String(value || '').trim().toLowerCase();
+  if (!rawValue) return '';
+  if (rawValue.includes('@')) return rawValue;
+  return `${rawValue}@${GENERATED_LOGIN_DOMAIN}`;
 }
 
 function isFirebaseReady() {
@@ -212,18 +220,35 @@ function ekranıGoster(sayfaId) {
   }
 }
 
+function updatePageHistory(sayfaId, mode = 'push') {
+  const state = { sayfaId: sayfaId };
+  const hash = `#${sayfaId}`;
+  if (mode === 'replace') {
+    history.replaceState(state, '', hash);
+  } else if (mode === 'push') {
+    history.pushState(state, '', hash);
+  }
+}
+
 function sayfaAcs(sayfaId, historyEkle = true) {
   ekranıGoster(sayfaId);
   if (historyEkle) {
-    history.pushState({ sayfaId: sayfaId }, "", "#" + sayfaId);
+    updatePageHistory(sayfaId, 'push');
   }
+}
+
+function currentPageFromHash() {
+  const hash = String(window.location.hash || '').replace(/^#/, '');
+  if (!hash) return 'promoPage';
+  const allowedPages = new Set(['promoPage', 'loginPage', 'dashboardApp']);
+  return allowedPages.has(hash) ? hash : 'promoPage';
 }
 
 window.addEventListener('popstate', (e) => {
   if (e.state && e.state.sayfaId) {
     ekranıGoster(e.state.sayfaId);
   } else {
-    ekranıGoster('promoPage');
+    ekranıGoster(currentPageFromHash());
   }
 });
 
@@ -817,6 +842,7 @@ async function paneleGirisYap(nereden) {
   setSubmitButtonLoading(submitBtn, true);
 
   try {
+    const loginIdentifier = normalizeLoginIdentifier(eposta);
     if (errorBox) errorBox.style.display = 'none';
     const modalInfoBox = document.getElementById('modalInfoBox');
     if (modalInfoBox) modalInfoBox.style.display = 'none';
@@ -833,9 +859,9 @@ async function paneleGirisYap(nereden) {
 
     if (shouldUseFirebaseAuth()) {
       const services = getFirebaseServices();
-      const session = await services.loginWithEmail({ email: eposta, password: sifre });
+      const session = await services.loginWithEmail({ email: loginIdentifier, password: sifre });
 
-      const userEmail = (session && session.email ? session.email : eposta).toLowerCase();
+      const userEmail = (session && session.email ? session.email : loginIdentifier).toLowerCase();
       localStorage.removeItem('koclukToken');
       sessionStorage.removeItem('koclukToken');
       if (remember) {
@@ -853,7 +879,8 @@ async function paneleGirisYap(nereden) {
       await syncStudentStorageFromCloud();
 
       modalKapat('authModal');
-      sayfaAcs('dashboardApp');
+      ekranıGoster('dashboardApp');
+      updatePageHistory('dashboardApp', 'replace');
       renderStoredOgrenciler();
       updateUserCountLabel();
       renderKokpitUserCard();
@@ -863,7 +890,7 @@ async function paneleGirisYap(nereden) {
     const res = await fetch(API_URL + '/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: eposta, password: sifre })
+      body: JSON.stringify({ email: loginIdentifier, password: sifre })
     });
 
     const text = await res.text();
@@ -896,7 +923,8 @@ async function paneleGirisYap(nereden) {
     await syncStudentStorageFromCloud();
 
     modalKapat('authModal');
-    sayfaAcs('dashboardApp');
+    ekranıGoster('dashboardApp');
+    updatePageHistory('dashboardApp', 'replace');
     renderStoredOgrenciler();
     updateUserCountLabel();
     renderKokpitUserCard();
@@ -1183,6 +1211,16 @@ function collectBransTopicSelections() {
 
 function formatDateInput(inputEl) {
   if (!inputEl) return;
+  const rawValue = String(inputEl.value || '');
+  const caretPosition = typeof inputEl.selectionStart === 'number' ? inputEl.selectionStart : rawValue.length;
+  const looksLikeTypedDate = /^\d{0,2}(\.\d{0,2}(\.\d{0,4})?)?$/.test(rawValue);
+
+  // If the user is editing inside an already dotted date, do not rebuild the whole
+  // string from digits on every keystroke. That regrouping was shifting digits.
+  if (looksLikeTypedDate && rawValue.includes('.') && caretPosition < rawValue.length) {
+    return;
+  }
+
   const digits = String(inputEl.value || '').replace(/\D/g, '').slice(0, 8);
   const day = digits.slice(0, 2);
   const month = digits.slice(2, 4);
@@ -1250,28 +1288,113 @@ function formatExamDate(dateText) {
   return `${day}.${month}.${year}`;
 }
 
+function parseTrDateToNumber(dateText) {
+  const formatted = formatExamDate(String(dateText || '').trim());
+  const match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(formatted);
+  if (!match) return null;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  if (!day || !month || !year) return null;
+
+  return Number(`${year}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}`);
+}
+
+function isDateInTrRange(dateText, startText, endText) {
+  const value = parseTrDateToNumber(dateText);
+  if (value === null) return false;
+
+  const start = startText ? parseTrDateToNumber(startText) : null;
+  const end = endText ? parseTrDateToNumber(endText) : null;
+  if (start !== null && value < start) return false;
+  if (end !== null && value > end) return false;
+  return true;
+}
+
+function parseTrDateToNumber(dateText) {
+  const formatted = formatExamDate(String(dateText || '').trim());
+  const match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(formatted);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  if (!day || !month || !year) return null;
+  return Number(`${year}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}`);
+}
+
+function isDateInTrRange(dateText, startText, endText) {
+  const value = parseTrDateToNumber(dateText);
+  if (value === null) return false;
+  const start = startText ? parseTrDateToNumber(startText) : null;
+  const end = endText ? parseTrDateToNumber(endText) : null;
+  if (start !== null && value < start) return false;
+  if (end !== null && value > end) return false;
+  return true;
+}
+
 function pdfSafeText(value) {
   return String(value ?? '')
-    .replace(/İ/g, 'I')
-    .replace(/ı/g, 'i')
-    .replace(/Ş/g, 'S')
-    .replace(/ş/g, 's')
-    .replace(/Ğ/g, 'G')
-    .replace(/ğ/g, 'g')
-    .replace(/Ü/g, 'U')
-    .replace(/ü/g, 'u')
-    .replace(/Ö/g, 'O')
-    .replace(/ö/g, 'o')
-    .replace(/Ç/g, 'C')
-    .replace(/ç/g, 'c')
-    .replace(/Â|â/g, 'a')
-    .replace(/Î|î/g, 'i')
-    .replace(/Û|û/g, 'u')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 let pdfLogoDataUrlCache = null;
+let pdfUnicodeFontCachePromise = null;
+
+async function getPdfUnicodeFontData() {
+  if (pdfUnicodeFontCachePromise) return pdfUnicodeFontCachePromise;
+
+  const toBase64 = (buffer) => {
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 0x8000;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, chunk);
+    }
+    return btoa(binary);
+  };
+
+  pdfUnicodeFontCachePromise = Promise.all([
+    fetch('https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf', { cache: 'force-cache' }),
+    fetch('https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSans/NotoSans-Bold.ttf', { cache: 'force-cache' })
+  ]).then(async ([regularResponse, boldResponse]) => {
+    if (!regularResponse.ok || !boldResponse.ok) {
+      throw new Error('Unicode PDF fontu indirilemedi');
+    }
+
+    const regularBuffer = await regularResponse.arrayBuffer();
+    const boldBuffer = await boldResponse.arrayBuffer();
+
+    return {
+      regular: toBase64(regularBuffer),
+      bold: toBase64(boldBuffer)
+    };
+  }).catch((error) => {
+    pdfUnicodeFontCachePromise = null;
+    throw error;
+  });
+
+  return pdfUnicodeFontCachePromise;
+}
+
+async function applyPdfUnicodeFont(doc) {
+  if (!doc || typeof doc.addFileToVFS !== 'function' || typeof doc.addFont !== 'function') return false;
+
+  try {
+    const fontData = await getPdfUnicodeFontData();
+    doc.addFileToVFS('NotoSans-Regular.ttf', fontData.regular);
+    doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal');
+    doc.addFileToVFS('NotoSans-Bold.ttf', fontData.bold);
+    doc.addFont('NotoSans-Bold.ttf', 'NotoSans', 'bold');
+    doc.setFont('NotoSans', 'normal');
+    return true;
+  } catch (error) {
+    console.warn('Unicode PDF fontu yüklenemedi:', error);
+    return false;
+  }
+}
 
 async function getPdfLogoDataUrl() {
   if (pdfLogoDataUrlCache) return pdfLogoDataUrlCache;
@@ -1354,6 +1477,7 @@ async function indirBransExamPdf(recordId) {
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF('l', 'pt', 'a4');
+  const hasUnicodeFont = await applyPdfUnicodeFont(doc);
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 14;
@@ -1372,10 +1496,11 @@ async function indirBransExamPdf(recordId) {
 
   const drawSectionTitle = (title) => {
     ensureSpace(30);
+    const titleWidth = Math.max(170, Math.min(contentWidth * 0.7, doc.getTextWidth(pdfSafeText(title)) + 28));
     doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
-    doc.roundedRect(margin, y, 170, 22, 10, 10, 'F');
+    doc.roundedRect(margin, y, titleWidth, 22, 10, 10, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
     doc.setFontSize(11.5);
     doc.text(pdfSafeText(title), margin + 12, y + 15);
     y += 30;
@@ -1424,7 +1549,7 @@ async function indirBransExamPdf(recordId) {
     doc.setLineWidth(1.1);
     columns.forEach((col, colIndex) => {
       doc.setTextColor(255, 255, 255);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
       doc.setFontSize(headerFontSize);
       const headerLines = wrappedHeaders[colIndex];
       const headerTextHeight = headerLines.length * headerLineHeight;
@@ -1462,7 +1587,7 @@ async function indirBransExamPdf(recordId) {
           ? cellX + (col.width / 2)
           : cellX + 5;
         doc.setTextColor(20, 28, 45);
-        doc.setFont('helvetica', col.bold ? 'bold' : 'normal');
+        doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', col.bold ? 'bold' : 'normal');
         doc.setFontSize(fontSize);
         lines.forEach((line, lineIdx) => {
           doc.text(line, textX, textTop + lineIdx * lineHeight, textAlign === 'center' ? { align: 'center' } : {});
@@ -1484,22 +1609,22 @@ async function indirBransExamPdf(recordId) {
       doc.addImage(logoDataUrl, 'PNG', margin + 12, y + 14, 92, 68, undefined, 'FAST');
     } catch (error) {
       doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
       doc.setFontSize(12);
       doc.text('PARABOL KOCLUK', margin + 18, y + 48);
     }
   } else {
     doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
     doc.setFontSize(12);
     doc.text('PARABOL KOCLUK', margin + 18, y + 48);
   }
 
   doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
   doc.setFontSize(24);
-  doc.text(pdfSafeText('BRANS DENEME KARNESI'), margin + 155, y + 46);
-  doc.setFont('helvetica', 'normal');
+  doc.text(pdfSafeText('BRANŞ DENEME KARNESİ'), margin + 155, y + 46);
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(107, 114, 128);
   doc.text(pdfSafeText('Tek deneme raporu'), margin + 155, y + 63);
@@ -1509,33 +1634,33 @@ async function indirBransExamPdf(recordId) {
 
   const rightInfoX = pageWidth - 250;
   doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
   doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
-  doc.text('Ogrenci', rightInfoX, y + 30);
+  doc.text(pdfSafeText('Öğrenci'), rightInfoX, y + 30);
   doc.text('Rapor Tarihi', rightInfoX, y + 56);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
   doc.text(pdfSafeText(studentName), rightInfoX + 92, y + 30);
   doc.text(pdfSafeText(formatExamDate(item.examDate || new Date().toLocaleDateString('tr-TR'))), rightInfoX + 92, y + 56);
 
   y += 110;
 
-  drawSectionTitle('1. DENEME OZETI');
+  drawSectionTitle('1. DENEME ÖZETİ');
 
   const summaryColumns = [
     { key: 'examName', label: 'DENEME', width: 125, bold: true, align: 'left' },
     { key: 'classLevel', label: 'SINIF', width: 52, bold: false, align: 'center' },
     { key: 'lesson', label: 'DERS', width: 80, bold: false, align: 'center' },
-    { key: 'unit', label: 'UNITE', width: 190, bold: false, align: 'left' },
-    { key: 'examDate', label: 'TARIH', width: 78, bold: false, align: 'center' },
+    { key: 'unit', label: 'ÜNİTE', width: 190, bold: false, align: 'left' },
+    { key: 'examDate', label: 'TARİH', width: 78, bold: false, align: 'center' },
     { key: 'questionCount', label: 'SORU', width: 58, bold: false, align: 'center' },
-    { key: 'correct', label: 'DOGRU', width: 58, bold: false, align: 'center' },
-    { key: 'wrong', label: 'YANLIS', width: 58, bold: false, align: 'center' },
-    { key: 'blank', label: 'BOS', width: 50, bold: false, align: 'center' },
+    { key: 'correct', label: 'DOĞRU', width: 58, bold: false, align: 'center' },
+    { key: 'wrong', label: 'YANLIŞ', width: 58, bold: false, align: 'center' },
+    { key: 'blank', label: 'BOŞ', width: 50, bold: false, align: 'center' },
     { key: 'net', label: 'NET', width: 64, bold: true, align: 'center' }
   ];
 
   const summaryRows = [{
-    examName: item.examName || `${item.lesson || 'Brans'} Denemesi`,
+    examName: item.examName || `${item.lesson || 'Branş'} Denemesi`,
     classLevel: item.classLevel || '-',
     lesson: item.lesson || '-',
     unit: item.unit || '-',
@@ -1550,7 +1675,7 @@ async function indirBransExamPdf(recordId) {
   drawTable(summaryColumns, summaryRows, { headerHeight: 22, rowMinHeight: 42, fontSize: 9 });
 
   y += 14;
-  drawSectionTitle('YANLIS VE BOS SORU DAGILIMI');
+  drawSectionTitle('YANLIŞ VE BOŞ SORU DAĞILIMI');
 
   const topicRowsSource = Array.isArray(item.topicStats) && item.topicStats.length
     ? item.topicStats
@@ -1590,10 +1715,10 @@ async function indirBransExamPdf(recordId) {
 
   const topicColumns = [
     { key: 'topic', label: 'KONU', width: 265, bold: false, align: 'left' },
-    { key: 'wrongCount', label: 'YANLIS SAYI', width: 100, bold: true, align: 'center' },
-    { key: 'wrongRate', label: 'YANLIS ORAN (%)', width: 110, bold: true, align: 'center' },
-    { key: 'blankCount', label: 'BOS SAYI', width: 100, bold: true, align: 'center' },
-    { key: 'blankRate', label: 'BOS ORAN (%)', width: 110, bold: true, align: 'center' },
+    { key: 'wrongCount', label: 'YANLIŞ SAYI', width: 100, bold: true, align: 'center' },
+    { key: 'wrongRate', label: 'YANLIŞ ORAN (%)', width: 110, bold: true, align: 'center' },
+    { key: 'blankCount', label: 'BOŞ SAYI', width: 100, bold: true, align: 'center' },
+    { key: 'blankRate', label: 'BOŞ ORAN (%)', width: 110, bold: true, align: 'center' },
     { key: 'totalTracked', label: 'TOPLAM SORU', width: 128, bold: true, align: 'center' }
   ];
 
@@ -1613,7 +1738,7 @@ function deleteBransExam(recordId) {
   renderBransExamHistory();
 }
 
-function indirTumBransDenemelerPdf() {
+async function indirTumBransDenemelerPdf() {
   const records = getStoredBransExams();
   if (!records.length) {
     alert('İndirilecek branş denemesi kaydı bulunamadı.');
@@ -1629,6 +1754,7 @@ function indirTumBransDenemelerPdf() {
   const studentName = student && student.name ? student.name : 'Ogrenci';
 
   const doc = new window.jspdf.jsPDF('p', 'pt', 'a4');
+  const hasUnicodeFont = await applyPdfUnicodeFont(doc);
   const marginLeft = 40;
   const pageHeight = doc.internal.pageSize.getHeight();
   let y = 44;
@@ -1640,48 +1766,48 @@ function indirTumBransDenemelerPdf() {
     }
   };
 
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
   doc.setFontSize(16);
-  doc.text(pdfSafeText('Brans Deneme Karnesi'), marginLeft, y);
+  doc.text(pdfSafeText('Branş Deneme Karnesi'), marginLeft, y);
   y += 24;
 
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
   doc.setFontSize(11);
-  doc.text(pdfSafeText(`Ogrenci: ${studentName}`), marginLeft, y);
+  doc.text(pdfSafeText(`Öğrenci: ${studentName}`), marginLeft, y);
   y += 16;
   doc.text(pdfSafeText(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`), marginLeft, y);
   y += 22;
 
   records.forEach((item, index) => {
     ensureSpace(120);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text(pdfSafeText(`${index + 1}. ${item.examName || (item.lesson || 'Brans') + ' Denemesi'}`), marginLeft, y);
+    doc.text(pdfSafeText(`${index + 1}. ${item.examName || (item.lesson || 'Branş') + ' Denemesi'}`), marginLeft, y);
     y += 16;
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    doc.text(pdfSafeText(`Sinif: ${item.classLevel || '-'}`), marginLeft, y);
+    doc.text(pdfSafeText(`Sınıf: ${item.classLevel || '-'}`), marginLeft, y);
     y += 14;
     doc.text(pdfSafeText(`Ders: ${item.lesson || '-'}`), marginLeft, y);
     y += 14;
-    doc.text(pdfSafeText(`Unite: ${item.unit || '-'}`), marginLeft, y);
+    doc.text(pdfSafeText(`Ünite: ${item.unit || '-'}`), marginLeft, y);
     y += 14;
     doc.text(pdfSafeText(`Tarih: ${formatExamDate(item.examDate)}`), marginLeft, y);
     y += 14;
 
-    const details = `Soru: ${item.questionCount || 0}   Dogru: ${item.correct || 0}   Yanlis: ${item.wrong || 0}   Bos: ${item.blank || 0}`;
+    const details = `Soru: ${item.questionCount || 0}   Doğru: ${item.correct || 0}   Yanlış: ${item.wrong || 0}   Boş: ${item.blank || 0}`;
     doc.text(pdfSafeText(details), marginLeft, y);
     y += 14;
 
     const topicSummary = item.topicStats && item.topicStats.length
       ? item.topicStats.map((t) => `${t.unit} / ${t.topic} (Y:${t.wrong}, B:${t.blank})`).join(' | ')
       : '-';
-    const topicLines = doc.splitTextToSize(pdfSafeText(`Konu Dagilimi: ${topicSummary}`), 510);
+    const topicLines = doc.splitTextToSize(pdfSafeText(`Konu Dağılımı: ${topicSummary}`), 510);
     doc.text(topicLines, marginLeft, y);
     y += topicLines.length * 12 + 4;
 
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
     doc.text(pdfSafeText(`Net: ${Number(item.net || 0).toFixed(2)}`), marginLeft, y);
     y += 18;
 
@@ -1897,6 +2023,7 @@ async function indirGenelExamPdf(recordId) {
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF('l', 'pt', 'a4');
+  const hasUnicodeFont = await applyPdfUnicodeFont(doc);
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 14;
@@ -1964,7 +2091,7 @@ async function indirGenelExamPdf(recordId) {
   }
 
   doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
   doc.setFontSize(27);
   doc.text(pdfSafeText('GENEL DENEME KARNESI'), margin + 130, y + 42);
   doc.setDrawColor(orange[0], orange[1], orange[2]);
@@ -1972,11 +2099,11 @@ async function indirGenelExamPdf(recordId) {
   doc.line(margin + 130, y + 55, margin + 370, y + 55);
 
   const infoX = pageWidth - 240;
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
   doc.setFontSize(11);
   doc.text('OGRENCI', infoX, y + 28);
   doc.text('RAPOR TARIHI', infoX, y + 56);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
   doc.text(pdfSafeText(studentName), infoX + 96, y + 28);
   doc.text(pdfSafeText(formatExamDate(item.examDate || new Date().toLocaleDateString('tr-TR'))), infoX + 96, y + 56);
 
@@ -1986,9 +2113,9 @@ async function indirGenelExamPdf(recordId) {
   doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
   doc.roundedRect(margin, y, 220, 24, 10, 10, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
   doc.setFontSize(12);
-  doc.text('1. DENEME BILGILERI', margin + 16, y + 16);
+  doc.text('1. DENEME BİLGİLERİ', margin + 16, y + 16);
   y += 30;
 
   ensureSpace(56);
@@ -1997,7 +2124,7 @@ async function indirGenelExamPdf(recordId) {
   doc.setLineWidth(1);
   doc.rect(margin, y, contentWidth, 26, 'FD');
   doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
   doc.setFontSize(12);
   doc.text(pdfSafeText(`1. ${item.examName || 'GENEL DENEME'}`), margin + (contentWidth / 2), y + 17, { align: 'center' });
   y += 26;
@@ -2006,16 +2133,16 @@ async function indirGenelExamPdf(recordId) {
   doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2]);
   doc.rect(margin, y, contentWidth, 24, 'FD');
   doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
   doc.setFontSize(11);
   doc.text(pdfSafeText(`Tarih: ${formatExamDate(item.examDate)}`), margin + (contentWidth / 2), y + 16, { align: 'center' });
   y += 30;
 
   const tableColumns = [
     { key: 'lesson', label: 'DERS', width: Math.round(contentWidth * 0.22), align: 'left', bold: true },
-    { key: 'd', label: 'DOGRU', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
-    { key: 'y', label: 'YANLIS', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
-    { key: 'b', label: 'BOS', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
+    { key: 'd', label: 'DOĞRU', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
+    { key: 'y', label: 'YANLIŞ', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
+    { key: 'b', label: 'BOŞ', width: Math.round(contentWidth * 0.195), align: 'center', bold: true },
     { key: 'net', label: 'NET', width: 0, align: 'center', bold: true }
   ];
   const assignedWidth = tableColumns.slice(0, 4).reduce((sum, c) => sum + c.width, 0);
@@ -2092,7 +2219,7 @@ async function indirGenelExamPdf(recordId) {
     doc.rect(cellX, y, summaryWidth, summaryHeight, 'FD');
 
     if (i === 0) {
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
       doc.setFontSize(11);
       doc.text('GENEL TOPLAM', cellX + (summaryWidth / 2), y + 21, { align: 'center' });
       doc.text('RAPORU', cellX + (summaryWidth / 2), y + 38, { align: 'center' });
@@ -2100,14 +2227,14 @@ async function indirGenelExamPdf(recordId) {
     }
 
     const blockData = i === 1
-      ? { title: 'TOPLAM DOGRU', value: totals.d, color: [24, 138, 52] }
+      ? { title: 'TOPLAM DOĞRU', value: totals.d, color: [24, 138, 52] }
       : i === 2
-        ? { title: 'TOPLAM YANLIS', value: totals.y, color: [199, 46, 46] }
+        ? { title: 'TOPLAM YANLIŞ', value: totals.y, color: [199, 46, 46] }
         : i === 3
-          ? { title: 'TOPLAM BOS', value: totals.b, color: [107, 114, 128] }
+          ? { title: 'TOPLAM BOŞ', value: totals.b, color: [107, 114, 128] }
           : { title: 'TOPLAM NET', value: Number(item.totalNet ?? totals.net).toFixed(2), color: darkBlue };
 
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
     doc.setFontSize(10);
     doc.setTextColor(31, 41, 55);
     doc.text(blockData.title, cellX + (summaryWidth / 2), y + 18, { align: 'center' });
@@ -2121,7 +2248,7 @@ async function indirGenelExamPdf(recordId) {
   doc.save(`${safeStudent}_${safeExam}_genel-karnesi.pdf`);
 }
 
-function indirTumGenelDenemelerPdf() {
+async function indirTumGenelDenemelerPdf() {
   const records = getStoredGenelExams();
   if (!records.length) {
     alert('İndirilecek genel deneme kaydı bulunamadı.');
@@ -2137,6 +2264,7 @@ function indirTumGenelDenemelerPdf() {
   const studentName = student && student.name ? student.name : 'Ogrenci';
 
   const doc = new window.jspdf.jsPDF('p', 'pt', 'a4');
+  const hasUnicodeFont = await applyPdfUnicodeFont(doc);
   const marginLeft = 40;
   const pageHeight = doc.internal.pageSize.getHeight();
   let y = 44;
@@ -2148,26 +2276,26 @@ function indirTumGenelDenemelerPdf() {
     }
   };
 
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
   doc.setFontSize(16);
   doc.text(pdfSafeText('Genel Deneme Karnesi'), marginLeft, y);
   y += 24;
 
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
   doc.setFontSize(11);
-  doc.text(pdfSafeText(`Ogrenci: ${studentName}`), marginLeft, y);
+  doc.text(pdfSafeText(`Öğrenci: ${studentName}`), marginLeft, y);
   y += 16;
   doc.text(pdfSafeText(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`), marginLeft, y);
   y += 22;
 
   records.forEach((item, index) => {
     ensureSpace(130);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
     doc.setFontSize(12);
     doc.text(pdfSafeText(`${index + 1}. ${item.examName || 'Genel Deneme'}`), marginLeft, y);
     y += 16;
 
-    doc.setFont('helvetica', 'normal');
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
     doc.setFontSize(10);
     doc.text(pdfSafeText(`Tarih: ${formatExamDate(item.examDate)}`), marginLeft, y);
     y += 14;
@@ -2175,9 +2303,9 @@ function indirTumGenelDenemelerPdf() {
     const breakdown = [
       `Mat: ${Number(item.lessons?.Mat?.net || 0).toFixed(2)}`,
       `Fen: ${Number(item.lessons?.Fen?.net || 0).toFixed(2)}`,
-      `Tur: ${Number(item.lessons?.Tur?.net || 0).toFixed(2)}`,
+      `Türkçe: ${Number(item.lessons?.Tur?.net || 0).toFixed(2)}`,
       `Ink: ${Number(item.lessons?.Ink?.net || 0).toFixed(2)}`,
-      `Ing: ${Number(item.lessons?.Ing?.net || 0).toFixed(2)}`,
+      `İng: ${Number(item.lessons?.Ing?.net || 0).toFixed(2)}`,
       `Din: ${Number(item.lessons?.Din?.net || 0).toFixed(2)}`
     ].join('   |   ');
 
@@ -2185,7 +2313,7 @@ function indirTumGenelDenemelerPdf() {
     doc.text(wrapped, marginLeft, y);
     y += wrapped.length * 12 + 8;
 
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
     doc.text(pdfSafeText(`Toplam Net: ${Number(item.totalNet || 0).toFixed(2)}`), marginLeft, y);
     y += 20;
 
@@ -2272,7 +2400,8 @@ async function cikisYap() {
   currentUserEmail = null;
   currentUserName = null;
   currentUserBranch = null;
-  sayfaAcs('promoPage');
+  ekranıGoster('promoPage');
+  updatePageHistory('promoPage', 'replace');
 }
 
 function renderKokpitUserCard() {
@@ -2379,6 +2508,25 @@ let selectedKaynakSinif = '8';
 
 function normalizeResourceText(value) {
   return String(value || '').trim().toLocaleLowerCase('tr-TR');
+}
+
+function normalizeTopicText(value) {
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function hasMatchingTopicName(existingTopics, topicName) {
+  const normalizedTarget = normalizeTopicText(topicName);
+  if (!normalizedTarget) return false;
+  return Array.isArray(existingTopics) && existingTopics.some((existingTopic) => normalizeTopicText(existingTopic) === normalizedTarget);
+}
+
+function getVisibleTopicNamesForScope(lesson, unit) {
+  return getTopicOptionsForLesson(selectedUniteKonuSinif, lesson, unit).filter((name) => name && name !== 'Konu seçiniz');
 }
 
 function getSortedVisibleResources() {
@@ -2538,6 +2686,178 @@ function onUniteKonuUnitSelectChange() {
   renderUniteKonuTopicList();
 }
 
+function splitBulkUniteKonuValues(text) {
+  return String(text || '')
+    .split(/[\n,]/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function populateBulkUniteKonuUnitSelect() {
+  const lesson = document.getElementById('uniteKonuLesson')?.value || '';
+  const selectEl = document.getElementById('bulkTopicUnitSelect');
+  if (!selectEl) return;
+
+  const previousValue = selectEl.value || '';
+  const units = lesson ? getUnitOptionsForLesson(selectedUniteKonuSinif, lesson) : [];
+
+  selectEl.innerHTML = '<option value="">Ünite seçin</option>';
+  units.forEach((unit) => {
+    const option = document.createElement('option');
+    option.value = unit;
+    option.textContent = unit;
+    selectEl.appendChild(option);
+  });
+
+  if (previousValue && units.includes(previousValue)) {
+    selectEl.value = previousValue;
+  }
+}
+
+function openBulkUniteKonuUnitModal() {
+  const lesson = document.getElementById('uniteKonuLesson')?.value || '';
+  if (!lesson) {
+    alert('Önce ders seçin.');
+    return;
+  }
+
+  const modal = document.getElementById('bulkUniteModal');
+  const lessonSelect = document.getElementById('bulkUniteLessonSelect');
+  if (!modal || !lessonSelect) return;
+
+  lessonSelect.innerHTML = '<option value="">Ders seçin</option>';
+  getLessonOptionsForClass(selectedUniteKonuSinif).forEach((item) => {
+    const option = document.createElement('option');
+    option.value = item;
+    option.textContent = item;
+    lessonSelect.appendChild(option);
+  });
+  lessonSelect.value = lesson;
+  document.getElementById('bulkUniteTextarea').value = '';
+  modal.style.display = 'flex';
+}
+
+function closeBulkUniteKonuUnitModal() {
+  const modal = document.getElementById('bulkUniteModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function openBulkUniteKonuTopicModal() {
+  const lesson = document.getElementById('uniteKonuLesson')?.value || '';
+  if (!lesson) {
+    alert('Önce ders seçin.');
+    return;
+  }
+
+  const modal = document.getElementById('bulkTopicModal');
+  const selectEl = document.getElementById('bulkTopicUnitSelect');
+  if (!modal || !selectEl) return;
+
+  populateBulkUniteKonuUnitSelect();
+  document.getElementById('bulkTopicTextarea').value = '';
+  modal.style.display = 'flex';
+}
+
+function closeBulkUniteKonuTopicModal() {
+  const modal = document.getElementById('bulkTopicModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function addBulkUniteKonuUnits() {
+  const lesson = document.getElementById('bulkUniteLessonSelect')?.value || '';
+  const textareaEl = document.getElementById('bulkUniteTextarea');
+  if (!textareaEl) return;
+
+  if (!lesson) {
+    alert('Önce ders seçin.');
+    return;
+  }
+
+  const unitNames = splitBulkUniteKonuValues(textareaEl.value);
+  if (!unitNames.length) {
+    alert('Ünite adlarını girin.');
+    textareaEl.focus();
+    return;
+  }
+
+  let addedCount = 0;
+  updateCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson, (lessonData) => {
+    unitNames.forEach((unitName) => {
+      if (!lessonData.units.includes(unitName)) {
+        lessonData.units.push(unitName);
+        addedCount += 1;
+      }
+      if (!lessonData.topicsByUnit[unitName]) lessonData.topicsByUnit[unitName] = [];
+    });
+  });
+
+  textareaEl.value = '';
+  closeBulkUniteKonuUnitModal();
+  onUniteKonuLessonChange();
+  if (addedCount === 0) {
+    alert('Girilen üniteler zaten mevcut.');
+  }
+}
+
+function addBulkUniteKonuTopics() {
+  const lesson = document.getElementById('uniteKonuLesson')?.value || '';
+  const unit = document.getElementById('bulkTopicUnitSelect')?.value || '';
+  const textareaEl = document.getElementById('bulkTopicTextarea');
+  if (!textareaEl) return;
+
+  if (!lesson) {
+    alert('Önce ders seçin.');
+    return;
+  }
+  if (!unit) {
+    alert('Önce ünite seçin.');
+    return;
+  }
+
+  const topicNames = splitBulkUniteKonuValues(textareaEl.value);
+  if (!topicNames.length) {
+    alert('Konu adlarını girin.');
+    textareaEl.focus();
+    return;
+  }
+
+  let addedCount = 0;
+  const duplicateTopics = [];
+  const seenBatchTopics = new Set();
+  const existingTopics = getVisibleTopicNamesForScope(lesson, unit);
+  updateCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson, (lessonData) => {
+    if (!lessonData.units.includes(unit)) lessonData.units.push(unit);
+    if (!lessonData.topicsByUnit[unit]) lessonData.topicsByUnit[unit] = [];
+
+    topicNames.forEach((topicName) => {
+      const normalizedTopic = normalizeTopicText(topicName);
+      if (!normalizedTopic || seenBatchTopics.has(normalizedTopic)) {
+        if (normalizedTopic && !duplicateTopics.includes(topicName)) duplicateTopics.push(topicName);
+        return;
+      }
+      seenBatchTopics.add(normalizedTopic);
+
+      if (!hasMatchingTopicName(existingTopics, topicName) && !hasMatchingTopicName(lessonData.topicsByUnit[unit], topicName)) {
+        lessonData.topicsByUnit[unit].push(topicName);
+        addedCount += 1;
+      } else if (!duplicateTopics.includes(topicName)) {
+        duplicateTopics.push(topicName);
+      }
+    });
+  });
+
+  textareaEl.value = '';
+  closeBulkUniteKonuTopicModal();
+  renderUniteKonuTopicList();
+  if (duplicateTopics.length) {
+    alert(`Bu konu eklenmiştir: ${duplicateTopics.join(', ')}`);
+    return;
+  }
+  if (addedCount === 0) {
+    alert('Girilen konular zaten mevcut.');
+  }
+}
+
 function addUniteKonuUnit() {
   const lesson = document.getElementById('uniteKonuLesson')?.value || '';
   const inputEl = document.getElementById('uniteKonuUnitInput');
@@ -2581,16 +2901,32 @@ function addUniteKonuTopic() {
     return;
   }
 
+  let duplicateFound = false;
+  const existingTopics = getVisibleTopicNamesForScope(lesson, unit);
   updateCustomUnitTopicLessonData(selectedUniteKonuSinif, lesson, (lessonData) => {
     if (unit) {
       if (!lessonData.units.includes(unit)) lessonData.units.push(unit);
       if (!lessonData.topicsByUnit[unit]) lessonData.topicsByUnit[unit] = [];
-      if (!lessonData.topicsByUnit[unit].includes(topicName)) lessonData.topicsByUnit[unit].push(topicName);
+      if (hasMatchingTopicName(existingTopics, topicName) || hasMatchingTopicName(lessonData.topicsByUnit[unit], topicName)) {
+        duplicateFound = true;
+        return;
+      }
+      lessonData.topicsByUnit[unit].push(topicName);
       return;
     }
 
-    if (!lessonData.generalTopics.includes(topicName)) lessonData.generalTopics.push(topicName);
+    if (hasMatchingTopicName(existingTopics, topicName) || hasMatchingTopicName(lessonData.generalTopics, topicName)) {
+      duplicateFound = true;
+      return;
+    }
+    lessonData.generalTopics.push(topicName);
   });
+
+  if (duplicateFound) {
+    alert('Bu konu eklenmiştir.');
+    inputEl.focus();
+    return;
+  }
 
   inputEl.value = '';
   renderUniteKonuTopicList();
@@ -2687,6 +3023,7 @@ function renderUniteKonuTopicList() {
   const listEl = document.getElementById('uniteKonuTopicList');
   const lesson = document.getElementById('uniteKonuLesson')?.value || '';
   const unit = document.getElementById('uniteKonuUnitSelect')?.value || '';
+  const searchTerm = normalizeTopicText(document.getElementById('uniteKonuTopicSearch')?.value || '');
   if (!listEl) return;
 
   if (!lesson) {
@@ -2742,12 +3079,16 @@ function renderUniteKonuTopicList() {
     uniqueRows.push(row);
   });
 
-  if (!uniqueRows.length) {
+  const filteredRows = searchTerm
+    ? uniqueRows.filter((row) => normalizeTopicText(row.topic).includes(searchTerm))
+    : uniqueRows;
+
+  if (!filteredRows.length) {
     listEl.innerHTML = '<div class="exam-history-empty">Henüz konu yok.</div>';
     return;
   }
 
-  listEl.innerHTML = uniqueRows.map((row) => {
+  listEl.innerHTML = filteredRows.map((row) => {
     const removeBtn = `<button type="button" class="exam-delete-btn" onclick="removeCustomUniteKonuTopic(decodeURIComponent('${encodeURIComponent(row.unitName)}'), decodeURIComponent('${encodeURIComponent(row.topic)}'))">Sil</button>`;
     return `
       <div class="exam-history-item">
@@ -2760,6 +3101,12 @@ function renderUniteKonuTopicList() {
     `;
   }).join('');
 }
+
+const originalOnUniteKonuLessonChange = onUniteKonuLessonChange;
+onUniteKonuLessonChange = function() {
+  originalOnUniteKonuLessonChange();
+  populateBulkUniteKonuUnitSelect();
+};
 
 function addKaynakOnerisi() {
   const name = document.getElementById('resourceNameInput').value.trim();
@@ -2804,8 +3151,122 @@ function addKaynakOnerisi() {
   document.getElementById('resourceNameInput').focus();
 }
 
+function openBulkKaynakModal() {
+  const lessonEl = document.getElementById('resourceLessonSelect');
+  const modal = document.getElementById('bulkKaynakModal');
+  const bulkLessonEl = document.getElementById('bulkKaynakLessonSelect');
+  const textarea = document.getElementById('bulkKaynakTextarea');
+
+  if (bulkLessonEl && lessonEl) bulkLessonEl.value = lessonEl.value || 'Matematik';
+  if (textarea) {
+    textarea.value = '';
+    setTimeout(() => textarea.focus(), 0);
+  }
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeBulkKaynakModal() {
+  const modal = document.getElementById('bulkKaynakModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function splitBulkKaynakLine(line) {
+  const raw = String(line || '').trim();
+  if (!raw) return null;
+
+  const levelMatch = raw.match(/(?:\s*[\-–—]\s*|\s+)(kolay|orta|zor)\s*$/i);
+  const explicitLevel = levelMatch ? levelMatch[1].toLowerCase() : '';
+  const name = levelMatch ? raw.slice(0, levelMatch.index).trim() : raw;
+
+  return {
+    name,
+    level: explicitLevel ? explicitLevel.charAt(0).toUpperCase() + explicitLevel.slice(1) : 'Orta'
+  };
+}
+
+function addBulkKaynakOnerileri() {
+  const textarea = document.getElementById('bulkKaynakTextarea');
+  if (!textarea) return;
+
+  const defaultLesson = document.getElementById('bulkKaynakLessonSelect')?.value || document.getElementById('resourceLessonSelect')?.value || '';
+  const rawLines = String(textarea.value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n/g, ',')
+    .split(',')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!rawLines.length) {
+    alert('Lütfen en az bir kaynak satırı yapıştırın.');
+    return;
+  }
+
+  const normalizedIncoming = [];
+  const duplicateNames = new Set();
+
+  rawLines.forEach((line) => {
+    const parsed = splitBulkKaynakLine(line);
+    if (!parsed) return;
+
+    const name = String(parsed.name || '').trim();
+    if (!name) return;
+
+    const lesson = defaultLesson;
+    const level = String(parsed.level || 'Orta').trim() || 'Orta';
+    const url = '';
+    const normalizedName = normalizeResourceText(name);
+    const signature = `${normalizeResourceText(lesson)}|||${normalizedName}`;
+
+    if (duplicateNames.has(signature)) return;
+    duplicateNames.add(signature);
+
+    normalizedIncoming.push({
+      sinif: selectedKaynakSinif,
+      lesson,
+      name,
+      level,
+      url
+    });
+  });
+
+  if (!normalizedIncoming.length) {
+    alert('Geçerli kaynak bulunamadı. Her satıra en az bir kaynak adı yazın.');
+    return;
+  }
+
+  const existing = getSortedVisibleResources();
+  const existingSignatures = new Set(existing.map((item) => `${normalizeResourceText(item.lesson)}|||${normalizeResourceText(item.name)}`));
+  const newResources = [];
+  let skippedCount = 0;
+
+  normalizedIncoming.forEach((item) => {
+    const signature = `${normalizeResourceText(item.lesson)}|||${normalizeResourceText(item.name)}`;
+    if (existingSignatures.has(signature)) {
+      skippedCount += 1;
+      return;
+    }
+    existingSignatures.add(signature);
+    newResources.push(item);
+  });
+
+  if (!newResources.length) {
+    alert('Yapıştırdığınız kaynaklar zaten kayıtlı.');
+    return;
+  }
+
+  savedResourceSuggestions.unshift(...newResources);
+  setStoredResourceSuggestions(savedResourceSuggestions);
+  renderResourceSuggestions();
+  updateResourceNameSuggestions();
+  closeBulkKaynakModal();
+
+  const message = skippedCount > 0
+    ? `${newResources.length} kaynak eklendi, ${skippedCount} tekrar kayıt atlandı.`
+    : `${newResources.length} kaynak eklendi.`;
+  alert(message);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-  history.replaceState({ sayfaId: 'promoPage' }, "", "#promoPage");
   refreshRegisterSpamGuards();
   loadSavedResourceSuggestions();
   const resourceNameInput = document.getElementById('resourceNameInput');
@@ -2822,7 +3283,13 @@ document.addEventListener('DOMContentLoaded', () => {
   renderKokpitTodoDate();
   attemptAutoLogin().then(auto => {
     if (!auto) {
-      sayfaAcs('promoPage', false);
+      const initialPage = currentPageFromHash();
+      ekranıGoster(initialPage);
+      if (initialPage === 'promoPage') {
+        updatePageHistory('promoPage', 'replace');
+      } else if (initialPage === 'loginPage') {
+        updatePageHistory('loginPage', 'replace');
+      }
     }
     renderResourceSuggestions();
   });
@@ -3368,6 +3835,97 @@ function ogrenciEkle() {
   modalKapat('ogrenciEkleModal');
 }
 
+function getStudentAccessCredentials(student) {
+  if (!student || typeof student !== 'object') return null;
+  const credentials = student.accessCredentials;
+  if (!credentials || typeof credentials !== 'object') return null;
+  return credentials;
+}
+
+function renderStudentAccessCredentials(student) {
+  const credentials = getStudentAccessCredentials(student);
+  const studentCodeEl = document.getElementById('studentAccessCode');
+  const parentCodeEl = document.getElementById('parentAccessCode');
+  const createBtn = document.getElementById('studentAccessCreateBtn');
+
+  if (studentCodeEl) studentCodeEl.value = credentials && credentials.student ? credentials.student.loginCode || '' : '';
+  if (parentCodeEl) parentCodeEl.value = credentials && credentials.parent ? credentials.parent.loginCode || '' : '';
+
+  if (createBtn) {
+    createBtn.style.display = credentials && credentials.student && credentials.parent ? 'none' : 'inline-flex';
+  }
+}
+
+async function copyStudentAccessText(value, label) {
+  const text = String(value || '').trim();
+  if (!text) {
+    alert(`${label} henüz oluşturulmadı.`);
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (error) {
+    const tempInput = document.createElement('textarea');
+    tempInput.value = text;
+    tempInput.setAttribute('readonly', 'true');
+    tempInput.style.position = 'absolute';
+    tempInput.style.left = '-9999px';
+    document.body.appendChild(tempInput);
+    tempInput.select();
+    document.execCommand('copy');
+    document.body.removeChild(tempInput);
+  }
+}
+
+function copyStudentAccessField(fieldId, label) {
+  const field = document.getElementById(fieldId);
+  if (!field) {
+    alert('Kopyalanacak alan bulunamadı.');
+    return;
+  }
+
+  copyStudentAccessText(field.value, label);
+}
+
+async function createStudentAccessCredentials(studentId) {
+  const students = getStoredOgrenciler();
+  const student = students.find((item) => item.id.toString() === studentId.toString());
+  if (!student) {
+    alert('Ogrenci bulunamadi.');
+    return;
+  }
+
+  if (student.accessCredentials && student.accessCredentials.student && student.accessCredentials.parent) {
+    renderStudentAccessCredentials(student);
+    return;
+  }
+
+  const services = getFirebaseServices();
+  if (!shouldUseFirebaseAuth() || !services || typeof services.provisionStudentAccounts !== 'function') {
+    alert('Otomatik giris bilgileri su anda kullanilamiyor. Firebase baglantisini kontrol edin.');
+    return;
+  }
+
+  const result = await services.provisionStudentAccounts({
+    studentId: String(student.firebaseUid || student.id),
+    studentName: student.name || '',
+    branch: currentUserBranch || '',
+    classLevel: student.classLevel || '',
+    parentDisplayName: `${student.name || 'Ogrenci'} Velisi`
+  });
+
+  student.firebaseUid = result.student && result.student.uid ? result.student.uid : student.firebaseUid;
+  student.accessCredentials = {
+    student: result.student,
+    parent: result.parent
+  };
+
+  setStoredOgrenciler(students);
+  renderStoredOgrenciler();
+  renderStudentAccessCredentials(student);
+}
+
 function openStudentEditModal(studentId) {
   const students = getStoredOgrenciler();
   const student = students.find(s => s.id.toString() === studentId.toString());
@@ -3378,6 +3936,7 @@ function openStudentEditModal(studentId) {
   document.getElementById('editStudentEmail').value = student.email || '';
   document.getElementById('editStudentPhone').value = student.phone || '';
   document.getElementById('editStudentClass').value = student.classLevel || '4';
+  renderStudentAccessCredentials(student);
 
   modalAc('ogrenciDuzenleModal');
 }
@@ -3657,7 +4216,9 @@ function onKaynakLessonChange() {
   kaynakIlerlemeState.lesson = lesson;
   const stored = readKaynakIlerlemeData(lesson);
   kaynakIlerlemeState.data = stored.data;
-  kaynakIlerlemeState.resourcePool = stored.resourcePool;
+  const studentResources = getStudentResourceOptions(getActiveStudentRecord(), getActiveStudentClassLevel(), lesson);
+  const storedPool = Array.isArray(stored.resourcePool) ? stored.resourcePool.filter((name) => studentResources.includes(name)) : [];
+  kaynakIlerlemeState.resourcePool = storedPool.length ? storedPool : studentResources.slice();
   renderKaynakIlerlemeRows();
 }
 
@@ -3685,15 +4246,15 @@ function renderKaynakIlerlemeRows() {
     kaynakIlerlemeState.lesson = lesson;
     const stored = readKaynakIlerlemeData(lesson);
     kaynakIlerlemeState.data = stored.data;
-    kaynakIlerlemeState.resourcePool = stored.resourcePool;
+    const studentResources = getStudentResourceOptions(getActiveStudentRecord(), classLevel, lesson);
+    const storedPool = Array.isArray(stored.resourcePool) ? stored.resourcePool.filter((name) => studentResources.includes(name)) : [];
+    kaynakIlerlemeState.resourcePool = storedPool.length ? storedPool : studentResources.slice();
   }
 
   renderKaynakGlobalResources(classLevel, lesson);
 
   const units = getUnitOptionsForLesson(classLevel, lesson);
   const unitList = units.length ? units : ['GENEL'];
-  const availableResources = getResourceOptionsForClass(classLevel, lesson);
-
   const unitBlocks = unitList.map((unit) => {
     const unitTopics = getTopicOptionsForLesson(classLevel, lesson, unit === 'GENEL' ? '' : unit).filter((t) => t && t !== 'Konu seçiniz');
     if (!unitTopics.length) return '';
@@ -3815,7 +4376,7 @@ function renderKaynakGlobalResources(classLevel, lesson) {
   const selectedWrap = document.getElementById('kaynakIlerlemeSelectedResources');
   if (!selectEl || !selectedWrap) return;
 
-  const options = getResourceOptionsForClass(classLevel, lesson);
+  const options = getStudentResourceOptions(getActiveStudentRecord(), classLevel, lesson);
   selectEl.innerHTML = options.length
     ? ['<option value="">Kaynak secin</option>']
       .concat(options.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`))
@@ -4028,6 +4589,7 @@ function openStudentVeliPage() {
   }
 
   setStudentDetailSection('veli');
+  renderStudentResourceSelectionPanel();
   renderStudentParentInfo(student, 1);
   renderStudentParentInfo(student, 2);
   closeVeliEditMode(1);
@@ -4098,7 +4660,7 @@ function onCozulenLessonChange() {
 
   topicEl.innerHTML = '<option value="">Konu seçin</option>';
 
-  const sources = getResourceOptionsForClass(classLevel, lesson);
+  const sources = getStudentResourceOptions(getActiveStudentRecord(), classLevel, lesson);
   sourceEl.innerHTML = '<option value="">Kaynak seçin</option>';
   sources.forEach((name) => {
     const opt = document.createElement('option');
@@ -4431,15 +4993,15 @@ async function indirTumCozulenSorularPdf(selectedLessonFilter = '') {
   doc.setTextColor(darkBlue[0], darkBlue[1], darkBlue[2]);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(26);
-  doc.text(pdfSafeText('COZULEN SORU RAPORU'), marginLeft + 150, y + 42);
+  doc.text(pdfSafeText('ÇÖZÜLEN SORU RAPORU'), marginLeft + 150, y + 42);
   doc.setLineWidth(1);
   doc.line(marginLeft + 150, y + 56, marginLeft + 420, y + 56);
 
   const infoX = pageWidth - 240;
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text('OGRENCI', infoX, y + 28);
-  doc.text('RAPOR TARIHI', infoX, y + 56);
+  doc.text('ÖĞRENCİ', infoX, y + 28);
+  doc.text('RAPOR TARİHİ', infoX, y + 56);
   doc.setFont('helvetica', 'normal');
   doc.text(pdfSafeText(studentName), infoX + 95, y + 28);
   doc.text(pdfSafeText(new Date().toLocaleDateString('tr-TR')), infoX + 95, y + 56);
@@ -4630,6 +5192,90 @@ function renderStudentParentInfo(student, slot = 1) {
   if (nameEl) nameEl.value = name;
   if (phoneEl) phoneEl.value = phone;
   if (emailEl) emailEl.value = email;
+}
+
+function renderStudentResourceSelectionPanel() {
+  const student = getActiveStudentRecord();
+  const lessonSelect = document.getElementById('studentResourceLessonSelect');
+  const resourceSelect = document.getElementById('studentResourceSelect');
+  const assignedWrap = document.getElementById('studentAssignedResources');
+  if (!student || !lessonSelect || !resourceSelect || !assignedWrap) return;
+
+  const classLevel = String(student.classLevel || '8');
+  const previousLesson = lessonSelect.value || '';
+  const lessons = getLessonOptionsForClass(classLevel);
+
+  lessonSelect.innerHTML = '<option value="">Tüm dersler</option>';
+  lessons.forEach((lesson) => {
+    const option = document.createElement('option');
+    option.value = lesson;
+    option.textContent = lesson;
+    lessonSelect.appendChild(option);
+  });
+  if (previousLesson && lessons.includes(previousLesson)) {
+    lessonSelect.value = previousLesson;
+  }
+
+  const selectedLesson = lessonSelect.value || '';
+  const assignableResources = getAssignableResourceEntriesForStudent(student, classLevel, selectedLesson);
+  resourceSelect.innerHTML = '<option value="">Kaynak seçin</option>';
+  assignableResources.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = `${item.lesson}|||${item.name}`;
+    option.textContent = selectedLesson ? item.name : `${item.lesson} • ${item.name}`;
+    resourceSelect.appendChild(option);
+  });
+
+  const assignedResources = getStudentAssignedResources(student).filter((item) => !selectedLesson || item.lesson === selectedLesson);
+  assignedWrap.innerHTML = assignedResources.length
+    ? assignedResources.map((item, index) => `
+        <span class="progress-resource-chip">${escapeHtml(item.lesson)} • ${escapeHtml(item.name)}
+          <button type="button" class="progress-resource-remove" onclick="removeStudentResourceAssignment(${index}, '${escapeHtml(selectedLesson)}')">x</button>
+        </span>
+      `).join('')
+    : '<span class="progress-resource-muted">Henüz kaynak seçilmedi</span>';
+}
+
+function addStudentResourceAssignment() {
+  const student = getActiveStudentRecord();
+  const selectEl = document.getElementById('studentResourceSelect');
+  if (!student || !selectEl) return;
+
+  const rawValue = String(selectEl.value || '').trim();
+  if (!rawValue) return;
+
+  const [lesson, name] = rawValue.split('|||');
+  if (!lesson || !name) return;
+
+  const students = getStoredOgrenciler();
+  const targetStudent = students.find((item) => String(item.id) === String(student.id));
+  if (!targetStudent) return;
+
+  if (!Array.isArray(targetStudent.assignedResources)) targetStudent.assignedResources = [];
+  const exists = targetStudent.assignedResources.some((item) => String(item.lesson || '').trim() === lesson && String(item.name || '').trim() === name);
+  if (!exists) {
+    targetStudent.assignedResources.push({ lesson, name });
+    setStoredOgrenciler(students);
+  }
+
+  renderStudentResourceSelectionPanel();
+}
+
+function removeStudentResourceAssignment(filteredIndex, lessonFilter = '') {
+  const student = getActiveStudentRecord();
+  if (!student) return;
+
+  const students = getStoredOgrenciler();
+  const targetStudent = students.find((item) => String(item.id) === String(student.id));
+  if (!targetStudent || !Array.isArray(targetStudent.assignedResources)) return;
+
+  const filteredResources = getStudentAssignedResources(targetStudent).filter((item) => !lessonFilter || item.lesson === lessonFilter);
+  const target = filteredResources[Number(filteredIndex)];
+  if (!target) return;
+
+  targetStudent.assignedResources = targetStudent.assignedResources.filter((item) => !(String(item.lesson || '').trim() === target.lesson && String(item.name || '').trim() === target.name));
+  setStoredOgrenciler(students);
+  renderStudentResourceSelectionPanel();
 }
 
 function openVeliEditMode(slot = 1) {
@@ -5737,6 +6383,54 @@ function getResourceOptionsForClass(classLevel, lesson = '') {
   ));
 }
 
+function getActiveStudentRecord() {
+  if (!activeStudentId) return null;
+  return getStoredOgrenciler().find((student) => String(student.id) === String(activeStudentId)) || null;
+}
+
+function getStudentAssignedResources(student) {
+  if (!student || !Array.isArray(student.assignedResources)) return [];
+  return student.assignedResources
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => ({
+      lesson: String(item.lesson || '').trim(),
+      name: String(item.name || '').trim()
+    }))
+    .filter((item) => item.name);
+}
+
+function getStudentResourceOptions(student, classLevel, lesson = '') {
+  const assigned = getStudentAssignedResources(student);
+  if (!assigned.length) {
+    return getResourceOptionsForClass(classLevel, lesson);
+  }
+
+  const normalizedLesson = String(lesson || '').trim();
+  return Array.from(new Set(
+    assigned
+      .filter((item) => !normalizedLesson || item.lesson === normalizedLesson)
+      .map((item) => item.name)
+      .filter(Boolean)
+  ));
+}
+
+function getAssignableResourceEntriesForStudent(student, classLevel, lesson = '') {
+  const hiddenSignatures = new Set(getStoredHiddenResourceSuggestions());
+  const allResources = [...initialResourceSuggestions, ...savedResourceSuggestions];
+  const assignedKeys = new Set(
+    getStudentAssignedResources(student).map((item) => `${item.lesson}|||${item.name}`)
+  );
+
+  return allResources
+    .filter((item) => item.sinif === classLevel && (!lesson || item.lesson === lesson) && !hiddenSignatures.has(getResourceSignature(item)))
+    .filter((item) => !assignedKeys.has(`${String(item.lesson || '').trim()}|||${String(item.name || '').trim()}`))
+    .sort((a, b) => {
+      const lessonCompare = String(a.lesson || '').localeCompare(String(b.lesson || ''), 'tr', { sensitivity: 'base' });
+      if (lessonCompare !== 0) return lessonCompare;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'tr', { sensitivity: 'base' });
+    });
+}
+
 function getResourceStorageKey() {
   const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail');
   return email ? `kaynaklar_${email}` : 'kaynaklar_default';
@@ -5784,7 +6478,7 @@ function loadSavedResourceSuggestions() {
 function populateTaskSourceOptions(classLevel, lesson = '', currentSource = '') {
   const sourceSelect = document.getElementById('taskSource');
   sourceSelect.innerHTML = '<option value="">Kaynak seçiniz</option>';
-  const sources = getResourceOptionsForClass(classLevel, lesson);
+  const sources = getStudentResourceOptions(getActiveStudentRecord(), classLevel, lesson);
   sources.forEach(source => {
     const option = document.createElement('option');
     option.value = source;
@@ -5883,6 +6577,7 @@ function openTaskEditModal(dayKey, taskIndex) {
     populateTaskUnitOptions(classLevel, taskLessonSelect.value);
     taskUnitSelect.value = '';
     populateTaskTopicOptions(classLevel, taskLessonSelect.value, '');
+    populateTaskSourceOptions(classLevel, taskLessonSelect.value);
   };
   taskUnitSelect.onchange = function() {
     populateTaskTopicOptions(classLevel, taskLessonSelect.value, taskUnitSelect.value);
@@ -6254,11 +6949,19 @@ function getCozulenBreakdownForStudent(student) {
   const records = Array.isArray(student?.cozulenSoruRecords) ? student.cozulenSoruRecords : [];
   const grouped = new Map();
 
+  const parseDateValue = (value) => {
+    const normalized = formatExamDate(String(value || ''));
+    const match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(normalized);
+    if (!match) return 0;
+    return Number(`${match[3]}${match[2]}${match[1]}`);
+  };
+
   records.forEach((item) => {
     const lesson = String(item?.lesson || '-').trim() || '-';
     const unit = String(item?.unit || '-').trim() || '-';
     const topic = String(item?.topic || '-').trim() || '-';
     const source = String(item?.source || '-').trim() || '-';
+    const examDate = formatExamDate(String(item?.date || '-')) || '-';
     const key = `${lesson}|||${unit}|||${topic}|||${source}`;
 
     if (!grouped.has(key)) {
@@ -6267,7 +6970,7 @@ function getCozulenBreakdownForStudent(student) {
         unit,
         topic,
         source,
-        recordCount: 0,
+        examDate,
         question: 0,
         correct: 0,
         wrong: 0,
@@ -6276,7 +6979,9 @@ function getCozulenBreakdownForStudent(student) {
     }
 
     const target = grouped.get(key);
-    target.recordCount += 1;
+    if (!target.examDate || parseDateValue(examDate) > parseDateValue(target.examDate)) {
+      target.examDate = examDate;
+    }
     target.question += Number(item?.questionCount || 0);
     target.correct += Number(item?.correct || 0);
     target.wrong += Number(item?.wrong || 0);
@@ -6313,14 +7018,89 @@ function renderRaporlamaStudentList() {
           <div class="exam-history-meta">${escapeHtml(getClassDisplayLabel(student.classLevel))} · Branş Deneme: ${bransCount} · Genel Deneme: ${genelCount} · Çözülen Kayıt: ${solvedSummary.recordCount}</div>
         </div>
         <div class="exam-history-actions">
-          <button type="button" class="exam-delete-btn exam-pdf-btn" onclick="indirOgrenciGenelRaporPdf(${Number(student.id)})">Raporla (PDF)</button>
+          <button type="button" class="exam-delete-btn exam-pdf-btn" onclick="openOgrenciGenelRaporDateModal(${Number(student.id)})">Raporla (PDF)</button>
         </div>
       </div>
     `;
   }).join('');
 }
 
-async function indirOgrenciGenelRaporPdf(studentId) {
+let pendingOgrenciRaporStudentId = null;
+
+function openOgrenciGenelRaporDateModal(studentId) {
+  pendingOgrenciRaporStudentId = studentId;
+  const modal = document.getElementById('ogrenciRaporDateModal');
+  const startEl = document.getElementById('ogrenciRaporStartDate');
+  const endEl = document.getElementById('ogrenciRaporEndDate');
+  const allTimeEl = document.getElementById('ogrenciRaporAllTime');
+  const typeEl = document.getElementById('ogrenciRaporType');
+  const infoEl = document.getElementById('ogrenciRaporDateInfo');
+  const student = getStoredOgrenciler().find((s) => String(s.id) === String(studentId));
+
+  if (!modal || !startEl || !endEl || !allTimeEl || !typeEl) return;
+
+  startEl.value = '';
+  endEl.value = '';
+  allTimeEl.checked = true;
+  typeEl.value = 'full';
+  if (infoEl) {
+    infoEl.textContent = student ? `${student.name || 'Öğrenci'} için tarih aralığı seçin.` : 'Tarih aralığı seçin.';
+  }
+  onOgrenciRaporAllTimeChange();
+  modalAc('ogrenciRaporDateModal');
+}
+
+function onOgrenciRaporAllTimeChange() {
+  const allTimeEl = document.getElementById('ogrenciRaporAllTime');
+  const startEl = document.getElementById('ogrenciRaporStartDate');
+  const endEl = document.getElementById('ogrenciRaporEndDate');
+  const disabled = !!allTimeEl?.checked;
+  if (startEl) startEl.disabled = disabled;
+  if (endEl) endEl.disabled = disabled;
+}
+
+function confirmOgrenciGenelRaporDateFilter() {
+  const allTime = !!document.getElementById('ogrenciRaporAllTime')?.checked;
+  const startDate = String(document.getElementById('ogrenciRaporStartDate')?.value || '').trim();
+  const endDate = String(document.getElementById('ogrenciRaporEndDate')?.value || '').trim();
+  const reportType = String(document.getElementById('ogrenciRaporType')?.value || 'full').trim() || 'full';
+
+  if (!pendingOgrenciRaporStudentId) {
+    alert('Öğrenci raporu başlatılamadı.');
+    return;
+  }
+
+  if (!allTime) {
+    if (!startDate || !endDate) {
+      alert('Tarih aralığı için başlangıç ve bitiş tarihi girin ya da tüm zamanları seçin.');
+      return;
+    }
+    if (!isValidTrDate(startDate) || !isValidTrDate(endDate)) {
+      alert('Tarihler GG.AA.YYYY formatında ve geçerli olmalı.');
+      return;
+    }
+    const startValue = parseTrDateToNumber(startDate);
+    const endValue = parseTrDateToNumber(endDate);
+    if (startValue !== null && endValue !== null && startValue > endValue) {
+      alert('Başlangıç tarihi bitiş tarihinden sonra olamaz.');
+      return;
+    }
+  }
+
+  modalKapat('ogrenciRaporDateModal');
+  indirOgrenciGenelRaporPdf(
+    pendingOgrenciRaporStudentId,
+    allTime ? { allTime: true, reportType } : { allTime: false, startDate, endDate, reportType }
+  );
+}
+
+function filterReportRecordsByDateRange(records, getDateValue, filter) {
+  if (!Array.isArray(records)) return [];
+  if (!filter || filter.allTime) return records.slice();
+  return records.filter((item) => isDateInTrRange(getDateValue(item), filter.startDate, filter.endDate));
+}
+
+async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true, reportType: 'full' }) {
   const students = getStoredOgrenciler();
   const student = students.find((s) => String(s.id) === String(studentId));
   if (!student) {
@@ -6340,6 +7120,7 @@ async function indirOgrenciGenelRaporPdf(studentId) {
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF('l', 'pt', 'a4');
+  const hasUnicodeFont = await applyPdfUnicodeFont(doc);
   const logoDataUrl = await getPdfLogoDataUrl();
   const margin = 22;
   const marginBottom = 22;
@@ -6357,6 +7138,51 @@ async function indirOgrenciGenelRaporPdf(studentId) {
   };
   let y = margin;
 
+  const filteredBransRecords = filterReportRecordsByDateRange(bransRecords, (item) => item.examDate, dateFilter);
+  const filteredGenelRecords = filterReportRecordsByDateRange(genelRecords, (item) => item.examDate, dateFilter);
+  const filteredSolvedBreakdown = filterReportRecordsByDateRange(solvedBreakdown, (item) => item.examDate, dateFilter);
+  const filteredKonuDetails = Array.isArray(kaynakSummary.finishedTopicDetails)
+    ? filterReportRecordsByDateRange(kaynakSummary.finishedTopicDetails, (item) => item.finishedDate, dateFilter)
+    : [];
+
+  const filteredSolvedSummary = filteredSolvedBreakdown.reduce((acc, item) => {
+    acc.recordCount += 1;
+    acc.question += Number(item?.question || 0);
+    acc.correct += Number(item?.correct || 0);
+    acc.wrong += Number(item?.wrong || 0);
+    acc.blank += Number(item?.blank || 0);
+    return acc;
+  }, { recordCount: 0, question: 0, correct: 0, wrong: 0, blank: 0 });
+
+  const filteredKaynakSummary = filteredKonuDetails.reduce((acc, item) => {
+    acc.finishedTopicCount += 1;
+    if (Array.isArray(item.resources)) {
+      item.resources.forEach((resourceName) => {
+        const normalized = String(resourceName || '').trim().toLocaleLowerCase('tr-TR');
+        if (normalized) acc.finishedResourceSet.add(normalized);
+      });
+    }
+    acc.finishedTopicDetails.push(item);
+    return acc;
+  }, { finishedTopicCount: 0, finishedResourceSet: new Set(), finishedTopicDetails: [] });
+
+  filteredKaynakSummary.finishedResourceCount = filteredKaynakSummary.finishedResourceSet.size;
+  filteredKaynakSummary.finishedTopicDetails.sort((a, b) => {
+    const dateDiff = (parseTrDateToNumber(b.finishedDate) || 0) - (parseTrDateToNumber(a.finishedDate) || 0);
+    if (dateDiff !== 0) return dateDiff;
+    const lessonDiff = String(a.lesson || '').localeCompare(String(b.lesson || ''), 'tr', { sensitivity: 'base' });
+    if (lessonDiff !== 0) return lessonDiff;
+    const unitDiff = String(a.unit || '').localeCompare(String(b.unit || ''), 'tr', { sensitivity: 'base' });
+    if (unitDiff !== 0) return unitDiff;
+    return String(a.topic || '').localeCompare(String(b.topic || ''), 'tr', { sensitivity: 'base' });
+  });
+
+  const reportType = String(dateFilter?.reportType || 'full').toLocaleLowerCase('tr-TR');
+  const isGeneralOnly = reportType === 'genel';
+  const isBransOnly = reportType === 'brans';
+  const isKaynakOnly = reportType === 'kaynak';
+  const isCozulenOnly = reportType === 'cozulen';
+
   const ensureSpace = (needed = 20, onAddPage = null) => {
     if (y + needed > pageHeight - marginBottom) {
       doc.addPage();
@@ -6372,7 +7198,7 @@ async function indirOgrenciGenelRaporPdf(studentId) {
     const lineGap = opts.gap || 15;
     const lines = doc.splitTextToSize(pdfSafeText(String(text || '')), contentWidth);
 
-    doc.setFont('helvetica', weight);
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', weight);
     doc.setFontSize(size);
     doc.setTextColor(color[0], color[1], color[2]);
 
@@ -6384,14 +7210,14 @@ async function indirOgrenciGenelRaporPdf(studentId) {
   };
 
   const writeSectionTitle = (title) => {
-    ensureSpace(26);
+    ensureSpace(34);
     doc.setFillColor(18, 47, 92);
-    doc.roundedRect(margin, y - 12, Math.min(340, contentWidth), 24, 10, 10, 'F');
+    doc.roundedRect(margin, y, Math.min(340, contentWidth), 24, 10, 10, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text(pdfSafeText(title), margin + 12, y + 5);
-    y += 22;
+    doc.text(pdfSafeText(title), margin + 12, y + 16);
+    y += 34;
   };
 
   const drawSummaryGrid = (items) => {
@@ -6410,12 +7236,12 @@ async function indirOgrenciGenelRaporPdf(studentId) {
         doc.roundedRect(x, y, cardWidth, cardHeight, 9, 9, 'FD');
 
         doc.setTextColor(71, 85, 105);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
         doc.setFontSize(9);
         doc.text(pdfSafeText(item.label), x + 10, y + 17);
 
         doc.setTextColor(15, 23, 42);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
         doc.setFontSize(16);
         doc.text(pdfSafeText(String(item.value)), x + 10, y + 39);
       });
@@ -6438,7 +7264,7 @@ async function indirOgrenciGenelRaporPdf(studentId) {
       fittedColumns[fittedColumns.length - 1].width += diff;
     }
 
-    const headerHeight = 26;
+    const headerHeight = 38;
     const sectionTitleHeight = 24;
     const sectionBottomGap = 10;
 
@@ -6495,13 +7321,23 @@ async function indirOgrenciGenelRaporPdf(studentId) {
     const drawHeader = () => {
       let x = margin;
       doc.setDrawColor(214, 224, 234);
-      doc.setFillColor(225, 234, 245);
       fittedColumns.forEach((col) => {
+        const headerLines = doc.splitTextToSize(pdfSafeText(col.label), Math.max(16, col.width - 10));
+        const lineHeight = 10;
+        const totalTextHeight = Math.max(1, headerLines.length) * lineHeight;
+        const textStartY = y + Math.max(12, ((headerHeight - totalTextHeight) / 2) + 8);
+        doc.setFillColor(24, 47, 85);
         doc.rect(x, y, col.width, headerHeight, 'FD');
-        doc.setTextColor(30, 41, 59);
-        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
         doc.setFontSize(8.8);
-        doc.text(pdfSafeText(col.label), x + col.width / 2, y + 17, { align: 'center' });
+        headerLines.forEach((line, index) => {
+          if (col.align === 'left') {
+            doc.text(line, x + 6, textStartY + (index * lineHeight));
+          } else {
+            doc.text(line, x + (col.width / 2), textStartY + (index * lineHeight), { align: 'center' });
+          }
+        });
         x += col.width;
       });
       y += headerHeight;
@@ -6531,7 +7367,7 @@ async function indirOgrenciGenelRaporPdf(studentId) {
         doc.rect(x, y, col.width, rowHeight, 'FD');
 
         doc.setTextColor(30, 41, 59);
-        doc.setFont('helvetica', 'normal');
+        doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
         doc.setFontSize(9);
 
         const textYStart = y + 15;
@@ -6564,28 +7400,247 @@ async function indirOgrenciGenelRaporPdf(studentId) {
   }
 
   doc.setTextColor(18, 47, 92);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
   doc.setFontSize(24);
-  doc.text(pdfSafeText('OGRENCI PERFORMANS RAPORU'), margin + 92, y + 26);
-  doc.setFont('helvetica', 'normal');
+  const reportTitle = isGeneralOnly
+    ? 'GENEL DENEME RAPORU'
+    : isBransOnly
+      ? 'BRANŞ DENEME RAPORU'
+      : isKaynakOnly
+        ? 'KAYNAK / KONU İLERLEME RAPORU'
+        : isCozulenOnly
+          ? 'ÇÖZÜLEN SORU RAPORU'
+          : 'ÖĞRENCİ PERFORMANS RAPORU';
+
+  doc.text(pdfSafeText(reportTitle), margin + 92, y + 26);
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
   doc.setFontSize(11);
   doc.text(pdfSafeText(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`), margin + 92, y + 46);
-  doc.text(pdfSafeText(`Ogrenci: ${student.name || '-'}`), pageWidth - 240, y + 46);
-  y += 74;
+  doc.text(pdfSafeText(`Öğrenci: ${student.name || '-'}`), pageWidth - 240, y + 46);
+  if (!dateFilter || !dateFilter.allTime) {
+    doc.text(pdfSafeText(`Tarih Aralığı: ${formatExamDate(dateFilter.startDate)} - ${formatExamDate(dateFilter.endDate)}`), margin + 92, y + 62);
+  }
+  y += (!dateFilter || !dateFilter.allTime) ? 96 : 84;
 
-  writeSectionTitle('1. OGRENCI OZETI');
+  if (isGeneralOnly) {
+    const totalNet = filteredGenelRecords.reduce((sum, item) => sum + Number(item.totalNet || 0), 0).toFixed(2);
+    const averageNet = filteredGenelRecords.length ? (Number(totalNet) / filteredGenelRecords.length).toFixed(2) : '0.00';
+
+    if (!filteredGenelRecords.length) {
+      alert('Seçilen aralık için genel deneme kaydı bulunamadı.');
+      return;
+    }
+
+    writeSectionTitle('1. GENEL DENEMELER ÖZETİ');
+    drawSummaryGrid([
+      { label: 'GENEL DENEME', value: filteredGenelRecords.length },
+      { label: 'TOPLAM NET', value: totalNet },
+      { label: 'ORTALAMA NET', value: averageNet },
+      { label: 'SINIF', value: getClassDisplayLabel(student.classLevel) }
+    ]);
+
+    const genelOnlyRows = filteredGenelRecords.map((item) => {
+      const lessonValues = item.lessons || {};
+      const row = {
+        examDate: formatExamDate(item.examDate || ''),
+        examName: item.examName || 'Genel Deneme',
+        totalNet: Number(item.totalNet || 0).toFixed(2)
+      };
+      Object.keys(genelLessonLabelMap).forEach((key) => {
+        row[key] = Number(lessonValues[key]?.net || 0).toFixed(2);
+      });
+      return row;
+    });
+
+    drawTable('2. GENEL DENEMELER', [
+      { key: 'examDate', label: 'TARİH', width: 74, align: 'center' },
+      { key: 'examName', label: 'DENEME ADI', width: 236, align: 'left', maxLines: 2 },
+      { key: 'totalNet', label: 'TOPLAM NET', width: 92, align: 'center' },
+      { key: 'Mat', label: 'MAT', width: 58, align: 'center' },
+      { key: 'Fen', label: 'FEN', width: 58, align: 'center' },
+      { key: 'Tur', label: 'TÜRKÇE', width: 60, align: 'center' },
+      { key: 'Ink', label: 'İNK', width: 54, align: 'center' },
+      { key: 'Ing', label: 'İNG', width: 54, align: 'center' },
+      { key: 'Din', label: 'DİN', width: 54, align: 'center' }
+    ], genelOnlyRows, 'Kayitli genel deneme bulunamadi.');
+
+    const safeStudent = normalizeFileName(student.name || 'ogrenci');
+    doc.save(`${safeStudent}_genel_deneme_raporu.pdf`);
+    return;
+  }
+
+  if (isBransOnly) {
+    if (!filteredBransRecords.length) {
+      alert('Seçilen aralık için branş denemesi kaydı bulunamadı.');
+      return;
+    }
+
+    const totalQuestion = filteredBransRecords.reduce((sum, item) => sum + Number(item.questionCount || 0), 0);
+    const totalNet = filteredBransRecords.reduce((sum, item) => sum + Number(item.net || 0), 0).toFixed(2);
+    const averageNet = filteredBransRecords.length ? (Number(totalNet) / filteredBransRecords.length).toFixed(2) : '0.00';
+
+    writeSectionTitle('1. BRANŞ DENEMELERİ ÖZETİ');
+    drawSummaryGrid([
+      { label: 'BRANS DENEME', value: filteredBransRecords.length },
+      { label: 'TOPLAM SORU', value: totalQuestion },
+      { label: 'TOPLAM NET', value: totalNet },
+      { label: 'ORTALAMA NET', value: averageNet }
+    ]);
+
+    const bransOnlyRows = filteredBransRecords.map((item) => ({
+      examDate: formatExamDate(item.examDate || ''),
+      examName: item.examName || 'Brans Denemesi',
+      lesson: item.lesson || '-',
+      unit: item.unit || '-',
+      questionCount: Number(item.questionCount || 0),
+      correct: Number(item.correct || 0),
+      wrong: Number(item.wrong || 0),
+      blank: Number(item.blank || 0),
+      net: Number(item.net || 0).toFixed(2)
+    }));
+
+    drawTable('2. BRANŞ DENEMELERİ', [
+      { key: 'examDate', label: 'TARİH', width: 74, align: 'center' },
+      { key: 'examName', label: 'DENEME ADI', width: 220, align: 'left', maxLines: 2 },
+      { key: 'lesson', label: 'DERS ADI', width: 100, align: 'left' },
+      { key: 'unit', label: 'KONU / ÜNİTE', width: 120, align: 'left', maxLines: 2 },
+      { key: 'questionCount', label: 'SORU SAYISI', width: 62, align: 'center' },
+      { key: 'correct', label: 'DOĞRU', width: 48, align: 'center' },
+      { key: 'wrong', label: 'YANLIŞ', width: 48, align: 'center' },
+      { key: 'blank', label: 'BOŞ', width: 48, align: 'center' },
+      { key: 'net', label: 'NET', width: 58, align: 'center' }
+    ], bransOnlyRows, 'Kayitli brans denemesi bulunamadi.');
+
+    const bransTopicRows = [];
+    filteredBransRecords.forEach((item) => {
+      const topicStats = Array.isArray(item.topicStats) ? item.topicStats : [];
+      if (!topicStats.length) return;
+
+      topicStats.forEach((topicItem) => {
+        bransTopicRows.push({
+          examDate: formatExamDate(item.examDate || ''),
+          examName: item.examName || 'Branş Denemesi',
+          lesson: item.lesson || '-',
+          topic: topicItem?.unit
+            ? `${topicItem.unit || '-'} / ${topicItem.topic || '-'}`
+            : (topicItem?.topic || '-'),
+          wrong: Number(topicItem?.wrong || 0),
+          blank: Number(topicItem?.blank || 0)
+        });
+      });
+    });
+
+    drawTable('3. BRANŞ DENEME KONU DAĞILIMI', [
+      { key: 'examDate', label: 'TARİH', width: 74, align: 'center' },
+      { key: 'examName', label: 'DENEME ADI', width: 184, align: 'left', maxLines: 2 },
+      { key: 'lesson', label: 'DERS', width: 90, align: 'left' },
+      { key: 'topic', label: 'KONU / ÜNİTE', width: 260, align: 'left', maxLines: 3 },
+      { key: 'wrong', label: 'YANLIŞ', width: 68, align: 'center' },
+      { key: 'blank', label: 'BOŞ', width: 68, align: 'center' }
+    ], bransTopicRows, 'Bu branş denemelerinde konu bazlı yanlış/boş kaydı bulunamadı.');
+
+    const safeStudent = normalizeFileName(student.name || 'ogrenci');
+    doc.save(`${safeStudent}_brans_deneme_raporu.pdf`);
+    return;
+  }
+
+  if (isKaynakOnly) {
+    if (!filteredKonuDetails.length) {
+      alert('Seçilen aralık için konu/kaynak ilerleme kaydı bulunamadı.');
+      return;
+    }
+
+    writeSectionTitle('1. KAYNAK / KONU İLERLEME ÖZETİ');
+    drawSummaryGrid([
+      { label: 'BİTİRİLEN KONU', value: filteredKaynakSummary.finishedTopicCount },
+      { label: 'BİTİRİLEN KAYNAK', value: filteredKaynakSummary.finishedResourceCount },
+      { label: 'SINIF', value: getClassDisplayLabel(student.classLevel) },
+      { label: 'KAYIT', value: filteredKonuDetails.length }
+    ]);
+
+    const kaynakOnlyRows = filteredKonuDetails.map((item) => ({
+      lesson: item.lesson || '-',
+      unit: item.unit || '-',
+      topic: item.topic || '-',
+      resources: item.resources && item.resources.length ? item.resources.join(', ') : '-',
+      finishedDate: item.finishedDate || '-'
+    }));
+
+    drawTable('2. KAYNAK / KONU İLERLEMESİ', [
+      { key: 'lesson', label: 'DERS', width: 120, align: 'left' },
+      { key: 'unit', label: 'ÜNİTE', width: 148, align: 'left', maxLines: 2 },
+      { key: 'topic', label: 'KONU', width: 220, align: 'left', maxLines: 2 },
+      { key: 'resources', label: 'BİTEN KAYNAKLAR', width: 230, align: 'left', maxLines: 3 },
+      { key: 'finishedDate', label: 'BİTİŞ TARİHİ', width: 76, align: 'center' }
+    ], kaynakOnlyRows, 'Konu bitti statulu kayit bulunamadi.');
+
+    const safeStudent = normalizeFileName(student.name || 'ogrenci');
+    doc.save(`${safeStudent}_kaynak_konu_ilerleme_raporu.pdf`);
+    return;
+  }
+
+  if (isCozulenOnly) {
+    if (!filteredSolvedBreakdown.length) {
+      alert('Seçilen aralık için çözülen soru kaydı bulunamadı.');
+      return;
+    }
+
+    const totalQuestion = filteredSolvedBreakdown.reduce((sum, item) => sum + Number(item.question || 0), 0);
+    const totalCorrect = filteredSolvedBreakdown.reduce((sum, item) => sum + Number(item.correct || 0), 0);
+    const totalWrong = filteredSolvedBreakdown.reduce((sum, item) => sum + Number(item.wrong || 0), 0);
+    const totalBlank = filteredSolvedBreakdown.reduce((sum, item) => sum + Number(item.blank || 0), 0);
+
+    writeSectionTitle('1. ÇÖZÜLEN SORU ÖZETİ');
+    drawSummaryGrid([
+      { label: 'KAYIT', value: filteredSolvedBreakdown.length },
+      { label: 'TOPLAM SORU', value: totalQuestion },
+      { label: 'DOĞRU', value: totalCorrect },
+      { label: 'YANLIŞ', value: totalWrong },
+      { label: 'BOŞ', value: totalBlank }
+    ]);
+
+    const solvedOnlyRows = filteredSolvedBreakdown.map((item) => ({
+      lesson: item.lesson,
+      unit: item.unit,
+      topic: item.topic,
+      source: item.source,
+      examDate: item.examDate || '-',
+      question: item.question,
+      correct: item.correct,
+      wrong: item.wrong,
+      blank: item.blank
+    }));
+
+    drawTable('2. ÇÖZÜLEN SORU DETAYI', [
+      { key: 'lesson', label: 'DERS', width: 88, align: 'left' },
+      { key: 'unit', label: 'ÜNİTE', width: 132, align: 'left', maxLines: 2 },
+      { key: 'topic', label: 'KONU', width: 168, align: 'left', maxLines: 2 },
+      { key: 'source', label: 'KAYNAK', width: 176, align: 'left', maxLines: 2 },
+      { key: 'examDate', label: 'DENEME TARİHİ', width: 82, align: 'center' },
+      { key: 'question', label: 'SORU', width: 54, align: 'center' },
+      { key: 'correct', label: 'D', width: 38, align: 'center' },
+      { key: 'wrong', label: 'Y', width: 38, align: 'center' },
+      { key: 'blank', label: 'BOŞ', width: 38, align: 'center' }
+    ], solvedOnlyRows, 'Cozulen soru kaydi bulunamadi.');
+
+    const safeStudent = normalizeFileName(student.name || 'ogrenci');
+    doc.save(`${safeStudent}_cozulen_soru_raporu.pdf`);
+    return;
+  }
+
+  writeSectionTitle('1. ÖĞRENCİ ÖZETİ');
   drawSummaryGrid([
     { label: 'SINIF', value: getClassDisplayLabel(student.classLevel) },
-    { label: 'BRANS DENEME', value: bransRecords.length },
-    { label: 'GENEL DENEME', value: genelRecords.length },
-    { label: 'COZULEN KAYIT', value: solvedSummary.recordCount },
-    { label: 'TOPLAM SORU', value: solvedSummary.question },
-    { label: 'BITIRILEN KONU', value: kaynakSummary.finishedTopicCount },
-    { label: 'BITIRILEN KAYNAK', value: kaynakSummary.finishedResourceCount },
-    { label: 'COZULEN DOGRU', value: solvedSummary.correct }
+    { label: 'BRANŞ DENEME', value: filteredBransRecords.length },
+    { label: 'GENEL DENEME', value: filteredGenelRecords.length },
+    { label: 'ÇÖZÜLEN KAYIT', value: filteredSolvedSummary.recordCount },
+    { label: 'TOPLAM SORU', value: filteredSolvedSummary.question },
+    { label: 'BİTİRİLEN KONU', value: filteredKaynakSummary.finishedTopicCount },
+    { label: 'BİTİRİLEN KAYNAK', value: filteredKaynakSummary.finishedResourceCount },
+    { label: 'ÇÖZÜLEN DOĞRU', value: filteredSolvedSummary.correct }
   ]);
 
-  const bransRows = bransRecords.map((item) => ({
+  const bransRows = filteredBransRecords.map((item) => ({
     examDate: formatExamDate(item.examDate || ''),
     examName: item.examName || 'Brans Denemesi',
     lesson: item.lesson || '-',
@@ -6597,19 +7652,19 @@ async function indirOgrenciGenelRaporPdf(studentId) {
     net: Number(item.net || 0).toFixed(2)
   }));
 
-  drawTable('2. BRANS DENEMELERI', [
-    { key: 'examDate', label: 'TARIH', width: 70, align: 'center' },
-    { key: 'examName', label: 'DENEME', width: 205, align: 'left', maxLines: 2 },
-    { key: 'lesson', label: 'DERS', width: 96, align: 'left' },
-    { key: 'unit', label: 'UNITE', width: 112, align: 'left', maxLines: 2 },
-    { key: 'questionCount', label: 'SORU', width: 54, align: 'center' },
-    { key: 'correct', label: 'D', width: 42, align: 'center' },
-    { key: 'wrong', label: 'Y', width: 42, align: 'center' },
-    { key: 'blank', label: 'BOS', width: 50, align: 'center' },
-    { key: 'net', label: 'NET', width: 56, align: 'center' }
+  drawTable('2. BRANŞ DENEMELERİ', [
+    { key: 'examDate', label: 'TARİH', width: 74, align: 'center' },
+    { key: 'examName', label: 'DENEME ADI', width: 220, align: 'left', maxLines: 2 },
+    { key: 'lesson', label: 'DERS ADI', width: 100, align: 'left' },
+    { key: 'unit', label: 'KONU / ÜNİTE', width: 120, align: 'left', maxLines: 2 },
+    { key: 'questionCount', label: 'SORU SAYISI', width: 62, align: 'center' },
+    { key: 'correct', label: 'DOĞRU', width: 48, align: 'center' },
+    { key: 'wrong', label: 'YANLIŞ', width: 48, align: 'center' },
+    { key: 'blank', label: 'BOŞ', width: 48, align: 'center' },
+    { key: 'net', label: 'NET', width: 58, align: 'center' }
   ], bransRows, 'Kayitli brans denemesi bulunamadi.');
 
-  const genelRows = genelRecords.map((item) => {
+  const genelRows = filteredGenelRecords.map((item) => {
     const lessonValues = item.lessons || {};
     const row = {
       examDate: formatExamDate(item.examDate || ''),
@@ -6623,18 +7678,18 @@ async function indirOgrenciGenelRaporPdf(studentId) {
   });
 
   drawTable('3. GENEL DENEMELER', [
-    { key: 'examDate', label: 'TARIH', width: 72, align: 'center' },
-    { key: 'examName', label: 'DENEME', width: 230, align: 'left', maxLines: 2 },
-    { key: 'totalNet', label: 'TOPLAM NET', width: 88, align: 'center' },
-    { key: 'Mat', label: 'MAT', width: 56, align: 'center' },
-    { key: 'Fen', label: 'FEN', width: 56, align: 'center' },
-    { key: 'Tur', label: 'TUR', width: 56, align: 'center' },
-    { key: 'Ink', label: 'INK', width: 56, align: 'center' },
-    { key: 'Ing', label: 'ING', width: 56, align: 'center' },
-    { key: 'Din', label: 'DIN', width: 56, align: 'center' }
+    { key: 'examDate', label: 'TARİH', width: 74, align: 'center' },
+    { key: 'examName', label: 'DENEME ADI', width: 236, align: 'left', maxLines: 2 },
+    { key: 'totalNet', label: 'TOPLAM NET', width: 92, align: 'center' },
+    { key: 'Mat', label: 'MAT', width: 58, align: 'center' },
+    { key: 'Fen', label: 'FEN', width: 58, align: 'center' },
+    { key: 'Tur', label: 'TÜRKÇE', width: 60, align: 'center' },
+    { key: 'Ink', label: 'İNK', width: 54, align: 'center' },
+    { key: 'Ing', label: 'İNG', width: 54, align: 'center' },
+    { key: 'Din', label: 'DİN', width: 54, align: 'center' }
   ], genelRows, 'Kayitli genel deneme bulunamadi.');
 
-  const kaynakRows = kaynakSummary.finishedTopicDetails.map((item) => ({
+  const kaynakRows = filteredKaynakSummary.finishedTopicDetails.map((item) => ({
     lesson: item.lesson || '-',
     unit: item.unit || '-',
     topic: item.topic || '-',
@@ -6642,36 +7697,36 @@ async function indirOgrenciGenelRaporPdf(studentId) {
     finishedDate: item.finishedDate || '-'
   }));
 
-  drawTable('4. KAYNAK / KONU ILERLEMESI', [
+    drawTable('4. KAYNAK / KONU İLERLEMESİ', [
     { key: 'lesson', label: 'DERS', width: 120, align: 'left' },
-    { key: 'unit', label: 'UNITE', width: 148, align: 'left', maxLines: 2 },
+      { key: 'unit', label: 'ÜNİTE', width: 148, align: 'left', maxLines: 2 },
     { key: 'topic', label: 'KONU', width: 220, align: 'left', maxLines: 2 },
-    { key: 'resources', label: 'BITEN KAYNAKLAR', width: 230, align: 'left', maxLines: 3 },
-    { key: 'finishedDate', label: 'BITIS TARIHI', width: 76, align: 'center' }
+      { key: 'resources', label: 'BİTEN KAYNAKLAR', width: 230, align: 'left', maxLines: 3 },
+      { key: 'finishedDate', label: 'BİTİŞ TARİHİ', width: 76, align: 'center' }
   ], kaynakRows, 'Konu bitti statulu kayit bulunamadi.', { startOnNewPage: true, keepTogether: true });
 
-  const solvedRows = solvedBreakdown.map((item) => ({
+  const solvedRows = filteredSolvedBreakdown.map((item) => ({
     lesson: item.lesson,
     unit: item.unit,
     topic: item.topic,
     source: item.source,
-    recordCount: item.recordCount,
+    examDate: item.examDate || '-',
     question: item.question,
     correct: item.correct,
     wrong: item.wrong,
     blank: item.blank
   }));
 
-  drawTable('5. COZULEN SORU DETAYI', [
+    drawTable('5. ÇÖZÜLEN SORU DETAYI', [
     { key: 'lesson', label: 'DERS', width: 88, align: 'left' },
-    { key: 'unit', label: 'UNITE', width: 132, align: 'left', maxLines: 2 },
+      { key: 'unit', label: 'ÜNİTE', width: 132, align: 'left', maxLines: 2 },
     { key: 'topic', label: 'KONU', width: 168, align: 'left', maxLines: 2 },
     { key: 'source', label: 'KAYNAK', width: 176, align: 'left', maxLines: 2 },
-    { key: 'recordCount', label: 'KAYIT', width: 52, align: 'center' },
+      { key: 'examDate', label: 'DENEME TARİHİ', width: 82, align: 'center' },
     { key: 'question', label: 'SORU', width: 54, align: 'center' },
     { key: 'correct', label: 'D', width: 38, align: 'center' },
     { key: 'wrong', label: 'Y', width: 38, align: 'center' },
-    { key: 'blank', label: 'BOS', width: 38, align: 'center' }
+      { key: 'blank', label: 'BOŞ', width: 38, align: 'center' }
   ], solvedRows, 'Cozulen soru kaydi bulunamadi.');
 
   const safeStudent = normalizeFileName(student.name || 'ogrenci');

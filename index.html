@@ -2322,7 +2322,10 @@
                   <option>Zor</option>
                 </select>
                 <input id="resourceUrlInput" type="text" class="input-field" placeholder="URL (opsiyonel)" style="width:100%;" />
-                <button type="button" onclick="addKaynakOnerisi()" class="btn-action btn-coral" style="width:100%; padding: 12px 14px; font-size: 0.95rem;">Ekle</button>
+                <div style="display:grid; gap:8px; width:100%;">
+                  <button type="button" onclick="addKaynakOnerisi()" class="btn-action btn-coral" style="width:100%; padding: 12px 14px; font-size: 0.95rem;">Ekle</button>
+                  <button type="button" onclick="openBulkKaynakModal()" class="btn-nav-outline" style="width:100%; padding: 11px 14px; font-size: 0.92rem;">Toplu Yapıştır</button>
+                </div>
               </div>
             </div>
             <div id="resourceSuggestionsList" style="margin-top: 20px; display: grid; gap: 14px;"></div>
@@ -2350,9 +2353,10 @@
                 </div>
               </div>
 
-              <div style="display:grid; grid-template-columns: 1.2fr 0.8fr; gap:12px; margin-bottom:12px;">
+              <div style="display:grid; grid-template-columns: 1.2fr auto auto; gap:10px; margin-bottom:12px; align-items:center;">
                 <input id="uniteKonuUnitInput" type="text" class="input-field" placeholder="Yeni ünite adı" style="margin-bottom:0;">
-                <button type="button" class="btn-action btn-coral" onclick="addUniteKonuUnit()">Ünite Ekle</button>
+                <button type="button" class="btn-action btn-coral" onclick="addUniteKonuUnit()" style="padding: 10px 16px; min-width: 122px; font-size: 0.92rem;">Ünite Ekle</button>
+                <button type="button" class="btn-nav-outline" onclick="openBulkUniteKonuUnitModal()" style="padding: 10px 16px; min-width: 138px; font-size: 0.92rem;">Toplu Ünite Ekle</button>
               </div>
 
               <div style="display:grid; grid-template-columns: 1fr; gap:12px; margin-bottom:12px;">
@@ -2364,14 +2368,18 @@
                 </div>
               </div>
 
-              <div style="display:grid; grid-template-columns: 1.2fr 0.8fr; gap:12px;">
+              <div style="display:grid; grid-template-columns: 1.2fr auto auto; gap:10px; align-items:center;">
                 <input id="uniteKonuTopicInput" type="text" class="input-field" placeholder="Yeni konu adı" style="margin-bottom:0;">
-                <button type="button" class="btn-action btn-coral" onclick="addUniteKonuTopic()">Konu Ekle</button>
+                <button type="button" class="btn-action btn-coral" onclick="addUniteKonuTopic()" style="padding: 10px 16px; min-width: 122px; font-size: 0.92rem;">Konu Ekle</button>
+                <button type="button" class="btn-nav-outline" onclick="openBulkUniteKonuTopicModal()" style="padding: 10px 16px; min-width: 138px; font-size: 0.92rem;">Toplu Konu Ekle</button>
               </div>
             </div>
 
             <div class="exam-history-wrap" style="margin-bottom:12px;">
-              <div class="exam-history-title">Konular</div>
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                <div class="exam-history-title" style="margin-bottom:0;">Konular</div>
+                <input id="uniteKonuTopicSearch" type="text" class="input-field" placeholder="Konu ara" oninput="renderUniteKonuTopicList()" style="margin-bottom:0; max-width:180px; padding:8px 10px; font-size:0.85rem;">
+              </div>
               <div id="uniteKonuTopicList" class="exam-history-list">
                 <div class="exam-history-empty">Henüz konu yok.</div>
               </div>
@@ -2550,6 +2558,40 @@
               <div>
                 <h2 style="margin:0; font-size:1.25rem; color: var(--color-dark-teal);">Veli Bilgileri</h2>
                 <p style="margin:8px 0 0; color:#64748b; font-size:0.9rem;">Seçili öğrenciye ait veli iletişim kartı.</p>
+              </div>
+            </div>
+
+            <div class="veli-card" style="margin-bottom:12px;">
+              <div class="veli-header">
+                <div class="veli-profile">
+                  <div class="veli-avatar">K</div>
+                  <div>
+                    <div class="veli-name">Öğrenci Kaynak Seçimi</div>
+                    <div class="veli-role">Bu öğrencinin kullanacağı kaynakları seçin</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-row" style="margin-bottom:10px;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Ders</label>
+                  <select id="studentResourceLessonSelect" class="input-field" onchange="renderStudentResourceSelectionPanel()" style="margin-bottom:0;">
+                    <option value="">Tüm dersler</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Kaynak</label>
+                  <div class="progress-resource-picker">
+                    <select id="studentResourceSelect" class="input-field progress-resource-select">
+                      <option value="">Kaynak seçin</option>
+                    </select>
+                    <button type="button" class="btn-action btn-coral progress-resource-add" onclick="addStudentResourceAssignment()">Ekle</button>
+                  </div>
+                </div>
+              </div>
+
+              <div id="studentAssignedResources" class="progress-global-selected">
+                <span class="progress-resource-muted">Henüz kaynak seçilmedi</span>
               </div>
             </div>
 
@@ -2761,6 +2803,46 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="ogrenciRaporDateModal" onclick="if(event.target === this) modalKapat('ogrenciRaporDateModal')" style="display:none;">
+    <div class="modal-card" style="max-width:500px;">
+      <button class="modal-close" onclick="modalKapat('ogrenciRaporDateModal')">✕</button>
+      <h3 style="margin:0; color:var(--color-dark-teal);">Rapor Tarih Aralığı</h3>
+      <p id="ogrenciRaporDateInfo" style="margin:10px 0 0; color:#64748b; font-size:0.9rem;">Tarih aralığı seçin.</p>
+
+      <div class="form-group" style="margin-top:14px; margin-bottom:0;">
+        <label class="form-label">Rapor Türü</label>
+        <select id="ogrenciRaporType" class="input-field" style="margin-bottom:0;">
+          <option value="full">Tam Rapor</option>
+          <option value="genel">Sadece Genel Denemeler</option>
+          <option value="brans">Sadece Branş Denemeleri</option>
+          <option value="kaynak">Sadece Konu / Kaynak İlerlemesi</option>
+          <option value="cozulen">Sadece Çözülen Sorular</option>
+        </select>
+      </div>
+
+      <label style="display:flex; align-items:center; gap:10px; margin-top:14px; font-size:0.9rem; font-weight:700; color:#334155;">
+        <input id="ogrenciRaporAllTime" type="checkbox" checked onchange="onOgrenciRaporAllTimeChange()">
+        Tüm zamanlar
+      </label>
+
+      <div class="form-row" style="margin-top:12px;">
+        <div class="form-group">
+          <label class="form-label">Başlangıç Tarihi</label>
+          <input id="ogrenciRaporStartDate" type="text" class="input-field" placeholder="GG.AA.YYYY" maxlength="10" oninput="formatDateInput(this)" style="margin-bottom:0;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Bitiş Tarihi</label>
+          <input id="ogrenciRaporEndDate" type="text" class="input-field" placeholder="GG.AA.YYYY" maxlength="10" oninput="formatDateInput(this)" style="margin-bottom:0;">
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px; flex-wrap:wrap;">
+        <button class="btn-nav-outline" type="button" onclick="modalKapat('ogrenciRaporDateModal')">İptal</button>
+        <button class="btn-action btn-coral" type="button" style="padding:10px 18px;" onclick="confirmOgrenciGenelRaporDateFilter()">PDF Oluştur</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="muhasebeDetailModal" style="display:none;">
     <div class="modal-card modal-card-lg muhasebe-detail-modal">
       <button class="modal-close" onclick="closeMuhasebeDetailModal()">✕</button>
@@ -2922,6 +3004,25 @@
             <label class="form-label">Telefon</label>
             <input id="editStudentPhone" type="tel" class="input-field" placeholder="05XXXXXXXXX">
           </div>
+        </div>
+
+        <div style="flex: 1; background: #f8fafc; padding: 14px; border-radius: 12px; border: 1px solid #e2e8f0;">
+          <h4 style="font-size: 0.8rem; color: var(--color-dark-teal); margin-bottom: 8px;">GİRİŞ BİLGİLERİ</h4>
+          <div class="form-group">
+            <label class="form-label">Öğrenci Giriş Kodu</label>
+            <div class="form-row" style="gap: 8px; align-items: center;">
+              <input id="studentAccessCode" type="text" class="input-field" readonly style="margin-bottom: 0;">
+              <button type="button" class="btn-nav-outline" style="padding: 10px 14px; white-space: nowrap;" onclick="copyStudentAccessField('studentAccessCode', 'Öğrenci giriş kodu')">Kopyala</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Veli Giriş Kodu</label>
+            <div class="form-row" style="gap: 8px; align-items: center;">
+              <input id="parentAccessCode" type="text" class="input-field" readonly style="margin-bottom: 0;">
+              <button type="button" class="btn-nav-outline" style="padding: 10px 14px; white-space: nowrap;" onclick="copyStudentAccessField('parentAccessCode', 'Veli giriş kodu')">Kopyala</button>
+            </div>
+          </div>
+          <button id="studentAccessCreateBtn" class="btn-action btn-coral" style="width: 100%; margin-top: 6px;" onclick="createStudentAccessCredentials(activeStudentId)">Kodları Oluştur</button>
         </div>
 
           <!-- KULLANICI LİSTESİ MODALİ -->
@@ -3175,6 +3276,77 @@
         <div class="legal-modal-subtitle">Parabol Koçluk dijital öğrenci koçluğu platformu için bilgilendirme metni</div>
       </div>
       <div id="legalModalContent" class="legal-modal-content"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="bulkKaynakModal" style="display:none;">
+    <div class="modal-card modal-card-lg">
+      <button class="modal-close" onclick="closeBulkKaynakModal()">✕</button>
+      <h3 style="margin-bottom: 12px; color: var(--color-dark-teal);">Toplu Kaynak Yapıştır</h3>
+      <p style="margin-bottom: 14px; color: #64748b; line-height: 1.5; font-size: 0.9rem;">
+        Sadece kaynak adlarını alt alta yazın veya aralarına virgül koyun. Zorluk belirtmek isterseniz kaynak adının sonuna <strong>zor</strong>, <strong>orta</strong> ya da <strong>kolay</strong> ekleyin; belirtilmezse hepsi orta düzey atanır.
+      </p>
+      <div class="form-row" style="gap:12px; margin-bottom: 12px;">
+        <div class="form-group" style="margin-bottom:0; flex:1;">
+          <label class="form-label">Ders</label>
+          <select id="bulkKaynakLessonSelect" class="input-field" style="margin-bottom:0;">
+            <option value="Matematik">Matematik</option>
+            <option value="Fen Bilimleri">Fen Bilimleri</option>
+            <option value="Türkçe">Türkçe</option>
+            <option value="İngilizce">İngilizce</option>
+            <option value="Tarih">Tarih</option>
+            <option value="Coğrafya">Coğrafya</option>
+            <option value="Sosyal Bilgiler">Sosyal Bilgiler</option>
+          </select>
+        </div>
+      </div>
+      <textarea id="bulkKaynakTextarea" class="input-field" rows="10" placeholder="Deneme 3 zor, Fen Test 4, Paragraf 1 kolay" style="min-height:240px;"></textarea>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top: 12px; flex-wrap:wrap;">
+        <button type="button" class="btn-nav-outline" onclick="closeBulkKaynakModal()">İptal</button>
+        <button type="button" class="btn-action btn-coral" onclick="addBulkKaynakOnerileri()">Hepsini Ekle</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="bulkUniteModal" style="display:none;">
+    <div class="modal-card modal-card-lg">
+      <button class="modal-close" onclick="closeBulkUniteKonuUnitModal()">✕</button>
+      <h3 style="margin-bottom: 12px; color: var(--color-dark-teal);">Toplu Ünite Ekle</h3>
+      <p style="margin-bottom: 14px; color: #64748b; line-height: 1.5; font-size: 0.9rem;">
+        Sadece ünite adlarını alt alta yazın veya aralarına virgül koyun.
+      </p>
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label class="form-label">Ders</label>
+        <select id="bulkUniteLessonSelect" class="input-field" style="margin-bottom:0;">
+          <option value="">Ders seçin</option>
+        </select>
+      </div>
+      <textarea id="bulkUniteTextarea" class="input-field" rows="10" placeholder="1. Ünite: Çarpanlar ve Katlar, 2. Ünite: Üslü İfadeler" style="min-height:220px;"></textarea>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top: 12px; flex-wrap:wrap;">
+        <button type="button" class="btn-nav-outline" onclick="closeBulkUniteKonuUnitModal()">İptal</button>
+        <button type="button" class="btn-action btn-coral" onclick="addBulkUniteKonuUnits()">Hepsini Ekle</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="bulkTopicModal" style="display:none;">
+    <div class="modal-card modal-card-lg">
+      <button class="modal-close" onclick="closeBulkUniteKonuTopicModal()">✕</button>
+      <h3 style="margin-bottom: 12px; color: var(--color-dark-teal);">Toplu Konu Ekle</h3>
+      <p style="margin-bottom: 14px; color: #64748b; line-height: 1.5; font-size: 0.9rem;">
+        Önce ünite seçin, sonra sadece konu adlarını alt alta yazın veya aralarına virgül koyun.
+      </p>
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label class="form-label">Ders / Ünite</label>
+        <select id="bulkTopicUnitSelect" class="input-field" style="margin-bottom:0;">
+          <option value="">Ünite seçin</option>
+        </select>
+      </div>
+      <textarea id="bulkTopicTextarea" class="input-field" rows="10" placeholder="Konu 1, Konu 2\nKonu 3" style="min-height:220px;"></textarea>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top: 12px; flex-wrap:wrap;">
+        <button type="button" class="btn-nav-outline" onclick="closeBulkUniteKonuTopicModal()">İptal</button>
+        <button type="button" class="btn-action btn-coral" onclick="addBulkUniteKonuTopics()">Hepsini Ekle</button>
+      </div>
     </div>
   </div>
 
