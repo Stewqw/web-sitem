@@ -498,6 +498,29 @@
     .submenu-item:hover, .submenu-item.active { background: rgba(255,255,255,0.16); color: #fff; }
     .submenu-item:hover, .submenu-item.active { background: rgba(255,255,255,0.16); }
     .submenu-item.active { color: #fff; }
+    .class-menu-item-with-delete { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .class-menu-delete { padding: 0; border: 0; background: transparent; color: #f87171; font-size: 1rem; font-weight: 800; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+    .class-menu-delete:hover { color: #fecaca; }
+
+    .worksheet-layout { display: grid; grid-template-columns: minmax(260px, 0.78fr) minmax(0, 1.5fr); gap: 18px; align-items: start; }
+    .worksheet-tool-panel { border: 1px solid #dbe4ef; background: #f8fafc; padding: 16px; border-radius: 8px; }
+    .worksheet-dropzone { min-height: 150px; border: 2px dashed #94a3b8; border-radius: 8px; display: grid; place-items: center; text-align: center; padding: 16px; color: #475569; background: #fff; cursor: pointer; }
+    .worksheet-dropzone.drag-over { border-color: var(--color-coral); background: #fff7ed; color: #9a4d00; }
+    .worksheet-question-list { display: grid; gap: 8px; margin-top: 14px; max-height: 420px; overflow-y: auto; }
+    .worksheet-question-row { display: grid; grid-template-columns: 30px 42px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; }
+    .worksheet-question-row img { width: 42px; height: 42px; object-fit: contain; background: #fff; }
+    .worksheet-question-actions { display: flex; gap: 4px; }
+    .worksheet-icon-button { border: 0; background: #eef2f7; color: #334155; width: 28px; height: 28px; border-radius: 4px; cursor: pointer; font-weight: 800; }
+    .worksheet-icon-button.delete { background: #fef2f2; color: #dc2626; }
+    .worksheet-preview-wrap { overflow: auto; max-height: 74vh; padding: 8px; background: #e8eef6; border-radius: 8px; }
+    .worksheet-page { width: min(100%, 660px); min-height: 880px; margin: 0 auto 18px; padding: 42px; background: #fff; box-shadow: 0 4px 16px rgba(15,23,42,0.16); }
+    .worksheet-page-header { border-bottom: 2px solid #102040; padding-bottom: 10px; margin-bottom: 18px; color: #102040; }
+    .worksheet-page-title { font-size: 1.1rem; font-weight: 800; }
+    .worksheet-page-meta { font-size: 0.76rem; color: #64748b; margin-top: 4px; }
+    .worksheet-question-preview { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: start; margin: 0 0 16px; break-inside: avoid; }
+    .worksheet-question-number { width: 26px; height: 26px; display: grid; place-items: center; background: #102040; color: #fff; border-radius: 50%; font-size: 0.78rem; font-weight: 800; }
+    .worksheet-question-preview img { width: 100%; height: auto; display: block; }
+    .worksheet-empty-preview { min-height: 480px; display: grid; place-items: center; color: #64748b; text-align: center; }
 
     .main-content { flex: 1; padding: 20px 24px 24px 88px; }
 
@@ -1993,8 +2016,13 @@
             <div class="menu-item" id="menu-ogrenci" onclick="sekmeAcs('ogrenci')">
               <span class="icon"></span><span class="menu-title">Öğrenci Yönetimi</span>
             </div>
-            <div class="menu-item" id="menu-raporlama" onclick="sekmeAcs('raporlama')">
-              <span class="icon"></span><span class="menu-title">Raporlama</span>
+            <div class="menu-item has-submenu" id="menu-raporlama">
+              <div class="menu-main" onclick="sekmeAcs('raporlama'); toggleRaporlamaSubmenu(event)">
+                <span class="icon"></span><span class="menu-title">Raporlama</span>
+              </div>
+              <div class="submenu">
+                <div class="submenu-item" onclick="event.stopPropagation(); openYaziliHazirlama()">Yazılı Hazırlama</div>
+              </div>
             </div>
             <div class="menu-item" id="menu-muhasebe" onclick="sekmeAcs('muhasebe')">
               <span class="icon"></span><span class="menu-title">Muhasebe</span>
@@ -2128,6 +2156,39 @@
           </div>
         </div>
 
+        <div id="tabYaziliHazirlama" style="display:none;">
+          <div class="card-panel">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap; margin-bottom:16px;">
+              <div>
+                <h2 style="margin:0; font-size:1.25rem; color:var(--color-dark-teal);">Yazılı Hazırlama</h2>
+                <p style="margin:8px 0 0; color:#64748b; font-size:0.88rem;">Görsellerden numaralı yazılı PDF'i oluşturun.</p>
+              </div>
+              <button type="button" class="btn-action btn-coral" onclick="downloadWorksheetPdf()">PDF İndir</button>
+            </div>
+
+            <div class="worksheet-layout">
+              <div class="worksheet-tool-panel">
+                <div class="form-group">
+                  <label class="form-label">Yazılı Başlığı</label>
+                  <input id="worksheetTitle" class="input-field" type="text" value="Yazılı Sınavı" oninput="renderWorksheetPreview()">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Ders / Açıklama</label>
+                  <input id="worksheetSubtitle" class="input-field" type="text" placeholder="Örn: Matematik - 1. Dönem" oninput="renderWorksheetPreview()">
+                </div>
+                <input id="worksheetImageInput" type="file" accept="image/*" multiple style="display:none;" onchange="addWorksheetImages(this.files); this.value='';">
+                <div id="worksheetDropzone" class="worksheet-dropzone" onclick="document.getElementById('worksheetImageInput').click()">
+                  <div><strong>Görselleri ekle</strong><div style="font-size:0.8rem; margin-top:6px;">Yükle, sürükle-bırak veya yapıştır</div></div>
+                </div>
+                <div id="worksheetQuestionList" class="worksheet-question-list"></div>
+              </div>
+              <div class="worksheet-preview-wrap">
+                <div id="worksheetPreview"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div id="tabMuhasebe" style="display:none;">
           <div class="card-panel">
             <div style="margin-bottom:14px;">
@@ -2156,6 +2217,7 @@
               <button id="studentInfoBtnGenel" class="btn-nav-outline student-switch-btn" onclick="openStudentGenelPage()">Genel Denemeleri</button>
               <button id="studentInfoBtnKaynak" class="btn-nav-outline student-switch-btn" onclick="openStudentKaynakIlerlemePage()">Kaynak/Konu İlerlemesi</button>
               <button id="studentInfoBtnCozulen" class="btn-nav-outline student-switch-btn" onclick="openStudentCozulenSoruPage()">Çözülen Soru Sayısı</button>
+              <button id="studentInfoBtnKaynakSecimi" class="btn-nav-outline student-switch-btn" onclick="openStudentResourceSelectionPage()">Kaynak Seçimi</button>
               <button id="studentInfoBtnVeli" class="btn-nav-outline student-switch-btn" onclick="openStudentVeliPage()">Veli Bilgisi</button>
             </div>
 
@@ -2347,9 +2409,12 @@
                 </div>
                 <div class="form-group" style="margin-bottom:0;">
                   <label class="form-label">Ders</label>
-                  <select id="uniteKonuLesson" class="input-field" onchange="onUniteKonuLessonChange()" style="margin-bottom:0;">
-                    <option value="">Ders seçin</option>
-                  </select>
+                  <div style="display:flex; gap:8px; align-items:center;">
+                    <select id="uniteKonuLesson" class="input-field" onchange="onUniteKonuLessonChange()" style="margin-bottom:0;">
+                      <option value="">Ders seçin</option>
+                    </select>
+                    <button type="button" class="btn-nav-outline" onclick="addCustomClassLesson()" style="padding:10px 12px; white-space:nowrap;">Ders Ekle</button>
+                  </div>
                 </div>
               </div>
 
@@ -2552,46 +2617,45 @@
           </div>
         </div>
 
+        <div id="tabOgrenciKaynakSecimi" style="display: none;">
+          <div class="card-panel">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+              <div>
+                <h2 style="margin:0; font-size:1.25rem; color: var(--color-dark-teal);">Öğrenci Kaynak Seçimi</h2>
+                <p style="margin:8px 0 0; color:#64748b; font-size:0.9rem;">Bu öğrencinin kullanacağı kaynakları seçin.</p>
+              </div>
+            </div>
+
+            <div class="form-row" style="margin-bottom:10px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Ders</label>
+                <select id="studentResourceLessonSelect" class="input-field" onchange="renderStudentResourceSelectionPanel()" style="margin-bottom:0;">
+                  <option value="">Tüm dersler</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Kaynak</label>
+                <div class="progress-resource-picker">
+                  <select id="studentResourceSelect" class="input-field progress-resource-select">
+                    <option value="">Kaynak seçin</option>
+                  </select>
+                  <button type="button" class="btn-action btn-coral progress-resource-add" onclick="addStudentResourceAssignment()">Ekle</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="studentAssignedResources" class="progress-global-selected">
+              <span class="progress-resource-muted">Henüz kaynak seçilmedi</span>
+            </div>
+          </div>
+        </div>
+
         <div id="tabVeliBilgi" style="display: none;">
           <div class="card-panel">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
               <div>
                 <h2 style="margin:0; font-size:1.25rem; color: var(--color-dark-teal);">Veli Bilgileri</h2>
                 <p style="margin:8px 0 0; color:#64748b; font-size:0.9rem;">Seçili öğrenciye ait veli iletişim kartı.</p>
-              </div>
-            </div>
-
-            <div class="veli-card" style="margin-bottom:12px;">
-              <div class="veli-header">
-                <div class="veli-profile">
-                  <div class="veli-avatar">K</div>
-                  <div>
-                    <div class="veli-name">Öğrenci Kaynak Seçimi</div>
-                    <div class="veli-role">Bu öğrencinin kullanacağı kaynakları seçin</div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="form-row" style="margin-bottom:10px;">
-                <div class="form-group" style="margin-bottom:0;">
-                  <label class="form-label">Ders</label>
-                  <select id="studentResourceLessonSelect" class="input-field" onchange="renderStudentResourceSelectionPanel()" style="margin-bottom:0;">
-                    <option value="">Tüm dersler</option>
-                  </select>
-                </div>
-                <div class="form-group" style="margin-bottom:0;">
-                  <label class="form-label">Kaynak</label>
-                  <div class="progress-resource-picker">
-                    <select id="studentResourceSelect" class="input-field progress-resource-select">
-                      <option value="">Kaynak seçin</option>
-                    </select>
-                    <button type="button" class="btn-action btn-coral progress-resource-add" onclick="addStudentResourceAssignment()">Ekle</button>
-                  </div>
-                </div>
-              </div>
-
-              <div id="studentAssignedResources" class="progress-global-selected">
-                <span class="progress-resource-muted">Henüz kaynak seçilmedi</span>
               </div>
             </div>
 
@@ -2969,7 +3033,7 @@
       </div>
       <div class="form-group">
         <label class="form-label">Sınıf</label>
-        <select id="ogrenciSinifInput" class="input-field">
+        <select id="ogrenciSinifInput" class="input-field" onchange="toggleCustomClassNameInput('ogrenciSinifInput', 'ogrenciCustomClassName')">
           <option value="4">4</option>
           <option value="5">5</option>
           <option value="6">6</option>
@@ -2979,7 +3043,9 @@
           <option value="10">10</option>
           <option value="11">11</option>
           <option value="YKS">YKS</option>
+          <option value="__custom__">+ Özel sınıf / sınav ekle</option>
         </select>
+        <input id="ogrenciCustomClassName" type="text" class="input-field" placeholder="Örn: KPSS" style="display:none; margin-top:10px;" maxlength="60">
       </div>
       <button class="btn-action btn-coral" style="width: 100%; margin-top: 10px;" onclick="ogrenciEkle()">Öğrenci Ekle</button>
     </div>
@@ -3040,7 +3106,7 @@
           <h4 style="font-size: 0.8rem; color: var(--color-dark-teal); margin-bottom: 8px;">SINIF BİLGİLERİ</h4>
           <div class="form-group">
             <label class="form-label">Sınıf</label>
-            <select id="editStudentClass" class="input-field">
+            <select id="editStudentClass" class="input-field" onchange="toggleCustomClassNameInput('editStudentClass', 'editStudentCustomClassName')">
               <option value="4">4</option>
               <option value="5">5</option>
               <option value="6">6</option>
@@ -3050,7 +3116,9 @@
               <option value="10">10</option>
               <option value="11">11</option>
               <option value="YKS">YKS</option>
+              <option value="__custom__">+ Özel sınıf / sınav ekle</option>
             </select>
+            <input id="editStudentCustomClassName" type="text" class="input-field" placeholder="Örn: KPSS" style="display:none; margin-top:10px;" maxlength="60">
           </div>
         </div>
       </div>

@@ -1,8 +1,9 @@
-const CACHE_NAME = 'kocluk-app-v25';
+const CACHE_NAME = 'kocluk-app-v27';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './firebase-init.js',
   './script.js'
 ];
 

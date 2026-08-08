@@ -72,6 +72,7 @@
   const db = window.firebase.firestore ? window.firebase.firestore(app) : null;
 
   const fieldValue = window.firebase.firestore ? window.firebase.firestore.FieldValue : null;
+  const studentRecordFingerprints = new Map();
 
   if (!db) {
     console.warn("Firebase Firestore SDK yuklenemedi. Profil kaydi ve formlar calismayabilir.");
@@ -99,6 +100,45 @@
     }
 
     return null;
+  }
+
+  function getStudentCollection(uid) {
+    return db.collection("users").doc(uid).collection("students");
+  }
+
+  function getStudentDocumentId(student) {
+    return encodeURIComponent(String(student && student.id));
+  }
+
+  function getStudentFingerprint(student) {
+    return JSON.stringify(student);
+  }
+
+  function replaceStudentRecordCache(students) {
+    studentRecordFingerprints.clear();
+    students.forEach((student) => {
+      studentRecordFingerprints.set(String(student.id), getStudentFingerprint(student));
+    });
+  }
+
+  async function commitStudentOperations(operations) {
+    const batchSize = 450;
+    for (let index = 0; index < operations.length; index += batchSize) {
+      const batch = db.batch();
+      operations.slice(index, index + batchSize).forEach((operation) => {
+        if (operation.type === "delete") {
+          batch.delete(operation.ref);
+        } else {
+          batch.set(operation.ref, operation.student);
+        }
+      });
+      await withTimeout(
+        batch.commit(),
+        10000,
+        "app/student-save-timeout",
+        "Öğrenci verisi kaydedilirken zaman aşımı oluştu."
+      );
+    }
   }
 
   const generatedLoginDomain = "parabol.kocluk";
@@ -230,7 +270,6 @@
       phone: payload.phone || "",
       branch: payload.branch || "",
       role: "coach",
-      students: [],
       createdAtIso: nowIso,
       updatedAtIso: nowIso
     };
@@ -458,9 +497,36 @@
     const user = auth.currentUser;
     if (!user || !db) return [];
 
+    const studentsSnapshot = await withTimeout(
+      getStudentCollection(user.uid).get(),
+      10000,
+      "app/student-load-timeout",
+      "Öğrenci verisi okunurken zaman aşımı oluştu."
+    );
+
+    if (!studentsSnapshot.empty) {
+      const students = studentsSnapshot.docs.map((doc) => doc.data());
+      replaceStudentRecordCache(students);
+      return students;
+    }
+
     const profile = await getProfileByUid(user.uid);
-    const students = profile && Array.isArray(profile.students) ? profile.students : [];
-    return students;
+    const legacyStudents = profile && Array.isArray(profile.students) ? profile.students : [];
+    if (!legacyStudents.length) {
+      replaceStudentRecordCache([]);
+      return [];
+    }
+
+    await services.saveStudentRecords(legacyStudents);
+    await db.collection("users").doc(user.uid).set(
+      {
+        students: fieldValue.delete(),
+        studentsMigratedAtIso: new Date().toISOString(),
+        updatedAt: fieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+    return legacyStudents;
   };
 
   services.saveStudentRecords = async function saveStudentRecords(students) {
@@ -472,10 +538,40 @@
     }
 
     const safeStudents = Array.isArray(students) ? students : [];
+    const nextFingerprints = new Map();
+    const operations = [];
+
+    safeStudents.forEach((student) => {
+      const studentId = String(student && student.id);
+      const fingerprint = getStudentFingerprint(student);
+      nextFingerprints.set(studentId, fingerprint);
+      if (studentRecordFingerprints.get(studentId) !== fingerprint) {
+        operations.push({
+          type: "set",
+          ref: getStudentCollection(user.uid).doc(getStudentDocumentId(student)),
+          student
+        });
+      }
+    });
+
+    studentRecordFingerprints.forEach((_, studentId) => {
+      if (!nextFingerprints.has(studentId)) {
+        operations.push({
+          type: "delete",
+          ref: getStudentCollection(user.uid).doc(encodeURIComponent(studentId))
+        });
+      }
+    });
+
+    await commitStudentOperations(operations);
+    studentRecordFingerprints.clear();
+    nextFingerprints.forEach((fingerprint, studentId) => {
+      studentRecordFingerprints.set(studentId, fingerprint);
+    });
+
     await withTimeout(
       db.collection("users").doc(user.uid).set(
         {
-          students: safeStudents,
           studentsUpdatedAtIso: new Date().toISOString(),
           updatedAt: fieldValue.serverTimestamp()
         },
@@ -483,7 +579,7 @@
       ),
       5000,
       "app/firestore-timeout",
-      "Öğrenci verisi kaydedilirken zaman aşımı oluştu."
+      "Öğrenci güncelleme bilgisi kaydedilirken zaman aşımı oluştu."
     );
 
     return safeStudents;

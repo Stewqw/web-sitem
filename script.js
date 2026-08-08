@@ -138,9 +138,117 @@ function normalizeClassLevel(value) {
 function getClassDisplayLabel(value) {
   const classLevel = normalizeClassLevel(value);
   if (!classLevel) return 'Sınıf bilgisi yok';
+  if (classLevel.startsWith('CUSTOM:')) return classLevel.slice('CUSTOM:'.length) || 'Özel sınıf';
   if (classLevel === '8') return 'LGS';
   if (classLevel === 'YKS') return 'YKS';
   return `${classLevel}. Sınıf`;
+}
+
+function isCustomClassLevel(value) {
+  return normalizeClassLevel(value).startsWith('CUSTOM:');
+}
+
+function getCustomClassStorageKey() {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  return `custom_class_levels_${email}`;
+}
+
+function getCustomClassLevels() {
+  const stored = safeJsonParse(localStorage.getItem(getCustomClassStorageKey()), []);
+  const fromStudents = getStoredOgrenciler()
+    .map((student) => normalizeClassLevel(student.classLevel))
+    .filter(isCustomClassLevel);
+  return ensureUniqueList([].concat(Array.isArray(stored) ? stored : [], fromStudents)).filter(isCustomClassLevel);
+}
+
+function getHiddenClassLevels() {
+  const stored = safeJsonParse(localStorage.getItem(`${getCustomClassStorageKey()}_hidden`), []);
+  return ensureUniqueList(stored);
+}
+
+function saveHiddenClassLevels(classLevels) {
+  localStorage.setItem(`${getCustomClassStorageKey()}_hidden`, JSON.stringify(ensureUniqueList(classLevels)));
+}
+
+function saveCustomClassLevels(classLevels) {
+  localStorage.setItem(getCustomClassStorageKey(), JSON.stringify(ensureUniqueList(classLevels).filter(isCustomClassLevel)));
+}
+
+function deleteCustomClassLevel(classLevel) {
+  const normalizedClassLevel = normalizeClassLevel(classLevel);
+  const assignedStudents = getStoredOgrenciler().filter((student) => normalizeClassLevel(student.classLevel) === normalizedClassLevel);
+  if (assignedStudents.length) {
+    alert(`Bu sınıf ${assignedStudents.length} öğrencide kullanılıyor. Silmeden önce öğrencilerin sınıfını değiştirin.`);
+    return;
+  }
+
+  if (!window.confirm(`${getClassDisplayLabel(normalizedClassLevel)} sınıfını Kaynak ve Ünite/Konu menülerinden kaldırmak istiyor musunuz?`)) return;
+
+  if (isCustomClassLevel(normalizedClassLevel)) {
+    saveCustomClassLevels(getCustomClassLevels().filter((item) => item !== normalizedClassLevel));
+    const all = readCustomUnitTopicData();
+    delete all[normalizedClassLevel];
+    writeCustomUnitTopicData(all);
+  } else {
+    saveHiddenClassLevels([].concat(getHiddenClassLevels(), normalizedClassLevel));
+  }
+  populateClassSelect(document.getElementById('ogrenciSinifInput'), '8');
+  populateClassSelect(document.getElementById('editStudentClass'), '8');
+  refreshCustomClassNavigation();
+}
+
+function createCustomClassLevel(name) {
+  const cleanName = String(name || '').trim().replace(/\s+/g, ' ');
+  if (!cleanName) return '';
+  const classLevel = `CUSTOM:${cleanName}`.toUpperCase();
+  const classes = getCustomClassLevels();
+  if (!classes.includes(classLevel)) {
+    classes.push(classLevel);
+    saveCustomClassLevels(classes);
+  }
+  return classLevel;
+}
+
+function populateClassSelect(selectEl, selectedValue) {
+  if (!selectEl) return;
+  const standardOptions = [['4', '4'], ['5', '5'], ['6', '6'], ['7', '7'], ['8', 'LGS'], ['9', '9'], ['10', '10'], ['11', '11'], ['YKS', 'YKS']];
+  const activeValue = selectedValue || selectEl.value || '8';
+  selectEl.innerHTML = '';
+  standardOptions.concat(getCustomClassLevels().map((value) => [value, getClassDisplayLabel(value)])).forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    selectEl.appendChild(option);
+  });
+  const customOption = document.createElement('option');
+  customOption.value = '__custom__';
+  customOption.textContent = '+ Özel sınıf / sınav ekle';
+  selectEl.appendChild(customOption);
+  selectEl.value = Array.from(selectEl.options).some((option) => option.value === activeValue) ? activeValue : '8';
+}
+
+function toggleCustomClassNameInput(selectId, inputId) {
+  const selectEl = document.getElementById(selectId);
+  const inputEl = document.getElementById(inputId);
+  if (!selectEl || !inputEl) return;
+  const isCustom = selectEl.value === '__custom__';
+  inputEl.style.display = isCustom ? 'block' : 'none';
+  inputEl.required = isCustom;
+  if (!isCustom) inputEl.value = '';
+  if (isCustom) inputEl.focus();
+}
+
+function resolveSelectedClassLevel(selectId, inputId) {
+  const selectEl = document.getElementById(selectId);
+  if (!selectEl) return '';
+  if (selectEl.value !== '__custom__') return selectEl.value;
+  const classLevel = createCustomClassLevel(document.getElementById(inputId)?.value);
+  if (!classLevel) return '';
+
+  refreshCustomClassNavigation();
+  populateClassSelect(document.getElementById('ogrenciSinifInput'), classLevel);
+  populateClassSelect(document.getElementById('editStudentClass'), classLevel);
+  return classLevel;
 }
 
 const initialResourceSuggestions = [
@@ -1022,6 +1130,8 @@ function sekmeAcs(sekmeAd) {
   document.getElementById('tabOgrenci').style.display = 'none';
   const raporlamaEl = document.getElementById('tabRaporlama');
   if (raporlamaEl) raporlamaEl.style.display = 'none';
+  const yaziliEl = document.getElementById('tabYaziliHazirlama');
+  if (yaziliEl) yaziliEl.style.display = 'none';
   const muhasebeEl = document.getElementById('tabMuhasebe');
   if (muhasebeEl) muhasebeEl.style.display = 'none';
   document.getElementById('tabOgrenciDetay').style.display = 'none';
@@ -1048,6 +1158,8 @@ function sekmeAcs(sekmeAd) {
   if (kaynakMenu && sekmeAd !== 'kaynak') kaynakMenu.classList.remove('submenu-open');
   const uniteKonuMenu = document.getElementById('menu-unite-konu');
   if (uniteKonuMenu && sekmeAd !== 'unite-konu') uniteKonuMenu.classList.remove('submenu-open');
+  const raporlamaMenu = document.getElementById('menu-raporlama');
+  if (raporlamaMenu && sekmeAd !== 'raporlama' && sekmeAd !== 'yazili-hazirlama') raporlamaMenu.classList.remove('submenu-open');
 
   document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
 
@@ -1061,6 +1173,10 @@ function sekmeAcs(sekmeAd) {
     if (raporlamaEl) raporlamaEl.style.display = 'block';
     markMenuActive('menu-raporlama');
     renderRaporlamaStudentList();
+  } else if (sekmeAd === 'yazili-hazirlama') {
+    if (yaziliEl) yaziliEl.style.display = 'block';
+    markMenuActive('menu-raporlama');
+    initWorksheetBuilder();
   } else if (sekmeAd === 'muhasebe') {
     if (muhasebeEl) muhasebeEl.style.display = 'block';
     markMenuActive('menu-muhasebe');
@@ -2595,6 +2711,7 @@ function selectKaynakSinif(sinif, element) {
   const menu = document.getElementById('menu-kaynak');
   if (menu) menu.classList.add('active');
 
+  populateResourceLessonOptions();
   renderResourceSuggestions();
 }
 
@@ -2628,6 +2745,77 @@ function selectUniteKonuSinif(sinif, element) {
   initUniteKonuPanel();
 }
 
+function refreshCustomClassNavigation() {
+  const customClasses = getCustomClassLevels();
+  const hiddenClasses = getHiddenClassLevels();
+  const menus = [
+    { menuId: 'menu-kaynak', onSelect: 'selectKaynakSinif' },
+    { menuId: 'menu-unite-konu', onSelect: 'selectUniteKonuSinif' }
+  ];
+
+  menus.forEach(({ menuId, onSelect }) => {
+    const submenu = document.getElementById(menuId)?.querySelector('.submenu');
+    if (!submenu) return;
+    submenu.querySelectorAll('.custom-class-menu-item').forEach((item) => item.remove());
+    submenu.querySelectorAll('.submenu-item:not(.custom-class-menu-item)').forEach((item) => {
+      const classLevel = normalizeClassLevel(item.dataset.sinif);
+      item.style.display = hiddenClasses.includes(classLevel) ? 'none' : 'flex';
+      if (!item.classList.contains('class-menu-item-with-delete')) {
+        item.classList.add('class-menu-item-with-delete');
+        const label = document.createElement('span');
+        label.textContent = item.textContent;
+        item.textContent = '';
+        item.appendChild(label);
+        item.appendChild(createClassMenuDeleteButton(classLevel));
+      }
+    });
+    customClasses.forEach((classLevel) => {
+      const item = document.createElement('div');
+      item.className = 'submenu-item class-menu-item-with-delete custom-class-menu-item';
+      item.dataset.sinif = classLevel;
+      item.onclick = (event) => {
+        event.stopPropagation();
+        window[onSelect](classLevel, item);
+      };
+      const label = document.createElement('span');
+      label.textContent = getClassDisplayLabel(classLevel);
+      item.appendChild(label);
+      item.appendChild(createClassMenuDeleteButton(classLevel));
+      submenu.appendChild(item);
+    });
+  });
+}
+
+function createClassMenuDeleteButton(classLevel) {
+  const deleteButton = document.createElement('button');
+  deleteButton.type = 'button';
+  deleteButton.className = 'class-menu-delete';
+  deleteButton.textContent = '×';
+  deleteButton.title = `${getClassDisplayLabel(classLevel)} sınıfını kaldır`;
+  deleteButton.setAttribute('aria-label', deleteButton.title);
+  deleteButton.onclick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deleteCustomClassLevel(classLevel);
+  };
+  return deleteButton;
+}
+
+function populateResourceLessonOptions() {
+  const lessonEl = document.getElementById('resourceLessonSelect');
+  if (!lessonEl) return;
+  const previousLesson = lessonEl.value || '';
+  const lessons = getLessonOptionsForClass(selectedKaynakSinif);
+  lessonEl.innerHTML = '';
+  lessons.forEach((lesson) => {
+    const option = document.createElement('option');
+    option.value = lesson;
+    option.textContent = lesson;
+    lessonEl.appendChild(option);
+  });
+  if (previousLesson && lessons.includes(previousLesson)) lessonEl.value = previousLesson;
+}
+
 function initUniteKonuPanel() {
   const classTitleEl = document.getElementById('uniteKonuClassTitle');
   const classDescEl = document.getElementById('uniteKonuClassDescription');
@@ -2655,6 +2843,26 @@ function initUniteKonuPanel() {
     lessonEl.value = lessonEl.options[1].value;
   }
 
+  onUniteKonuLessonChange();
+}
+
+function addCustomClassLesson() {
+  if (!isCustomClassLevel(selectedUniteKonuSinif)) {
+    alert('Ders ekleme yalnızca özel sınıf veya sınav türlerinde kullanılabilir.');
+    return;
+  }
+
+  const cleanLesson = String(window.prompt(`${getClassDisplayLabel(selectedUniteKonuSinif)} için ders adı girin.`) || '').trim().replace(/\s+/g, ' ');
+  if (!cleanLesson) return;
+
+  const all = readCustomUnitTopicData();
+  const classKey = String(selectedUniteKonuSinif);
+  if (!all[classKey] || typeof all[classKey] !== 'object') all[classKey] = {};
+  all[classKey].__customLessons = ensureUniqueList([].concat(all[classKey].__customLessons || [], cleanLesson));
+  writeCustomUnitTopicData(all);
+  initUniteKonuPanel();
+  const lessonEl = document.getElementById('uniteKonuLesson');
+  if (lessonEl) lessonEl.value = cleanLesson;
   onUniteKonuLessonChange();
 }
 
@@ -3268,6 +3476,8 @@ function addBulkKaynakOnerileri() {
 
 document.addEventListener('DOMContentLoaded', () => {
   refreshRegisterSpamGuards();
+  populateClassSelect(document.getElementById('ogrenciSinifInput'), '8');
+  populateClassSelect(document.getElementById('editStudentClass'), '8');
   loadSavedResourceSuggestions();
   const resourceNameInput = document.getElementById('resourceNameInput');
   const resourceLessonSelect = document.getElementById('resourceLessonSelect');
@@ -3282,6 +3492,9 @@ document.addEventListener('DOMContentLoaded', () => {
   loadKokpitNotebookNotes();
   renderKokpitTodoDate();
   attemptAutoLogin().then(auto => {
+    populateClassSelect(document.getElementById('ogrenciSinifInput'), document.getElementById('ogrenciSinifInput')?.value || '8');
+    populateClassSelect(document.getElementById('editStudentClass'), document.getElementById('editStudentClass')?.value || '8');
+    refreshCustomClassNavigation();
     if (!auto) {
       const initialPage = currentPageFromHash();
       ekranıGoster(initialPage);
@@ -3803,7 +4016,11 @@ function ogrenciEkle() {
   const name = document.getElementById('ogrenciAdiInput').value.trim();
   const email = document.getElementById('ogrenciEmailInput').value.trim();
   const phone = document.getElementById('ogrenciTelefonInput').value.trim();
-  const classLevel = document.getElementById('ogrenciSinifInput')?.value || '8';
+  const classLevel = resolveSelectedClassLevel('ogrenciSinifInput', 'ogrenciCustomClassName');
+  if (document.getElementById('ogrenciSinifInput')?.value === '__custom__' && !classLevel) {
+    alert('Özel sınıf veya sınav adı girin.');
+    return;
+  }
   if (!name) {
     alert('Öğrenci adı girin.');
     return;
@@ -3814,7 +4031,7 @@ function ogrenciEkle() {
     name,
     email,
     phone,
-    classLevel,
+    classLevel: classLevel || '8',
     status: 'Aktif',
     program: {
       weeks: {}
@@ -3830,8 +4047,10 @@ function ogrenciEkle() {
   document.getElementById('ogrenciAdiInput').value = '';
   document.getElementById('ogrenciEmailInput').value = '';
   document.getElementById('ogrenciTelefonInput').value = '';
+  document.getElementById('ogrenciCustomClassName').value = '';
   const classInput = document.getElementById('ogrenciSinifInput');
   if (classInput) classInput.value = '8';
+  toggleCustomClassNameInput('ogrenciSinifInput', 'ogrenciCustomClassName');
   modalKapat('ogrenciEkleModal');
 }
 
@@ -3935,7 +4154,8 @@ function openStudentEditModal(studentId) {
   document.getElementById('editStudentName').value = student.name || '';
   document.getElementById('editStudentEmail').value = student.email || '';
   document.getElementById('editStudentPhone').value = student.phone || '';
-  document.getElementById('editStudentClass').value = student.classLevel || '4';
+  populateClassSelect(document.getElementById('editStudentClass'), student.classLevel || '4');
+  toggleCustomClassNameInput('editStudentClass', 'editStudentCustomClassName');
   renderStudentAccessCredentials(student);
 
   modalAc('ogrenciDuzenleModal');
@@ -3957,7 +4177,12 @@ function saveStudentEdits() {
   const name = document.getElementById('editStudentName').value.trim();
   const email = document.getElementById('editStudentEmail').value.trim();
   const phone = document.getElementById('editStudentPhone').value.trim();
-  const classLevel = document.getElementById('editStudentClass').value;
+  const classLevel = resolveSelectedClassLevel('editStudentClass', 'editStudentCustomClassName');
+
+  if (document.getElementById('editStudentClass')?.value === '__custom__' && !classLevel) {
+    alert('Özel sınıf veya sınav adı girin.');
+    return;
+  }
 
   if (!name) {
     alert('Öğrenci adı girin.');
@@ -3981,6 +4206,7 @@ function setStudentDetailButtonState(activeSection) {
     genel: document.getElementById('studentInfoBtnGenel'),
     kaynak: document.getElementById('studentInfoBtnKaynak'),
     cozulen: document.getElementById('studentInfoBtnCozulen'),
+    kaynakSecimi: document.getElementById('studentInfoBtnKaynakSecimi'),
     veli: document.getElementById('studentInfoBtnVeli')
   };
 
@@ -3997,17 +4223,19 @@ function setStudentDetailSection(section) {
   const bransEl = document.getElementById('tabBrans');
   const genelEl = document.getElementById('tabGenel');
   const kaynakIlerlemeEl = document.getElementById('tabKaynakIlerleme');
+  const kaynakSecimiEl = document.getElementById('tabOgrenciKaynakSecimi');
   const veliBilgiEl = document.getElementById('tabVeliBilgi');
   const cozulenSoruEl = document.getElementById('tabCozulenSoru');
   const noteEl = document.getElementById('studentInfoNote');
 
-  if (!detailEl || !programEl || !bransEl || !genelEl || !kaynakIlerlemeEl || !veliBilgiEl || !cozulenSoruEl) return;
+  if (!detailEl || !programEl || !bransEl || !genelEl || !kaynakIlerlemeEl || !kaynakSecimiEl || !veliBilgiEl || !cozulenSoruEl) return;
 
   detailEl.style.display = 'block';
   programEl.style.display = 'none';
   bransEl.style.display = 'none';
   genelEl.style.display = 'none';
   kaynakIlerlemeEl.style.display = 'none';
+  kaynakSecimiEl.style.display = 'none';
   veliBilgiEl.style.display = 'none';
   cozulenSoruEl.style.display = 'none';
 
@@ -4023,6 +4251,9 @@ function setStudentDetailSection(section) {
   } else if (section === 'kaynak') {
     kaynakIlerlemeEl.style.display = 'block';
     if (noteEl) noteEl.textContent = 'Kaynak ve konu ilerleme bölümü aşağıda açıldı. Ders ve üniteye göre konu takibi yapabilirsiniz.';
+  } else if (section === 'kaynakSecimi') {
+    kaynakSecimiEl.style.display = 'block';
+    if (noteEl) noteEl.textContent = 'Kaynak seçimi bölümü aşağıda açıldı. Öğrencinin kullanacağı kaynakları buradan ekleyebilirsiniz.';
   } else if (section === 'veli') {
     veliBilgiEl.style.display = 'block';
     if (noteEl) noteEl.textContent = 'Veli bilgisi bölümü aşağıda açıldı. Veli adı, telefonu ve e-posta bilgisini kaydedebilirsiniz.';
@@ -4589,7 +4820,6 @@ function openStudentVeliPage() {
   }
 
   setStudentDetailSection('veli');
-  renderStudentResourceSelectionPanel();
   renderStudentParentInfo(student, 1);
   renderStudentParentInfo(student, 2);
   closeVeliEditMode(1);
@@ -6250,6 +6480,13 @@ function getCustomUnitTopicLessonData(classLevel, lesson) {
   return normalizeCustomLessonData(classData[String(lesson)]);
 }
 
+function getCustomClassLessons(classLevel) {
+  if (!isCustomClassLevel(classLevel)) return [];
+  const all = readCustomUnitTopicData();
+  const classData = all[String(classLevel)] && typeof all[String(classLevel)] === 'object' ? all[String(classLevel)] : {};
+  return ensureUniqueList(classData.__customLessons);
+}
+
 function updateCustomUnitTopicLessonData(classLevel, lesson, updater) {
   if (!classLevel || !lesson || typeof updater !== 'function') return;
 
@@ -6278,7 +6515,9 @@ function getLessonOptionsForClass(classLevel) {
     '11': ['Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'],
     'YKS': ['Matematik', 'Geometri', 'Fizik', 'Kimya', 'Biyoloji', 'Türkçe', 'Tarih', 'Coğrafya']
   };
-  return lessonsByClass[normalizeClassLevel(classLevel)] || ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'];
+  const normalizedClassLevel = normalizeClassLevel(classLevel);
+  if (isCustomClassLevel(normalizedClassLevel)) return getCustomClassLessons(normalizedClassLevel);
+  return lessonsByClass[normalizedClassLevel] || ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'];
 }
 
 function getUnitOptionsForLesson(classLevel, lesson) {
@@ -7870,4 +8109,293 @@ function toggleAdmin(userId, makeAdmin) {
   }).catch(err => {
     alert('Sunucu hatası: ' + (err.message || ''));
   });
+}
+
+function openStudentResourceSelectionPage() {
+  const students = getStoredOgrenciler();
+  const student = students.find(s => s.id === activeStudentId);
+  if (!student) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  setStudentDetailSection('kaynakSecimi');
+  renderStudentResourceSelectionPanel();
+}
+
+let worksheetQuestions = [];
+let worksheetBuilderBound = false;
+
+function toggleRaporlamaSubmenu(event) {
+  event.stopPropagation();
+  document.getElementById('menu-raporlama')?.classList.toggle('submenu-open');
+}
+
+function openYaziliHazirlama() {
+  sekmeAcs('yazili-hazirlama');
+}
+
+function initWorksheetBuilder() {
+  const dropzone = document.getElementById('worksheetDropzone');
+  if (dropzone && !dropzone.dataset.bound) {
+    dropzone.dataset.bound = 'true';
+    ['dragenter', 'dragover'].forEach((eventName) => dropzone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      dropzone.classList.add('drag-over');
+    }));
+    ['dragleave', 'drop'].forEach((eventName) => dropzone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      dropzone.classList.remove('drag-over');
+    }));
+    dropzone.addEventListener('drop', (event) => addWorksheetImages(event.dataTransfer.files));
+  }
+
+  if (!worksheetBuilderBound) {
+    worksheetBuilderBound = true;
+    document.addEventListener('paste', (event) => {
+      const isOpen = document.getElementById('tabYaziliHazirlama')?.style.display === 'block';
+      const images = Array.from(event.clipboardData?.items || [])
+        .filter((item) => item.type.startsWith('image/'))
+        .map((item) => item.getAsFile())
+        .filter(Boolean);
+      if (isOpen && images.length) {
+        event.preventDefault();
+        addWorksheetImages(images);
+      }
+    });
+  }
+
+  renderWorksheetPreview();
+}
+
+async function addWorksheetImages(files) {
+  const images = Array.from(files || []).filter((file) => file && String(file.type || '').startsWith('image/'));
+  if (!images.length) return;
+
+  for (const file of images) {
+    try {
+      const source = await readWorksheetFile(file);
+      const cleaned = await cleanWorksheetImage(source);
+      worksheetQuestions.push({ id: Date.now() + Math.random(), ...cleaned });
+    } catch (error) {
+      console.warn('Soru görseli eklenemedi:', error);
+    }
+  }
+  renderWorksheetPreview();
+}
+
+function readWorksheetFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadWorksheetImage(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = source;
+  });
+}
+
+async function cleanWorksheetImage(source) {
+  const image = await loadWorksheetImage(source);
+  const maxWidth = 1800;
+  const scale = Math.min(1, maxWidth / image.naturalWidth);
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  context.drawImage(image, 0, 0, width, height);
+  const imageData = context.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let index = 0; index < data.length; index += 4) {
+    const red = data[index];
+    const green = data[index + 1];
+    const blue = data[index + 2];
+    const pixel = index / 4;
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    if (red > 244 && green > 244 && blue > 244) {
+      data[index + 3] = 0;
+      continue;
+    }
+    if (data[index + 3] > 20) {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  context.putImageData(imageData, 0, 0);
+
+  if (maxX < minX || maxY < minY) {
+    return { source, width, height };
+  }
+
+  const padding = 14;
+  const cropX = Math.max(0, minX - padding);
+  const cropY = Math.max(0, minY - padding);
+  const cropWidth = Math.min(width - cropX, maxX - minX + (padding * 2) + 1);
+  const cropHeight = Math.min(height - cropY, maxY - minY + (padding * 2) + 1);
+  const cropped = document.createElement('canvas');
+  cropped.width = cropWidth;
+  cropped.height = cropHeight;
+  cropped.getContext('2d').drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  return { source: cropped.toDataURL('image/png'), width: cropWidth, height: cropHeight };
+}
+
+function moveWorksheetQuestion(index, direction) {
+  const target = index + direction;
+  if (target < 0 || target >= worksheetQuestions.length) return;
+  [worksheetQuestions[index], worksheetQuestions[target]] = [worksheetQuestions[target], worksheetQuestions[index]];
+  renderWorksheetPreview();
+}
+
+function removeWorksheetQuestion(index) {
+  worksheetQuestions.splice(index, 1);
+  renderWorksheetPreview();
+}
+
+function getWorksheetTitle() {
+  return String(document.getElementById('worksheetTitle')?.value || 'Yazılı Sınavı').trim() || 'Yazılı Sınavı';
+}
+
+function getWorksheetSubtitle() {
+  return String(document.getElementById('worksheetSubtitle')?.value || '').trim();
+}
+
+function renderWorksheetPreview() {
+  const list = document.getElementById('worksheetQuestionList');
+  const preview = document.getElementById('worksheetPreview');
+  if (!list || !preview) return;
+
+  list.innerHTML = worksheetQuestions.length ? worksheetQuestions.map((question, index) => `
+    <div class="worksheet-question-row">
+      <strong>${index + 1}</strong>
+      <img src="${question.source}" alt="Soru ${index + 1}">
+      <span style="font-size:0.78rem; color:#475569;">${question.width} × ${question.height}</span>
+      <div class="worksheet-question-actions">
+        <button type="button" class="worksheet-icon-button" onclick="moveWorksheetQuestion(${index}, -1)" aria-label="Yukarı taşı">↑</button>
+        <button type="button" class="worksheet-icon-button" onclick="moveWorksheetQuestion(${index}, 1)" aria-label="Aşağı taşı">↓</button>
+        <button type="button" class="worksheet-icon-button delete" onclick="removeWorksheetQuestion(${index})" aria-label="Soruyu sil">×</button>
+      </div>
+    </div>
+  `).join('') : '';
+
+  if (!worksheetQuestions.length) {
+    preview.innerHTML = '<div class="worksheet-empty-preview">Henüz soru görseli eklenmedi.</div>';
+    return;
+  }
+
+  const pageWidth = 576;
+  const usableHeight = 770;
+  let pageHeight = 68;
+  let page = createWorksheetPreviewPage();
+  const pages = [page];
+  worksheetQuestions.forEach((question, index) => {
+    const imageHeight = Math.min(430, (pageWidth - 38) * (question.height / question.width));
+    const blockHeight = Math.max(54, imageHeight) + 24;
+    if (pageHeight + blockHeight > usableHeight && page.childElementCount > 1) {
+      page = createWorksheetPreviewPage();
+      pages.push(page);
+      pageHeight = 68;
+    }
+    const item = document.createElement('div');
+    item.className = 'worksheet-question-preview';
+    item.innerHTML = `<span class="worksheet-question-number">${index + 1}</span><img src="${question.source}" alt="Soru ${index + 1}">`;
+    page.appendChild(item);
+    pageHeight += blockHeight;
+  });
+  preview.innerHTML = '';
+  pages.forEach((item) => preview.appendChild(item));
+}
+
+function createWorksheetPreviewPage() {
+  const page = document.createElement('div');
+  page.className = 'worksheet-page';
+  page.innerHTML = `<div class="worksheet-page-header"><div class="worksheet-page-title">${escapeHtml(getWorksheetTitle())}</div><div class="worksheet-page-meta">${escapeHtml(getWorksheetSubtitle())}</div></div>`;
+  return page;
+}
+
+async function downloadWorksheetPdf() {
+  if (!worksheetQuestions.length) {
+    alert('Önce en az bir soru görseli ekleyin.');
+    return;
+  }
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert('PDF kütüphanesi yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin.');
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p', 'pt', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 42;
+  const contentWidth = pageWidth - (margin * 2);
+  const contentBottom = pageHeight - margin;
+  let y = margin;
+
+  const drawHeader = () => {
+    doc.setTextColor(16, 32, 64);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(pdfSafeText(getWorksheetTitle()), margin, y);
+    const subtitle = getWorksheetSubtitle();
+    if (subtitle) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.text(pdfSafeText(subtitle), margin, y + 15);
+    }
+    doc.setDrawColor(16, 32, 64);
+    doc.setLineWidth(1);
+    doc.line(margin, y + 24, pageWidth - margin, y + 24);
+    y += 42;
+  };
+
+  drawHeader();
+  worksheetQuestions.forEach((question, index) => {
+    let imageWidth = contentWidth - 34;
+    let imageHeight = imageWidth * (question.height / question.width);
+    const maxImageHeight = contentBottom - y - 16;
+    if (imageHeight > maxImageHeight) {
+      imageHeight = Math.max(80, maxImageHeight);
+      imageWidth = imageHeight * (question.width / question.height);
+    }
+    const blockHeight = Math.max(imageHeight, 26) + 18;
+    if (y + blockHeight > contentBottom) {
+      doc.addPage();
+      y = margin;
+      drawHeader();
+      imageWidth = contentWidth - 34;
+      imageHeight = imageWidth * (question.height / question.width);
+      if (imageHeight > contentBottom - y - 16) {
+        imageHeight = contentBottom - y - 16;
+        imageWidth = imageHeight * (question.width / question.height);
+      }
+    }
+    doc.setFillColor(16, 32, 64);
+    doc.circle(margin + 10, y + 10, 10, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(String(index + 1), margin + 10, y + 13, { align: 'center' });
+    doc.addImage(question.source, 'PNG', margin + 28, y, imageWidth, imageHeight, undefined, 'FAST');
+    y += Math.max(imageHeight, 26) + 18;
+  });
+
+  doc.save(`${normalizeFileName(getWorksheetTitle()) || 'yazili'}_sorular.pdf`);
 }
