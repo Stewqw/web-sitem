@@ -8273,23 +8273,18 @@ async function addWorksheetImages(files) {
   const images = Array.from(files || []).filter((file) => file && String(file.type || '').startsWith('image/'));
   if (!images.length) return;
 
-  setWorksheetAnalysisStatus(`${images.length} görsel hazırlanıyor. Arka plan temizleme ve metin okuma başlatıldı...`);
+  setWorksheetAnalysisStatus(`${images.length} görselin arka planı temizleniyor ve sayfaya yerleştiriliyor...`);
 
-  for (const [index, file] of images.entries()) {
+  for (const file of images) {
     try {
       const source = await readWorksheetFile(file);
       const cleaned = await cleanWorksheetImage(source);
-      setWorksheetAnalysisStatus(`${index + 1}/${images.length}. soru metne çevriliyor...`);
-      const text = await extractWorksheetQuestionText(cleaned.ocrSource || cleaned.source);
-      worksheetQuestions.push({
-        id: Date.now() + Math.random(),
-        ...cleaned,
-        text: text || 'Metin algılanamadı. Soruyu buradan düzenleyin.'
-      });
+      worksheetQuestions.push({ id: Date.now() + Math.random(), ...cleaned });
     } catch (error) {
       console.warn('Soru görseli eklenemedi:', error);
     }
   }
+  autoArrangeWorksheetQuestions();
   renderWorksheetPreview();
 }
 
@@ -8309,22 +8304,6 @@ function loadWorksheetImage(source) {
     image.onerror = reject;
     image.src = source;
   });
-}
-
-function normalizeWorksheetOcrText(value) {
-  return String(value || '')
-    .replace(/\r/g, '')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-async function extractWorksheetQuestionText(source) {
-  if (!window.Tesseract || typeof window.Tesseract.recognize !== 'function') {
-    throw new Error('Metin okuma kütüphanesi yüklenemedi.');
-  }
-  const result = await window.Tesseract.recognize(source, 'tur+eng');
-  return normalizeWorksheetOcrText(result?.data?.text);
 }
 
 async function cleanWorksheetImage(source) {
@@ -8378,25 +8357,92 @@ async function cleanWorksheetImage(source) {
   cropped.width = cropWidth;
   cropped.height = cropHeight;
   cropped.getContext('2d').drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-  const ocrCanvas = document.createElement('canvas');
-  ocrCanvas.width = cropWidth;
-  ocrCanvas.height = cropHeight;
-  const ocrContext = ocrCanvas.getContext('2d');
-  ocrContext.fillStyle = '#ffffff';
-  ocrContext.fillRect(0, 0, cropWidth, cropHeight);
-  ocrContext.drawImage(cropped, 0, 0);
   return {
     source: cropped.toDataURL('image/png'),
-    ocrSource: ocrCanvas.toDataURL('image/png'),
     width: cropWidth,
     height: cropHeight
   };
+}
+
+const WORKSHEET_CANVAS_WIDTH = 576;
+const WORKSHEET_CANVAS_HEIGHT = 700;
+let worksheetDragState = null;
+
+function autoArrangeWorksheetQuestions() {
+  const rows = buildWorksheetLayoutRows(worksheetQuestions, WORKSHEET_CANVAS_WIDTH, 310);
+  let page = 0;
+  let y = 0;
+  rows.forEach((row) => {
+    if (y + row.height > WORKSHEET_CANVAS_HEIGHT && y > 0) {
+      page += 1;
+      y = 0;
+    }
+    const cellWidth = row.type === 'two' ? (WORKSHEET_CANVAS_WIDTH - 12) / 2 : WORKSHEET_CANVAS_WIDTH;
+    row.items.forEach((item, index) => {
+      item.question.layout = {
+        page,
+        x: index * (cellWidth + 12),
+        y,
+        width: item.width,
+        height: item.height
+      };
+    });
+    y += row.height;
+  });
+}
+
+function ensureWorksheetQuestionLayouts() {
+  if (worksheetQuestions.some((question) => !question.layout)) autoArrangeWorksheetQuestions();
+}
+
+function getWorksheetPageCount() {
+  return Math.max(1, ...worksheetQuestions.map((question) => Number(question.layout?.page || 0) + 1));
+}
+
+function startWorksheetQuestionDrag(event, index) {
+  const question = worksheetQuestions[index];
+  const canvas = event.currentTarget.closest('.worksheet-canvas');
+  if (!question || !question.layout || !canvas) return;
+  event.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const scale = WORKSHEET_CANVAS_WIDTH / rect.width;
+  worksheetDragState = {
+    index,
+    page: question.layout.page,
+    element: event.currentTarget,
+    offsetX: (event.clientX - rect.left) * scale - question.layout.x,
+    offsetY: (event.clientY - rect.top) * scale - question.layout.y
+  };
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+  window.addEventListener('pointermove', moveWorksheetQuestionDrag);
+  window.addEventListener('pointerup', endWorksheetQuestionDrag, { once: true });
+}
+
+function moveWorksheetQuestionDrag(event) {
+  if (!worksheetDragState) return;
+  const question = worksheetQuestions[worksheetDragState.index];
+  const canvas = document.querySelector(`.worksheet-canvas[data-page="${worksheetDragState.page}"]`);
+  if (!question || !question.layout || !canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const scale = WORKSHEET_CANVAS_WIDTH / rect.width;
+  const maxX = Math.max(0, WORKSHEET_CANVAS_WIDTH - (question.layout.width + 20));
+  const maxY = Math.max(0, WORKSHEET_CANVAS_HEIGHT - question.layout.height);
+  question.layout.x = Math.max(0, Math.min(maxX, ((event.clientX - rect.left) * scale) - worksheetDragState.offsetX));
+  question.layout.y = Math.max(0, Math.min(maxY, ((event.clientY - rect.top) * scale) - worksheetDragState.offsetY));
+  worksheetDragState.element.style.left = `${question.layout.x}px`;
+  worksheetDragState.element.style.top = `${question.layout.y}px`;
+}
+
+function endWorksheetQuestionDrag() {
+  window.removeEventListener('pointermove', moveWorksheetQuestionDrag);
+  worksheetDragState = null;
 }
 
 function moveWorksheetQuestion(index, direction) {
   const target = index + direction;
   if (target < 0 || target >= worksheetQuestions.length) return;
   [worksheetQuestions[index], worksheetQuestions[target]] = [worksheetQuestions[target], worksheetQuestions[index]];
+  autoArrangeWorksheetQuestions();
   renderWorksheetPreview();
 }
 
@@ -8405,6 +8451,7 @@ function setWorksheetQuestionNumber(index, value) {
   if (target === index) return;
   const [question] = worksheetQuestions.splice(index, 1);
   worksheetQuestions.splice(target, 0, question);
+  autoArrangeWorksheetQuestions();
   renderWorksheetPreview();
 }
 
@@ -8416,6 +8463,7 @@ function updateWorksheetQuestionText(index, value) {
 
 function removeWorksheetQuestion(index) {
   worksheetQuestions.splice(index, 1);
+  autoArrangeWorksheetQuestions();
   renderWorksheetPreview();
 }
 
@@ -8553,13 +8601,12 @@ function renderWorksheetPreview() {
     <div class="worksheet-question-row">
       <input class="input-field worksheet-question-order" type="number" min="1" max="${worksheetQuestions.length}" value="${index + 1}" onchange="setWorksheetQuestionNumber(${index}, this.value)" aria-label="Soru numarası">
       <img src="${question.source}" alt="Soru ${index + 1}">
-      <span style="font-size:0.78rem; color:#475569;">Metin düzenleyin</span>
+      <span style="font-size:0.78rem; color:#475569;">Sayfa ${Number(question.layout?.page || 0) + 1} • Sürükleyerek konumlandırın</span>
       <div class="worksheet-question-actions">
         <button type="button" class="worksheet-icon-button" onclick="moveWorksheetQuestion(${index}, -1)" aria-label="Yukarı taşı">↑</button>
         <button type="button" class="worksheet-icon-button" onclick="moveWorksheetQuestion(${index}, 1)" aria-label="Aşağı taşı">↓</button>
         <button type="button" class="worksheet-icon-button delete" onclick="removeWorksheetQuestion(${index})" aria-label="Soruyu sil">×</button>
       </div>
-      <textarea class="input-field worksheet-question-editor" oninput="updateWorksheetQuestionText(${index}, this.value)" placeholder="Soru metni">${escapeHtml(question.text || '')}</textarea>
     </div>
   `).join('') : '';
 
@@ -8568,26 +8615,29 @@ function renderWorksheetPreview() {
     return;
   }
 
-  const rows = buildWorksheetTextRows(worksheetQuestions);
-  const pages = paginateWorksheetRows(rows, 690);
+  ensureWorksheetQuestionLayouts();
+  const pageCount = getWorksheetPageCount();
   preview.innerHTML = '';
-  pages.forEach((pageRows) => {
+  Array.from({ length: pageCount }, (_, pageIndex) => pageIndex).forEach((pageIndex) => {
     const page = createWorksheetPreviewPage();
-    pageRows.forEach((row) => {
-      const rowEl = document.createElement('div');
-      rowEl.className = `worksheet-text-row ${row.type}`;
-      row.items.forEach((item) => {
-        const cell = document.createElement('div');
-        cell.className = 'worksheet-text-question';
-        cell.style.minHeight = `${row.height}px`;
-        cell.innerHTML = `<span class="worksheet-question-number">${item.number}.</span>${escapeHtml(item.question.text || '').replace(/\n/g, '<br>')}`;
-        rowEl.appendChild(cell);
-      });
-      page.appendChild(rowEl);
+    const canvas = document.createElement('div');
+    canvas.className = 'worksheet-canvas';
+    canvas.dataset.page = String(pageIndex);
+    worksheetQuestions.forEach((question, index) => {
+      if (Number(question.layout?.page || 0) !== pageIndex) return;
+      const item = document.createElement('div');
+      item.className = 'worksheet-draggable-question';
+      item.style.left = `${question.layout.x}px`;
+      item.style.top = `${question.layout.y}px`;
+      item.style.width = `${question.layout.width + 20}px`;
+      item.onpointerdown = (event) => startWorksheetQuestionDrag(event, index);
+      item.innerHTML = `<span class="worksheet-question-number">${index + 1}.</span><img src="${question.source}" alt="Soru ${index + 1}" style="width:${question.layout.width}px; height:${question.layout.height}px;">`;
+      canvas.appendChild(item);
     });
+    page.appendChild(canvas);
     preview.appendChild(page);
   });
-  setWorksheetAnalysisStatus(`${worksheetQuestions.length} soru metne çevrildi • ${pages.length} A4 sayfasına yerleştirildi. Formül ve özel karakterleri kontrol edin.`);
+  setWorksheetAnalysisStatus(`${worksheetQuestions.length} soru temizlendi • ${pageCount} A4 sayfasına yerleştirildi. Soruları sayfa üzerinde sürükleyebilirsiniz.`);
 }
 
 function createWorksheetPreviewPage() {
@@ -8635,40 +8685,39 @@ async function downloadWorksheetPdf() {
     y += 42;
   };
 
-  drawHeader();
-  const layoutRows = buildWorksheetTextRows(worksheetQuestions);
-  layoutRows.forEach((row) => {
-    const cellWidth = row.type === 'two' ? (contentWidth - 12) / 2 : contentWidth;
-    const preparedItems = row.items.map((item) => {
-      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
-      doc.setFontSize(10);
-      const lines = doc.splitTextToSize(pdfSafeText(item.question.text || ''), cellWidth - 34);
-      return { ...item, lines, height: Math.max(108, 36 + (lines.length * 13)) };
-    });
-    const rowHeight = Math.max(...preparedItems.map((item) => item.height));
+  ensureWorksheetQuestionLayouts();
+  const pageCount = getWorksheetPageCount();
+  const scale = contentWidth / WORKSHEET_CANVAS_WIDTH;
 
-    if (y + rowHeight > contentBottom && y > margin + 42) {
-      doc.addPage();
-      y = margin;
-      drawHeader();
-    }
-
-    preparedItems.forEach((item, index) => {
-      const cellX = margin + (index * (cellWidth + 12));
-      doc.setTextColor(16, 32, 64);
-      doc.setDrawColor(71, 85, 105);
-      doc.setLineWidth(0.65);
-      doc.rect(cellX, y, cellWidth, rowHeight);
-      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.text(`${item.number}.`, cellX + 10, y + 18);
-      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.setTextColor(17, 24, 39);
-      doc.text(item.lines, cellX + 24, y + 18);
-    });
-    y += rowHeight;
-  });
+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+    if (pageIndex > 0) doc.addPage();
+    y = margin;
+    drawHeader();
+    const canvasTop = y;
+    worksheetQuestions
+      .map((question, index) => ({ question, index }))
+      .filter((item) => Number(item.question.layout?.page || 0) === pageIndex)
+      .sort((a, b) => a.question.layout.y - b.question.layout.y || a.question.layout.x - b.question.layout.x)
+      .forEach(({ question, index }) => {
+        const layout = question.layout;
+        const questionX = margin + (layout.x * scale);
+        const questionY = canvasTop + (layout.y * scale);
+        doc.setTextColor(16, 32, 64);
+        doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text(`${index + 1}.`, questionX, questionY + 11);
+        doc.addImage(
+          question.source,
+          'PNG',
+          questionX + (20 * scale),
+          questionY,
+          layout.width * scale,
+          layout.height * scale,
+          undefined,
+          'FAST'
+        );
+      });
+  }
 
   doc.save(`${normalizeFileName(getWorksheetTitle()) || 'yazili'}_sorular.pdf`);
 }

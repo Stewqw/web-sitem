@@ -528,6 +528,11 @@
     .worksheet-question-cell img { width: 100%; height: auto; display: block; }
     .worksheet-analysis-status { margin-top: 10px; min-height: 18px; font-size: 0.76rem; color: #64748b; line-height: 1.4; }
     .worksheet-empty-preview { min-height: 480px; display: grid; place-items: center; color: #64748b; text-align: center; }
+    .worksheet-canvas { position: relative; min-height: 700px; }
+    .worksheet-draggable-question { position: absolute; display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 6px; align-items: start; cursor: grab; touch-action: none; user-select: none; }
+    .worksheet-draggable-question:active { cursor: grabbing; }
+    .worksheet-draggable-question img { display: block; max-width: 100%; height: auto; pointer-events: none; }
+    .worksheet-draggable-question .worksheet-question-number { pointer-events: none; }
     .worksheet-text-row { display: grid; gap: 0; margin-bottom: 0; break-inside: avoid; }
     .worksheet-text-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .worksheet-text-question { min-height: 108px; padding: 14px; border: 1px dashed #334155; color: #111827; font-family: Georgia, 'Times New Roman', serif; font-size: 0.88rem; line-height: 1.45; white-space: pre-wrap; }
@@ -2171,7 +2176,7 @@
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap; margin-bottom:16px;">
               <div>
                 <h2 style="margin:0; font-size:1.25rem; color:var(--color-dark-teal);">Yazılı Hazırlama</h2>
-                <p style="margin:8px 0 0; color:#64748b; font-size:0.88rem;">Görsellerdeki soruları metne çevirin, düzenleyin ve yazılı PDF'i oluşturun.</p>
+                <p style="margin:8px 0 0; color:#64748b; font-size:0.88rem;">Soruları temiz arka planla ekleyin, A4 üzerinde sürükleyerek yerleştirin ve yazılı PDF'i oluşturun.</p>
               </div>
               <button type="button" class="btn-action btn-coral" onclick="downloadWorksheetPdf()">PDF İndir</button>
             </div>
@@ -3431,7 +3436,6 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
