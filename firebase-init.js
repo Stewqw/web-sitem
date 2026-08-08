@@ -428,7 +428,15 @@
   };
 
   services.getCurrentUserSession = async function getCurrentUserSession() {
-    const user = auth.currentUser;
+    // auth.currentUser is null until Firebase restores the session asynchronously;
+    // onAuthStateChanged waits for that initialization before resolving.
+    const user = await new Promise(resolve => {
+      const unsubscribe = auth.onAuthStateChanged(u => {
+        unsubscribe();
+        resolve(u);
+      });
+    });
+
     if (!user) return null;
 
     if (!user.emailVerified) {
