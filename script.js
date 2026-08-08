@@ -8273,13 +8273,19 @@ async function addWorksheetImages(files) {
   const images = Array.from(files || []).filter((file) => file && String(file.type || '').startsWith('image/'));
   if (!images.length) return;
 
-  setWorksheetAnalysisStatus(`${images.length} görsel analiz ediliyor, arka planlar temizleniyor...`);
+  setWorksheetAnalysisStatus(`${images.length} görsel hazırlanıyor. Arka plan temizleme ve metin okuma başlatıldı...`);
 
-  for (const file of images) {
+  for (const [index, file] of images.entries()) {
     try {
       const source = await readWorksheetFile(file);
       const cleaned = await cleanWorksheetImage(source);
-      worksheetQuestions.push({ id: Date.now() + Math.random(), ...cleaned });
+      setWorksheetAnalysisStatus(`${index + 1}/${images.length}. soru metne çevriliyor...`);
+      const text = await extractWorksheetQuestionText(cleaned.ocrSource || cleaned.source);
+      worksheetQuestions.push({
+        id: Date.now() + Math.random(),
+        ...cleaned,
+        text: text || 'Metin algılanamadı. Soruyu buradan düzenleyin.'
+      });
     } catch (error) {
       console.warn('Soru görseli eklenemedi:', error);
     }
@@ -8303,6 +8309,22 @@ function loadWorksheetImage(source) {
     image.onerror = reject;
     image.src = source;
   });
+}
+
+function normalizeWorksheetOcrText(value) {
+  return String(value || '')
+    .replace(/\r/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+async function extractWorksheetQuestionText(source) {
+  if (!window.Tesseract || typeof window.Tesseract.recognize !== 'function') {
+    throw new Error('Metin okuma kütüphanesi yüklenemedi.');
+  }
+  const result = await window.Tesseract.recognize(source, 'tur+eng');
+  return normalizeWorksheetOcrText(result?.data?.text);
 }
 
 async function cleanWorksheetImage(source) {
@@ -8356,7 +8378,19 @@ async function cleanWorksheetImage(source) {
   cropped.width = cropWidth;
   cropped.height = cropHeight;
   cropped.getContext('2d').drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-  return { source: cropped.toDataURL('image/png'), width: cropWidth, height: cropHeight };
+  const ocrCanvas = document.createElement('canvas');
+  ocrCanvas.width = cropWidth;
+  ocrCanvas.height = cropHeight;
+  const ocrContext = ocrCanvas.getContext('2d');
+  ocrContext.fillStyle = '#ffffff';
+  ocrContext.fillRect(0, 0, cropWidth, cropHeight);
+  ocrContext.drawImage(cropped, 0, 0);
+  return {
+    source: cropped.toDataURL('image/png'),
+    ocrSource: ocrCanvas.toDataURL('image/png'),
+    width: cropWidth,
+    height: cropHeight
+  };
 }
 
 function moveWorksheetQuestion(index, direction) {
@@ -8371,6 +8405,12 @@ function setWorksheetQuestionNumber(index, value) {
   if (target === index) return;
   const [question] = worksheetQuestions.splice(index, 1);
   worksheetQuestions.splice(target, 0, question);
+  renderWorksheetPreview();
+}
+
+function updateWorksheetQuestionText(index, value) {
+  if (!worksheetQuestions[index]) return;
+  worksheetQuestions[index].text = String(value || '');
   renderWorksheetPreview();
 }
 
@@ -8464,6 +8504,46 @@ function paginateWorksheetRows(rows, usableHeight) {
   return pages;
 }
 
+function estimateWorksheetTextHeight(text, charactersPerLine) {
+  const lineCount = String(text || '')
+    .split('\n')
+    .reduce((count, line) => count + Math.max(1, Math.ceil(Math.max(1, line.length) / charactersPerLine)), 0);
+  return Math.max(108, 38 + (lineCount * 18));
+}
+
+function buildWorksheetTextRows(questions) {
+  const rows = [];
+  let index = 0;
+  while (index < questions.length) {
+    const current = questions[index];
+    const currentTwoColumnHeight = estimateWorksheetTextHeight(current.text, 39);
+    const next = questions[index + 1];
+    const nextTwoColumnHeight = next ? estimateWorksheetTextHeight(next.text, 39) : 0;
+
+    if (next && currentTwoColumnHeight <= 270 && nextTwoColumnHeight <= 270) {
+      rows.push({
+        type: 'two',
+        height: Math.max(currentTwoColumnHeight, nextTwoColumnHeight),
+        items: [
+          { question: current, number: index + 1, height: currentTwoColumnHeight },
+          { question: next, number: index + 2, height: nextTwoColumnHeight }
+        ]
+      });
+      index += 2;
+      continue;
+    }
+
+    const fullHeight = estimateWorksheetTextHeight(current.text, 82);
+    rows.push({
+      type: 'full',
+      height: fullHeight,
+      items: [{ question: current, number: index + 1, height: fullHeight }]
+    });
+    index += 1;
+  }
+  return rows;
+}
+
 function renderWorksheetPreview() {
   const list = document.getElementById('worksheetQuestionList');
   const preview = document.getElementById('worksheetPreview');
@@ -8473,12 +8553,13 @@ function renderWorksheetPreview() {
     <div class="worksheet-question-row">
       <input class="input-field worksheet-question-order" type="number" min="1" max="${worksheetQuestions.length}" value="${index + 1}" onchange="setWorksheetQuestionNumber(${index}, this.value)" aria-label="Soru numarası">
       <img src="${question.source}" alt="Soru ${index + 1}">
-      <span style="font-size:0.78rem; color:#475569;">${question.width} × ${question.height}</span>
+      <span style="font-size:0.78rem; color:#475569;">Metin düzenleyin</span>
       <div class="worksheet-question-actions">
         <button type="button" class="worksheet-icon-button" onclick="moveWorksheetQuestion(${index}, -1)" aria-label="Yukarı taşı">↑</button>
         <button type="button" class="worksheet-icon-button" onclick="moveWorksheetQuestion(${index}, 1)" aria-label="Aşağı taşı">↓</button>
         <button type="button" class="worksheet-icon-button delete" onclick="removeWorksheetQuestion(${index})" aria-label="Soruyu sil">×</button>
       </div>
+      <textarea class="input-field worksheet-question-editor" oninput="updateWorksheetQuestionText(${index}, this.value)" placeholder="Soru metni">${escapeHtml(question.text || '')}</textarea>
     </div>
   `).join('') : '';
 
@@ -8487,26 +8568,26 @@ function renderWorksheetPreview() {
     return;
   }
 
-  const rows = buildWorksheetLayoutRows(worksheetQuestions, 576, 350);
-  const pages = paginateWorksheetRows(rows, 700);
+  const rows = buildWorksheetTextRows(worksheetQuestions);
+  const pages = paginateWorksheetRows(rows, 690);
   preview.innerHTML = '';
   pages.forEach((pageRows) => {
     const page = createWorksheetPreviewPage();
     pageRows.forEach((row) => {
       const rowEl = document.createElement('div');
-      rowEl.className = `worksheet-layout-row ${row.type}`;
-      rowEl.style.marginBottom = `${row.spacing}px`;
+      rowEl.className = `worksheet-text-row ${row.type}`;
       row.items.forEach((item) => {
         const cell = document.createElement('div');
-        cell.className = 'worksheet-question-cell';
-        cell.innerHTML = `<span class="worksheet-question-number">${item.number}</span><img src="${item.question.source}" alt="Soru ${item.number}" style="max-width:${item.width}px; max-height:${item.height}px;">`;
+        cell.className = 'worksheet-text-question';
+        cell.style.minHeight = `${row.height}px`;
+        cell.innerHTML = `<span class="worksheet-question-number">${item.number}.</span>${escapeHtml(item.question.text || '').replace(/\n/g, '<br>')}`;
         rowEl.appendChild(cell);
       });
       page.appendChild(rowEl);
     });
     preview.appendChild(page);
   });
-  setWorksheetAnalysisStatus(`${worksheetQuestions.length} soru analiz edildi • ${pages.length} A4 sayfasına akıllı yerleşim yapıldı.`);
+  setWorksheetAnalysisStatus(`${worksheetQuestions.length} soru metne çevrildi • ${pages.length} A4 sayfasına yerleştirildi. Formül ve özel karakterleri kontrol edin.`);
 }
 
 function createWorksheetPreviewPage() {
@@ -8528,6 +8609,7 @@ async function downloadWorksheetPdf() {
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF('p', 'pt', 'a4');
+  const hasUnicodeFont = await applyPdfUnicodeFont(doc);
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 42;
@@ -8537,12 +8619,12 @@ async function downloadWorksheetPdf() {
 
   const drawHeader = () => {
     doc.setTextColor(16, 32, 64);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
     doc.setFontSize(16);
     doc.text(pdfSafeText(getWorksheetTitle()), margin, y);
     const subtitle = getWorksheetSubtitle();
     if (subtitle) {
-      doc.setFont('helvetica', 'normal');
+      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(100, 116, 139);
       doc.text(pdfSafeText(subtitle), margin, y + 15);
@@ -8554,24 +8636,38 @@ async function downloadWorksheetPdf() {
   };
 
   drawHeader();
-  const layoutRows = buildWorksheetLayoutRows(worksheetQuestions, contentWidth, 390);
+  const layoutRows = buildWorksheetTextRows(worksheetQuestions);
   layoutRows.forEach((row) => {
-    if (y + row.height > contentBottom && y > margin + 42) {
+    const cellWidth = row.type === 'two' ? (contentWidth - 12) / 2 : contentWidth;
+    const preparedItems = row.items.map((item) => {
+      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
+      doc.setFontSize(10);
+      const lines = doc.splitTextToSize(pdfSafeText(item.question.text || ''), cellWidth - 34);
+      return { ...item, lines, height: Math.max(108, 36 + (lines.length * 13)) };
+    });
+    const rowHeight = Math.max(...preparedItems.map((item) => item.height));
+
+    if (y + rowHeight > contentBottom && y > margin + 42) {
       doc.addPage();
       y = margin;
       drawHeader();
     }
 
-    const cellWidth = row.type === 'two' ? (contentWidth - 12) / 2 : contentWidth;
-    row.items.forEach((item, index) => {
+    preparedItems.forEach((item, index) => {
       const cellX = margin + (index * (cellWidth + 12));
       doc.setTextColor(16, 32, 64);
-      doc.setFont('helvetica', 'bold');
+      doc.setDrawColor(71, 85, 105);
+      doc.setLineWidth(0.65);
+      doc.rect(cellX, y, cellWidth, rowHeight);
+      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
       doc.setFontSize(11);
-      doc.text(`${item.number}.`, cellX, y + 11);
-      doc.addImage(item.question.source, 'PNG', cellX + 20, y, item.width, item.height, undefined, 'FAST');
+      doc.text(`${item.number}.`, cellX + 10, y + 18);
+      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(17, 24, 39);
+      doc.text(item.lines, cellX + 24, y + 18);
     });
-    y += row.height;
+    y += rowHeight;
   });
 
   doc.save(`${normalizeFileName(getWorksheetTitle()) || 'yazili'}_sorular.pdf`);
