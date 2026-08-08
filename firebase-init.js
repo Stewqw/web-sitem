@@ -50,6 +50,15 @@
     },
     async getCurrentUserSession() {
       return null;
+    },
+    async getCoachUserCount() {
+      return null;
+    },
+    async loadWorkspaceSettings() {
+      return null;
+    },
+    async saveWorkspaceSettings() {
+      return null;
     }
   };
 
@@ -583,6 +592,59 @@
     );
 
     return safeStudents;
+  };
+
+  services.getCoachUserCount = async function getCoachUserCount() {
+    if (!db) return null;
+
+    const snapshot = await withTimeout(
+      db.collection("users").where("role", "==", "coach").count().get(),
+      10000,
+      "app/user-count-timeout",
+      "Kullanıcı sayısı okunurken zaman aşımı oluştu."
+    );
+    const data = snapshot.data();
+    return typeof data.count === "number" ? data.count : 0;
+  };
+
+  services.loadWorkspaceSettings = async function loadWorkspaceSettings() {
+    const user = auth.currentUser;
+    if (!user || !db) return null;
+
+    const profile = await withTimeout(
+      getProfileByUid(user.uid),
+      10000,
+      "app/workspace-load-timeout",
+      "Çalışma alanı ayarları okunurken zaman aşımı oluştu."
+    );
+    return profile && profile.workspaceSettings && typeof profile.workspaceSettings === "object"
+      ? profile.workspaceSettings
+      : null;
+  };
+
+  services.saveWorkspaceSettings = async function saveWorkspaceSettings(settings) {
+    const user = auth.currentUser;
+    if (!user || !db || !fieldValue) {
+      const missingDbError = new Error("Firestore kullanima hazir degil.");
+      missingDbError.code = "app/firestore-unavailable";
+      throw missingDbError;
+    }
+
+    const safeSettings = settings && typeof settings === "object" ? settings : {};
+    await withTimeout(
+      db.collection("users").doc(user.uid).set(
+        {
+          workspaceSettings: safeSettings,
+          workspaceSettingsUpdatedAtIso: new Date().toISOString(),
+          updatedAt: fieldValue.serverTimestamp()
+        },
+        { merge: true }
+      ),
+      10000,
+      "app/workspace-save-timeout",
+      "Çalışma alanı ayarları kaydedilirken zaman aşımı oluştu."
+    );
+    return safeSettings;
   };
 
   services.isReady = true;

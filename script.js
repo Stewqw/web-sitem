@@ -168,10 +168,12 @@ function getHiddenClassLevels() {
 
 function saveHiddenClassLevels(classLevels) {
   localStorage.setItem(`${getCustomClassStorageKey()}_hidden`, JSON.stringify(ensureUniqueList(classLevels)));
+  queueWorkspaceSettingsSave();
 }
 
 function saveCustomClassLevels(classLevels) {
   localStorage.setItem(getCustomClassStorageKey(), JSON.stringify(ensureUniqueList(classLevels).filter(isCustomClassLevel)));
+  queueWorkspaceSettingsSave();
 }
 
 function deleteCustomClassLevel(classLevel) {
@@ -985,6 +987,7 @@ async function paneleGirisYap(nereden) {
       currentUserBranch = session && session.branch ? session.branch : currentUserBranch;
       loadSavedResourceSuggestions();
       await syncStudentStorageFromCloud();
+      await syncWorkspaceSettingsFromCloud();
 
       modalKapat('authModal');
       ekranıGoster('dashboardApp');
@@ -1029,6 +1032,7 @@ async function paneleGirisYap(nereden) {
     currentUserBranch = data.user && data.user.branch ? data.user.branch : currentUserBranch;
     loadSavedResourceSuggestions();
     await syncStudentStorageFromCloud();
+    await syncWorkspaceSettingsFromCloud();
 
     modalKapat('authModal');
     ekranıGoster('dashboardApp');
@@ -1070,6 +1074,7 @@ async function attemptAutoLogin() {
         currentUserBranch = session.branch || currentUserBranch;
         loadSavedResourceSuggestions();
         await syncStudentStorageFromCloud();
+        await syncWorkspaceSettingsFromCloud();
         localStorage.setItem('koclukUserEmail', email);
         sessionStorage.removeItem('koclukUserEmail');
 
@@ -1105,6 +1110,7 @@ async function attemptAutoLogin() {
         currentUserBranch = data.user.branch || currentUserBranch;
         loadSavedResourceSuggestions();
         await syncStudentStorageFromCloud();
+        await syncWorkspaceSettingsFromCloud();
         if (localStorage.getItem('koclukToken')) {
           localStorage.setItem('koclukUserEmail', email);
           sessionStorage.removeItem('koclukUserEmail');
@@ -3914,6 +3920,19 @@ function updateUserCountLabel() {
   const labelEl = document.getElementById('userCountLabel');
   if (!labelEl) return;
 
+  if (shouldUseFirebaseAuth()) {
+    const services = getFirebaseServices();
+    if (!services || typeof services.getCoachUserCount !== 'function') return;
+    services.getCoachUserCount()
+      .then((count) => {
+        if (typeof count === 'number') labelEl.textContent = `${count} üye`;
+      })
+      .catch((error) => {
+        console.warn('Firebase kullanıcı sayısı okunamadı:', error);
+      });
+    return;
+  }
+
   fetch(API_URL + '/api/users/count')
     .then(async res => {
       if (!res.ok) throw new Error('Fail');
@@ -3934,7 +3953,7 @@ function startUserCountAutoRefresh() {
     clearInterval(userCountIntervalId);
   }
 
-  userCountIntervalId = setInterval(updateUserCountLabel, 10000);
+  userCountIntervalId = setInterval(updateUserCountLabel, 5 * 60 * 1000);
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
@@ -6432,6 +6451,7 @@ function writeCustomUnitTopicData(data) {
   customUnitTopicCache = safeData;
   customUnitTopicCacheKey = getUnitTopicStorageKey();
   localStorage.setItem(customUnitTopicCacheKey, JSON.stringify(safeData));
+  queueWorkspaceSettingsSave();
 }
 
 function ensureUniqueList(values) {
@@ -6685,6 +6705,7 @@ function getStoredResourceSuggestions() {
 function setStoredResourceSuggestions(resources) {
   const key = getResourceStorageKey();
   localStorage.setItem(key, JSON.stringify(resources));
+  queueWorkspaceSettingsSave();
 }
 
 function getHiddenResourceStorageKey() {
@@ -6705,10 +6726,79 @@ function getStoredHiddenResourceSuggestions() {
 function setStoredHiddenResourceSuggestions(entries) {
   const key = getHiddenResourceStorageKey();
   localStorage.setItem(key, JSON.stringify(entries));
+  queueWorkspaceSettingsSave();
 }
 
 function loadSavedResourceSuggestions() {
   savedResourceSuggestions = getStoredResourceSuggestions();
+}
+
+let workspaceSettingsSaveTimer = null;
+let workspaceSettingsApplying = false;
+
+function getWorkspaceSettingsPayload() {
+  return {
+    version: 1,
+    resourceSuggestions: getStoredResourceSuggestions(),
+    hiddenResourceSuggestions: getStoredHiddenResourceSuggestions(),
+    unitTopicData: readCustomUnitTopicData(),
+    customClassLevels: getCustomClassLevels(),
+    hiddenClassLevels: getHiddenClassLevels()
+  };
+}
+
+function hasWorkspaceSettings(settings) {
+  if (!settings || typeof settings !== 'object') return false;
+  return (Array.isArray(settings.resourceSuggestions) && settings.resourceSuggestions.length > 0)
+    || (Array.isArray(settings.hiddenResourceSuggestions) && settings.hiddenResourceSuggestions.length > 0)
+    || (settings.unitTopicData && typeof settings.unitTopicData === 'object' && Object.keys(settings.unitTopicData).length > 0)
+    || (Array.isArray(settings.customClassLevels) && settings.customClassLevels.length > 0)
+    || (Array.isArray(settings.hiddenClassLevels) && settings.hiddenClassLevels.length > 0);
+}
+
+function applyWorkspaceSettings(settings) {
+  if (!settings || typeof settings !== 'object') return;
+  workspaceSettingsApplying = true;
+  try {
+    setStoredResourceSuggestions(Array.isArray(settings.resourceSuggestions) ? settings.resourceSuggestions : []);
+    setStoredHiddenResourceSuggestions(Array.isArray(settings.hiddenResourceSuggestions) ? settings.hiddenResourceSuggestions : []);
+    writeCustomUnitTopicData(settings.unitTopicData && typeof settings.unitTopicData === 'object' ? settings.unitTopicData : {});
+    saveCustomClassLevels(Array.isArray(settings.customClassLevels) ? settings.customClassLevels : []);
+    saveHiddenClassLevels(Array.isArray(settings.hiddenClassLevels) ? settings.hiddenClassLevels : []);
+    loadSavedResourceSuggestions();
+    refreshCustomClassNavigation();
+    populateClassSelect(document.getElementById('ogrenciSinifInput'), document.getElementById('ogrenciSinifInput')?.value || '8');
+    populateClassSelect(document.getElementById('editStudentClass'), document.getElementById('editStudentClass')?.value || '8');
+  } finally {
+    workspaceSettingsApplying = false;
+  }
+}
+
+function queueWorkspaceSettingsSave() {
+  if (workspaceSettingsApplying || !shouldUseFirebaseAuth() || !currentUserEmail) return;
+  if (workspaceSettingsSaveTimer) clearTimeout(workspaceSettingsSaveTimer);
+  workspaceSettingsSaveTimer = setTimeout(() => {
+    workspaceSettingsSaveTimer = null;
+    const services = getFirebaseServices();
+    if (!services || typeof services.saveWorkspaceSettings !== 'function') return;
+    services.saveWorkspaceSettings(getWorkspaceSettingsPayload()).catch((error) => {
+      console.warn('Çalışma alanı ayarları buluta kaydedilemedi:', error);
+    });
+  }, 1200);
+}
+
+async function syncWorkspaceSettingsFromCloud() {
+  if (!shouldUseFirebaseAuth()) return;
+  const services = getFirebaseServices();
+  if (!services || typeof services.loadWorkspaceSettings !== 'function') return;
+
+  const localSettings = getWorkspaceSettingsPayload();
+  const cloudSettings = await services.loadWorkspaceSettings();
+  if (hasWorkspaceSettings(cloudSettings)) {
+    applyWorkspaceSettings(cloudSettings);
+  } else if (hasWorkspaceSettings(localSettings) && typeof services.saveWorkspaceSettings === 'function') {
+    await services.saveWorkspaceSettings(localSettings);
+  }
 }
 
 function populateTaskSourceOptions(classLevel, lesson = '', currentSource = '') {
