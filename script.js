@@ -990,6 +990,7 @@ async function paneleGirisYap(nereden) {
       await syncWorkspaceSettingsFromCloud();
 
       modalKapat('authModal');
+      restoreLastDashboardSection();
       ekranıGoster('dashboardApp');
       updatePageHistory('dashboardApp', 'replace');
       renderStoredOgrenciler();
@@ -1035,6 +1036,7 @@ async function paneleGirisYap(nereden) {
     await syncWorkspaceSettingsFromCloud();
 
     modalKapat('authModal');
+    restoreLastDashboardSection();
     ekranıGoster('dashboardApp');
     updatePageHistory('dashboardApp', 'replace');
     renderStoredOgrenciler();
@@ -1078,6 +1080,7 @@ async function attemptAutoLogin() {
         localStorage.setItem('koclukUserEmail', email);
         sessionStorage.removeItem('koclukUserEmail');
 
+        restoreLastDashboardSection();
         sayfaAcs('dashboardApp', false);
         renderStoredOgrenciler();
         updateUserCountLabel();
@@ -1119,6 +1122,7 @@ async function attemptAutoLogin() {
           localStorage.removeItem('koclukUserEmail');
         }
       }
+      restoreLastDashboardSection();
       sayfaAcs('dashboardApp', false);
       renderStoredOgrenciler();
       updateUserCountLabel();
@@ -1129,6 +1133,17 @@ async function attemptAutoLogin() {
     return false;
   }
   return false;
+}
+const SAVED_DASHBOARD_SECTIONS = new Set(['kokpit', 'ogrenci', 'raporlama', 'yazili-hazirlama', 'muhasebe', 'kaynak', 'unite-konu']);
+
+function getDashboardSectionStorageKey() {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  return `last_dashboard_section_${email}`;
+}
+
+function restoreLastDashboardSection() {
+  const section = localStorage.getItem(getDashboardSectionStorageKey());
+  sekmeAcs(SAVED_DASHBOARD_SECTIONS.has(section) ? section : 'kokpit');
 }
 
 function sekmeAcs(sekmeAd) {
@@ -1200,6 +1215,10 @@ function sekmeAcs(sekmeAd) {
     if (uniteKonuEl) uniteKonuEl.style.display = 'block';
     markMenuActive('menu-unite-konu');
     initUniteKonuPanel();
+  }
+
+  if (SAVED_DASHBOARD_SECTIONS.has(sekmeAd)) {
+    localStorage.setItem(getDashboardSectionStorageKey(), sekmeAd);
   }
 
   closeMobileSidebar();
@@ -8254,6 +8273,8 @@ async function addWorksheetImages(files) {
   const images = Array.from(files || []).filter((file) => file && String(file.type || '').startsWith('image/'));
   if (!images.length) return;
 
+  setWorksheetAnalysisStatus(`${images.length} görsel analiz ediliyor, arka planlar temizleniyor...`);
+
   for (const file of images) {
     try {
       const source = await readWorksheetFile(file);
@@ -8358,6 +8379,75 @@ function getWorksheetSubtitle() {
   return String(document.getElementById('worksheetSubtitle')?.value || '').trim();
 }
 
+function setWorksheetAnalysisStatus(message) {
+  const statusEl = document.getElementById('worksheetAnalysisStatus');
+  if (statusEl) statusEl.textContent = message || '';
+}
+
+function fitWorksheetQuestion(question, maxWidth, maxHeight) {
+  const aspectRatio = Math.max(0.1, Number(question.width || 1) / Math.max(1, Number(question.height || 1)));
+  let width = maxWidth;
+  let height = width / aspectRatio;
+  if (height > maxHeight) {
+    height = maxHeight;
+    width = height * aspectRatio;
+  }
+  return { width, height };
+}
+
+function buildWorksheetLayoutRows(questions, contentWidth, maxImageHeight) {
+  const rows = [];
+  let index = 0;
+  while (index < questions.length) {
+    const current = questions[index];
+    const currentAspect = Number(current.width || 1) / Math.max(1, Number(current.height || 1));
+    const next = questions[index + 1];
+    const nextAspect = next ? Number(next.width || 1) / Math.max(1, Number(next.height || 1)) : 0;
+    const isCompact = currentAspect >= 0.72 && currentAspect <= 1.45;
+    const nextIsCompact = next && nextAspect >= 0.72 && nextAspect <= 1.45;
+
+    if (isCompact && nextIsCompact) {
+      const cellWidth = (contentWidth - 12) / 2;
+      const imageWidth = Math.max(80, cellWidth - 33);
+      const first = fitWorksheetQuestion(current, imageWidth, maxImageHeight);
+      const second = fitWorksheetQuestion(next, imageWidth, maxImageHeight);
+      rows.push({
+        type: 'two',
+        height: Math.max(first.height, second.height) + 16,
+        items: [
+          { question: current, number: index + 1, ...first },
+          { question: next, number: index + 2, ...second }
+        ]
+      });
+      index += 2;
+      continue;
+    }
+
+    const fitted = fitWorksheetQuestion(current, Math.max(120, contentWidth - 34), maxImageHeight);
+    rows.push({
+      type: 'full',
+      height: Math.max(fitted.height, 26) + 16,
+      items: [{ question: current, number: index + 1, ...fitted }]
+    });
+    index += 1;
+  }
+  return rows;
+}
+
+function paginateWorksheetRows(rows, usableHeight) {
+  const pages = [[]];
+  let currentHeight = 0;
+  rows.forEach((row) => {
+    if (currentHeight + row.height > usableHeight && pages[pages.length - 1].length) {
+      pages.push([]);
+      currentHeight = 0;
+    }
+    pages[pages.length - 1].push(row);
+    currentHeight += row.height;
+  });
+  return pages;
+}
+
 function renderWorksheetPreview() {
   const list = document.getElementById('worksheetQuestionList');
   const preview = document.getElementById('worksheetPreview');
@@ -8381,27 +8471,25 @@ function renderWorksheetPreview() {
     return;
   }
 
-  const pageWidth = 576;
-  const usableHeight = 770;
-  let pageHeight = 68;
-  let page = createWorksheetPreviewPage();
-  const pages = [page];
-  worksheetQuestions.forEach((question, index) => {
-    const imageHeight = Math.min(430, (pageWidth - 38) * (question.height / question.width));
-    const blockHeight = Math.max(54, imageHeight) + 24;
-    if (pageHeight + blockHeight > usableHeight && page.childElementCount > 1) {
-      page = createWorksheetPreviewPage();
-      pages.push(page);
-      pageHeight = 68;
-    }
-    const item = document.createElement('div');
-    item.className = 'worksheet-question-preview';
-    item.innerHTML = `<span class="worksheet-question-number">${index + 1}</span><img src="${question.source}" alt="Soru ${index + 1}">`;
-    page.appendChild(item);
-    pageHeight += blockHeight;
-  });
+  const rows = buildWorksheetLayoutRows(worksheetQuestions, 576, 350);
+  const pages = paginateWorksheetRows(rows, 700);
   preview.innerHTML = '';
-  pages.forEach((item) => preview.appendChild(item));
+  pages.forEach((pageRows) => {
+    const page = createWorksheetPreviewPage();
+    pageRows.forEach((row) => {
+      const rowEl = document.createElement('div');
+      rowEl.className = `worksheet-layout-row ${row.type}`;
+      row.items.forEach((item) => {
+        const cell = document.createElement('div');
+        cell.className = 'worksheet-question-cell';
+        cell.innerHTML = `<span class="worksheet-question-number">${item.number}</span><img src="${item.question.source}" alt="Soru ${item.number}" style="max-width:${item.width}px; max-height:${item.height}px;">`;
+        rowEl.appendChild(cell);
+      });
+      page.appendChild(rowEl);
+    });
+    preview.appendChild(page);
+  });
+  setWorksheetAnalysisStatus(`${worksheetQuestions.length} soru analiz edildi • ${pages.length} A4 sayfasına akıllı yerleşim yapıldı.`);
 }
 
 function createWorksheetPreviewPage() {
@@ -8449,34 +8537,26 @@ async function downloadWorksheetPdf() {
   };
 
   drawHeader();
-  worksheetQuestions.forEach((question, index) => {
-    let imageWidth = contentWidth - 34;
-    let imageHeight = imageWidth * (question.height / question.width);
-    const maxImageHeight = contentBottom - y - 16;
-    if (imageHeight > maxImageHeight) {
-      imageHeight = Math.max(80, maxImageHeight);
-      imageWidth = imageHeight * (question.width / question.height);
-    }
-    const blockHeight = Math.max(imageHeight, 26) + 18;
-    if (y + blockHeight > contentBottom) {
+  const layoutRows = buildWorksheetLayoutRows(worksheetQuestions, contentWidth, 390);
+  layoutRows.forEach((row) => {
+    if (y + row.height > contentBottom && y > margin + 42) {
       doc.addPage();
       y = margin;
       drawHeader();
-      imageWidth = contentWidth - 34;
-      imageHeight = imageWidth * (question.height / question.width);
-      if (imageHeight > contentBottom - y - 16) {
-        imageHeight = contentBottom - y - 16;
-        imageWidth = imageHeight * (question.width / question.height);
-      }
     }
-    doc.setFillColor(16, 32, 64);
-    doc.circle(margin + 10, y + 10, 10, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.text(String(index + 1), margin + 10, y + 13, { align: 'center' });
-    doc.addImage(question.source, 'PNG', margin + 28, y, imageWidth, imageHeight, undefined, 'FAST');
-    y += Math.max(imageHeight, 26) + 18;
+
+    const cellWidth = row.type === 'two' ? (contentWidth - 12) / 2 : contentWidth;
+    row.items.forEach((item, index) => {
+      const cellX = margin + (index * (cellWidth + 12));
+      doc.setFillColor(16, 32, 64);
+      doc.circle(cellX + 10, y + 10, 10, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text(String(item.number), cellX + 10, y + 13, { align: 'center' });
+      doc.addImage(item.question.source, 'PNG', cellX + 28, y, item.width, item.height, undefined, 'FAST');
+    });
+    y += row.height;
   });
 
   doc.save(`${normalizeFileName(getWorksheetTitle()) || 'yazili'}_sorular.pdf`);
