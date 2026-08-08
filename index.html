@@ -2016,13 +2016,11 @@
             <div class="menu-item" id="menu-ogrenci" onclick="sekmeAcs('ogrenci')">
               <span class="icon"></span><span class="menu-title">Öğrenci Yönetimi</span>
             </div>
-            <div class="menu-item has-submenu" id="menu-raporlama">
-              <div class="menu-main" onclick="sekmeAcs('raporlama'); toggleRaporlamaSubmenu(event)">
-                <span class="icon"></span><span class="menu-title">Raporlama</span>
-              </div>
-              <div class="submenu">
-                <div class="submenu-item" onclick="event.stopPropagation(); openYaziliHazirlama()">Yazılı Hazırlama</div>
-              </div>
+            <div class="menu-item" id="menu-raporlama" onclick="sekmeAcs('raporlama')">
+              <span class="icon"></span><span class="menu-title">Raporlama</span>
+            </div>
+            <div class="menu-item" id="menu-yazili-hazirlama" onclick="openYaziliHazirlama()">
+              <span class="icon"></span><span class="menu-title">Yazılı Hazırlama</span>
             </div>
             <div class="menu-item" id="menu-muhasebe" onclick="sekmeAcs('muhasebe')">
               <span class="icon"></span><span class="menu-title">Muhasebe</span>

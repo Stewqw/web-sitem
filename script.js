@@ -1158,9 +1158,6 @@ function sekmeAcs(sekmeAd) {
   if (kaynakMenu && sekmeAd !== 'kaynak') kaynakMenu.classList.remove('submenu-open');
   const uniteKonuMenu = document.getElementById('menu-unite-konu');
   if (uniteKonuMenu && sekmeAd !== 'unite-konu') uniteKonuMenu.classList.remove('submenu-open');
-  const raporlamaMenu = document.getElementById('menu-raporlama');
-  if (raporlamaMenu && sekmeAd !== 'raporlama' && sekmeAd !== 'yazili-hazirlama') raporlamaMenu.classList.remove('submenu-open');
-
   document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
 
   if (sekmeAd === 'kokpit') {
@@ -1175,7 +1172,7 @@ function sekmeAcs(sekmeAd) {
     renderRaporlamaStudentList();
   } else if (sekmeAd === 'yazili-hazirlama') {
     if (yaziliEl) yaziliEl.style.display = 'block';
-    markMenuActive('menu-raporlama');
+    markMenuActive('menu-yazili-hazirlama');
     initWorksheetBuilder();
   } else if (sekmeAd === 'muhasebe') {
     if (muhasebeEl) muhasebeEl.style.display = 'block';
@@ -8125,11 +8122,6 @@ function openStudentResourceSelectionPage() {
 
 let worksheetQuestions = [];
 let worksheetBuilderBound = false;
-
-function toggleRaporlamaSubmenu(event) {
-  event.stopPropagation();
-  document.getElementById('menu-raporlama')?.classList.toggle('submenu-open');
-}
 
 function openYaziliHazirlama() {
   sekmeAcs('yazili-hazirlama');
