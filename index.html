@@ -507,7 +507,8 @@
     .worksheet-dropzone { min-height: 150px; border: 2px dashed #94a3b8; border-radius: 8px; display: grid; place-items: center; text-align: center; padding: 16px; color: #475569; background: #fff; cursor: pointer; }
     .worksheet-dropzone.drag-over { border-color: var(--color-coral); background: #fff7ed; color: #9a4d00; }
     .worksheet-question-list { display: grid; gap: 8px; margin-top: 14px; max-height: 420px; overflow-y: auto; }
-    .worksheet-question-row { display: grid; grid-template-columns: 30px 42px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; }
+    .worksheet-question-row { display: grid; grid-template-columns: 42px 42px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; }
+    .worksheet-question-order { width: 42px; margin: 0; padding: 6px 4px; text-align: center; font-weight: 800; }
     .worksheet-question-row img { width: 42px; height: 42px; object-fit: contain; background: #fff; }
     .worksheet-question-actions { display: flex; gap: 4px; }
     .worksheet-icon-button { border: 0; background: #eef2f7; color: #334155; width: 28px; height: 28px; border-radius: 4px; cursor: pointer; font-weight: 800; }
@@ -518,11 +519,11 @@
     .worksheet-page-title { font-size: 1.1rem; font-weight: 800; }
     .worksheet-page-meta { font-size: 0.76rem; color: #64748b; margin-top: 4px; }
     .worksheet-question-preview { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: start; margin: 0 0 16px; break-inside: avoid; }
-    .worksheet-question-number { width: 26px; height: 26px; display: grid; place-items: center; background: #102040; color: #fff; border-radius: 50%; font-size: 0.78rem; font-weight: 800; }
+    .worksheet-question-number { display: block; color: #102040; font-size: 0.95rem; font-weight: 800; line-height: 1.25; padding-top: 2px; }
     .worksheet-question-preview img { width: 100%; height: auto; display: block; }
     .worksheet-layout-row { display: grid; gap: 12px; margin-bottom: 16px; break-inside: avoid; }
     .worksheet-layout-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .worksheet-question-cell { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 7px; align-items: start; min-width: 0; }
+    .worksheet-question-cell { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 7px; align-items: start; min-width: 0; }
     .worksheet-question-cell img { width: 100%; height: auto; display: block; }
     .worksheet-analysis-status { margin-top: 10px; min-height: 18px; font-size: 0.76rem; color: #64748b; line-height: 1.4; }
     .worksheet-empty-preview { min-height: 480px; display: grid; place-items: center; color: #64748b; text-align: center; }

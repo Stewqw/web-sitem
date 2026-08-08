@@ -8366,6 +8366,14 @@ function moveWorksheetQuestion(index, direction) {
   renderWorksheetPreview();
 }
 
+function setWorksheetQuestionNumber(index, value) {
+  const target = Math.max(1, Math.min(worksheetQuestions.length, Number(value) || 1)) - 1;
+  if (target === index) return;
+  const [question] = worksheetQuestions.splice(index, 1);
+  worksheetQuestions.splice(target, 0, question);
+  renderWorksheetPreview();
+}
+
 function removeWorksheetQuestion(index) {
   worksheetQuestions.splice(index, 1);
   renderWorksheetPreview();
@@ -8395,6 +8403,10 @@ function fitWorksheetQuestion(question, maxWidth, maxHeight) {
   return { width, height };
 }
 
+function getWorksheetRowSpacing(contentHeight) {
+  return Math.max(7, Math.min(22, Math.round(contentHeight * 0.06)));
+}
+
 function buildWorksheetLayoutRows(questions, contentWidth, maxImageHeight) {
   const rows = [];
   let index = 0;
@@ -8411,9 +8423,11 @@ function buildWorksheetLayoutRows(questions, contentWidth, maxImageHeight) {
       const imageWidth = Math.max(80, cellWidth - 33);
       const first = fitWorksheetQuestion(current, imageWidth, maxImageHeight);
       const second = fitWorksheetQuestion(next, imageWidth, maxImageHeight);
+      const contentHeight = Math.max(first.height, second.height);
       rows.push({
         type: 'two',
-        height: Math.max(first.height, second.height) + 16,
+        spacing: getWorksheetRowSpacing(contentHeight),
+        height: contentHeight + getWorksheetRowSpacing(contentHeight),
         items: [
           { question: current, number: index + 1, ...first },
           { question: next, number: index + 2, ...second }
@@ -8424,9 +8438,11 @@ function buildWorksheetLayoutRows(questions, contentWidth, maxImageHeight) {
     }
 
     const fitted = fitWorksheetQuestion(current, Math.max(120, contentWidth - 34), maxImageHeight);
+    const contentHeight = Math.max(fitted.height, 26);
     rows.push({
       type: 'full',
-      height: Math.max(fitted.height, 26) + 16,
+      spacing: getWorksheetRowSpacing(contentHeight),
+      height: contentHeight + getWorksheetRowSpacing(contentHeight),
       items: [{ question: current, number: index + 1, ...fitted }]
     });
     index += 1;
@@ -8455,7 +8471,7 @@ function renderWorksheetPreview() {
 
   list.innerHTML = worksheetQuestions.length ? worksheetQuestions.map((question, index) => `
     <div class="worksheet-question-row">
-      <strong>${index + 1}</strong>
+      <input class="input-field worksheet-question-order" type="number" min="1" max="${worksheetQuestions.length}" value="${index + 1}" onchange="setWorksheetQuestionNumber(${index}, this.value)" aria-label="Soru numarası">
       <img src="${question.source}" alt="Soru ${index + 1}">
       <span style="font-size:0.78rem; color:#475569;">${question.width} × ${question.height}</span>
       <div class="worksheet-question-actions">
@@ -8479,6 +8495,7 @@ function renderWorksheetPreview() {
     pageRows.forEach((row) => {
       const rowEl = document.createElement('div');
       rowEl.className = `worksheet-layout-row ${row.type}`;
+      rowEl.style.marginBottom = `${row.spacing}px`;
       row.items.forEach((item) => {
         const cell = document.createElement('div');
         cell.className = 'worksheet-question-cell';
@@ -8548,13 +8565,11 @@ async function downloadWorksheetPdf() {
     const cellWidth = row.type === 'two' ? (contentWidth - 12) / 2 : contentWidth;
     row.items.forEach((item, index) => {
       const cellX = margin + (index * (cellWidth + 12));
-      doc.setFillColor(16, 32, 64);
-      doc.circle(cellX + 10, y + 10, 10, 'F');
-      doc.setTextColor(255, 255, 255);
+      doc.setTextColor(16, 32, 64);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.text(String(item.number), cellX + 10, y + 13, { align: 'center' });
-      doc.addImage(item.question.source, 'PNG', cellX + 28, y, item.width, item.height, undefined, 'FAST');
+      doc.setFontSize(11);
+      doc.text(`${item.number}.`, cellX, y + 11);
+      doc.addImage(item.question.source, 'PNG', cellX + 20, y, item.width, item.height, undefined, 'FAST');
     });
     y += row.height;
   });
