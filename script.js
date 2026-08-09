@@ -6699,6 +6699,27 @@ function ensureUniqueList(values) {
   return Array.from(new Set((Array.isArray(values) ? values : []).map((item) => String(item || '').trim()).filter(Boolean)));
 }
 
+function sortNumberedUnitTopicItems(items) {
+  return ensureUniqueList(items)
+    .map((item, index) => {
+      const match = item.match(/^\s*(\d+)\s*[.)]/);
+      return {
+        item,
+        index,
+        order: match ? Number(match[1]) : null
+      };
+    })
+    .sort((left, right) => {
+      if (left.order !== null && right.order !== null) {
+        return left.order - right.order || left.index - right.index;
+      }
+      if (left.order !== null) return -1;
+      if (right.order !== null) return 1;
+      return left.index - right.index;
+    })
+    .map((entry) => entry.item);
+}
+
 function createEmptyCustomLessonData() {
   return {
     units: [],
@@ -6791,7 +6812,7 @@ function getUnitOptionsForLesson(classLevel, lesson) {
   const defaultUnits = (DEFAULT_UNITS_BY_CLASS[String(classLevel)] && DEFAULT_UNITS_BY_CLASS[String(classLevel)][lesson]) || [];
   const customLessonData = getCustomUnitTopicLessonData(classLevel, lesson);
   const visibleDefaultUnits = defaultUnits.filter((unitName) => !customLessonData.hiddenUnits.includes(unitName));
-  return ensureUniqueList([].concat(visibleDefaultUnits, customLessonData.units));
+  return sortNumberedUnitTopicItems([].concat(visibleDefaultUnits, customLessonData.units));
 }
 
 function getTopicOptionsForLesson(classLevel, lesson, unit) {
@@ -6816,7 +6837,7 @@ function getTopicOptionsForLesson(classLevel, lesson, unit) {
     ? (Array.isArray(customLessonData.topicsByUnit[unit]) ? customLessonData.topicsByUnit[unit] : [])
     : customLessonData.generalTopics;
 
-  const merged = ensureUniqueList([].concat(defaultTopics, customTopics));
+  const merged = sortNumberedUnitTopicItems([].concat(defaultTopics, customTopics));
 
   if (isNestedTopicMap) {
     return merged;
