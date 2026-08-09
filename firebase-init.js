@@ -387,24 +387,6 @@
       "Giriş işlemi zaman aşımına uğradı."
     );
 
-    if (!credential.user.emailVerified) {
-      try {
-        await withTimeout(
-          credential.user.sendEmailVerification(),
-          12000,
-          "app/email-verification-send-failed",
-          "Doğrulama e-postası tekrar gönderilemedi."
-        );
-      } catch (error) {
-        console.warn("Doğrulama e-postası yeniden gönderilemedi:", error);
-      }
-
-      await auth.signOut();
-      const err = new Error("E-posta adresinizi doğrulamadan giriş yapamazsınız.");
-      err.code = "app/email-not-verified";
-      throw err;
-    }
-
     let profile = null;
     try {
       profile = await withTimeout(

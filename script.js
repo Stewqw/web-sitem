@@ -111,6 +111,17 @@ function getFirebaseAuthErrorMessage(error, fallbackMessage) {
       return 'Çok fazla başarısız deneme yaptınız. Lütfen biraz bekleyin.';
     case 'auth/network-request-failed':
       return 'Ağ bağlantısı kurulamadı. İnternetinizi kontrol edip tekrar deneyin.';
+    case 'OPERATION_NOT_ALLOWED':
+    case 'auth/operation-not-allowed':
+      return 'Firebase Authentication içinde E-posta/Şifre giriş yöntemi kapalı. Firebase Console > Authentication > Sign-in method bölümünden etkinleştirin.';
+    case 'API_KEY_SERVICE_BLOCKED':
+    case 'API_KEY_INVALID':
+      return 'Firebase API anahtarı bu işlem için kullanılamıyor. Google Cloud Console içindeki API anahtarı kısıtlarını ve Identity Toolkit API erişimini kontrol edin.';
+    case 'PERMISSION_DENIED':
+    case 'permission-denied':
+      return 'Firebase hesabı oluşturuldu ancak Firestore profil yazma izni reddedildi. Firestore Security Rules içinde giriş yapmış öğretmenin users kaydı oluşturmasına izin verin.';
+    case 'EMAIL_EXISTS':
+      return 'Bu giriş kodu zaten kullanılıyor. Lütfen tekrar deneyin.';
     case 'app/auth-create-timeout':
     case 'app/auth-signin-timeout':
     case 'app/profile-update-timeout':
