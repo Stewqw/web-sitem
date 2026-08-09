@@ -8231,6 +8231,14 @@ function openStudentResourceSelectionPage() {
 
 let worksheetQuestions = [];
 let worksheetBuilderBound = false;
+const worksheetTemplate = {
+  title: '1. Dönem 1. Yazılı Örnek Soruları',
+  subtitle: 'Matematik Dersi 11. Sınıflar',
+  year: '2024-2025 Eğitim-Öğretim Yılı',
+  note: 'NOT',
+  duration: '40 dakika',
+  pointNote: 'Her soru 10 puandır.'
+};
 
 function openYaziliHazirlama() {
   sekmeAcs('yazili-hazirlama');
@@ -8308,7 +8316,7 @@ function loadWorksheetImage(source) {
 
 async function cleanWorksheetImage(source) {
   const image = await loadWorksheetImage(source);
-  const maxWidth = 1800;
+  const maxWidth = 3000;
   const scale = Math.min(1, maxWidth / image.naturalWidth);
   const width = Math.max(1, Math.round(image.naturalWidth * scale));
   const height = Math.max(1, Math.round(image.naturalHeight * scale));
@@ -8331,7 +8339,9 @@ async function cleanWorksheetImage(source) {
     const pixel = index / 4;
     const x = pixel % width;
     const y = Math.floor(pixel / width);
-    if (red > 244 && green > 244 && blue > 244) {
+    const luminance = (red * 0.2126) + (green * 0.7152) + (blue * 0.0722);
+    const chroma = Math.max(red, green, blue) - Math.min(red, green, blue);
+    if (luminance > 205 || (luminance > 185 && chroma < 100)) {
       data[index + 3] = 0;
       continue;
     }
@@ -8365,29 +8375,25 @@ async function cleanWorksheetImage(source) {
 }
 
 const WORKSHEET_CANVAS_WIDTH = 576;
-const WORKSHEET_CANVAS_HEIGHT = 700;
-let worksheetDragState = null;
+const WORKSHEET_CANVAS_HEIGHT = 650;
+const WORKSHEET_NUMBER_GUTTER = 21;
+const WORKSHEET_ITEM_GAP = 18;
+let worksheetPointerState = null;
 
+// Vertical single-column flow: each question stacks below the previous one, wrapping to a new page when it no longer fits.
 function autoArrangeWorksheetQuestions() {
-  const rows = buildWorksheetLayoutRows(worksheetQuestions, WORKSHEET_CANVAS_WIDTH, 310);
+  const maxImageWidth = WORKSHEET_CANVAS_WIDTH - WORKSHEET_NUMBER_GUTTER;
+  const maxImageHeight = WORKSHEET_CANVAS_HEIGHT - 20;
   let page = 0;
   let y = 0;
-  rows.forEach((row) => {
-    if (y + row.height > WORKSHEET_CANVAS_HEIGHT && y > 0) {
+  worksheetQuestions.forEach((question) => {
+    const fitted = fitWorksheetQuestion(question, maxImageWidth, maxImageHeight);
+    if (y > 0 && y + fitted.height > WORKSHEET_CANVAS_HEIGHT) {
       page += 1;
       y = 0;
     }
-    const cellWidth = row.type === 'two' ? (WORKSHEET_CANVAS_WIDTH - 12) / 2 : WORKSHEET_CANVAS_WIDTH;
-    row.items.forEach((item, index) => {
-      item.question.layout = {
-        page,
-        x: index * (cellWidth + 12),
-        y,
-        width: item.width,
-        height: item.height
-      };
-    });
-    y += row.height;
+    question.layout = { page, x: 0, y, width: fitted.width, height: fitted.height };
+    y += fitted.height + WORKSHEET_ITEM_GAP;
   });
 }
 
@@ -8400,42 +8406,102 @@ function getWorksheetPageCount() {
 }
 
 function startWorksheetQuestionDrag(event, index) {
+  if (event.button !== undefined && event.button !== 0) return;
   const question = worksheetQuestions[index];
   const canvas = event.currentTarget.closest('.worksheet-canvas');
-  if (!question || !question.layout || !canvas) return;
+  if (!question?.layout || !canvas) return;
   event.preventDefault();
   const rect = canvas.getBoundingClientRect();
   const scale = WORKSHEET_CANVAS_WIDTH / rect.width;
-  worksheetDragState = {
+  worksheetPointerState = {
+    type: 'drag',
     index,
-    page: question.layout.page,
+    canvas,
     element: event.currentTarget,
-    offsetX: (event.clientX - rect.left) * scale - question.layout.x,
-    offsetY: (event.clientY - rect.top) * scale - question.layout.y
+    offsetX: ((event.clientX - rect.left) * scale) - question.layout.x,
+    offsetY: ((event.clientY - rect.top) * scale) - question.layout.y
   };
   event.currentTarget.setPointerCapture?.(event.pointerId);
-  window.addEventListener('pointermove', moveWorksheetQuestionDrag);
-  window.addEventListener('pointerup', endWorksheetQuestionDrag, { once: true });
+  window.addEventListener('pointermove', moveWorksheetPointer);
+  window.addEventListener('pointerup', endWorksheetPointer, { once: true });
 }
 
-function moveWorksheetQuestionDrag(event) {
-  if (!worksheetDragState) return;
-  const question = worksheetQuestions[worksheetDragState.index];
-  const canvas = document.querySelector(`.worksheet-canvas[data-page="${worksheetDragState.page}"]`);
-  if (!question || !question.layout || !canvas) return;
+function startWorksheetQuestionResize(event, index) {
+  const question = worksheetQuestions[index];
+  const element = event.currentTarget.closest('.worksheet-draggable-question');
+  const canvas = event.currentTarget.closest('.worksheet-canvas');
+  if (!question?.layout || !element || !canvas) return;
+  event.preventDefault();
+  event.stopPropagation();
   const rect = canvas.getBoundingClientRect();
-  const scale = WORKSHEET_CANVAS_WIDTH / rect.width;
-  const maxX = Math.max(0, WORKSHEET_CANVAS_WIDTH - (question.layout.width + 20));
-  const maxY = Math.max(0, WORKSHEET_CANVAS_HEIGHT - question.layout.height);
-  question.layout.x = Math.max(0, Math.min(maxX, ((event.clientX - rect.left) * scale) - worksheetDragState.offsetX));
-  question.layout.y = Math.max(0, Math.min(maxY, ((event.clientY - rect.top) * scale) - worksheetDragState.offsetY));
-  worksheetDragState.element.style.left = `${question.layout.x}px`;
-  worksheetDragState.element.style.top = `${question.layout.y}px`;
+  worksheetPointerState = {
+    type: 'resize',
+    index,
+    canvas,
+    element,
+    startClientX: event.clientX,
+    startWidth: question.layout.width,
+    aspectRatio: question.layout.width / Math.max(1, question.layout.height)
+  };
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+  window.addEventListener('pointermove', moveWorksheetPointer);
+  window.addEventListener('pointerup', endWorksheetPointer, { once: true });
 }
 
-function endWorksheetQuestionDrag() {
-  window.removeEventListener('pointermove', moveWorksheetQuestionDrag);
-  worksheetDragState = null;
+function moveWorksheetPointer(event) {
+  if (!worksheetPointerState) return;
+  const state = worksheetPointerState;
+  const question = worksheetQuestions[state.index];
+  const rect = state.canvas.getBoundingClientRect();
+  if (!question?.layout || !rect.width) return;
+  const scale = WORKSHEET_CANVAS_WIDTH / rect.width;
+
+  if (state.type === 'drag') {
+    const maxX = Math.max(0, WORKSHEET_CANVAS_WIDTH - question.layout.width - WORKSHEET_NUMBER_GUTTER);
+    const maxY = Math.max(0, WORKSHEET_CANVAS_HEIGHT - question.layout.height);
+    question.layout.x = Math.max(0, Math.min(maxX, ((event.clientX - rect.left) * scale) - state.offsetX));
+    question.layout.y = Math.max(0, Math.min(maxY, ((event.clientY - rect.top) * scale) - state.offsetY));
+    state.element.style.left = `${question.layout.x}px`;
+    state.element.style.top = `${question.layout.y}px`;
+    return;
+  }
+
+  const maxWidth = Math.max(80, WORKSHEET_CANVAS_WIDTH - question.layout.x - WORKSHEET_NUMBER_GUTTER);
+  const maxHeight = Math.max(60, WORKSHEET_CANVAS_HEIGHT - question.layout.y);
+  let width = Math.max(80, Math.min(maxWidth, state.startWidth + ((event.clientX - state.startClientX) * scale)));
+  let height = width / state.aspectRatio;
+  if (height > maxHeight) {
+    height = maxHeight;
+    width = height * state.aspectRatio;
+  }
+  question.layout.width = width;
+  question.layout.height = height;
+  state.element.style.width = `${width + WORKSHEET_NUMBER_GUTTER}px`;
+  const image = state.element.querySelector('img');
+  if (image) image.style.width = `${width}px`;
+}
+
+function endWorksheetPointer() {
+  window.removeEventListener('pointermove', moveWorksheetPointer);
+  worksheetPointerState = null;
+}
+
+function resizeWorksheetQuestion(index, multiplier) {
+  const question = worksheetQuestions[index];
+  if (!question?.layout) return;
+  const minWidth = 80;
+  const maxWidth = Math.max(minWidth, WORKSHEET_CANVAS_WIDTH - question.layout.x - WORKSHEET_NUMBER_GUTTER);
+  const aspectRatio = question.layout.width / Math.max(1, question.layout.height);
+  const maxHeight = Math.max(60, WORKSHEET_CANVAS_HEIGHT - question.layout.y);
+  let width = Math.max(minWidth, Math.min(maxWidth, question.layout.width * multiplier));
+  let height = width / aspectRatio;
+  if (height > maxHeight) {
+    height = maxHeight;
+    width = height * aspectRatio;
+  }
+  question.layout.width = width;
+  question.layout.height = height;
+  renderWorksheetPreview();
 }
 
 function moveWorksheetQuestion(index, direction) {
@@ -8468,11 +8534,20 @@ function removeWorksheetQuestion(index) {
 }
 
 function getWorksheetTitle() {
-  return String(document.getElementById('worksheetTitle')?.value || 'Yazılı Sınavı').trim() || 'Yazılı Sınavı';
+  return worksheetTemplate.title || 'Yazılı Sınavı';
 }
 
 function getWorksheetSubtitle() {
-  return String(document.getElementById('worksheetSubtitle')?.value || '').trim();
+  return worksheetTemplate.subtitle;
+}
+
+function getWorksheetTemplate() {
+  return { ...worksheetTemplate };
+}
+
+function updateWorksheetTemplateField(field, value) {
+  if (!Object.prototype.hasOwnProperty.call(worksheetTemplate, field)) return;
+  worksheetTemplate[field] = String(value || '').replace(/\s+/g, ' ').trim();
 }
 
 function setWorksheetAnalysisStatus(message) {
@@ -8489,67 +8564,6 @@ function fitWorksheetQuestion(question, maxWidth, maxHeight) {
     width = height * aspectRatio;
   }
   return { width, height };
-}
-
-function getWorksheetRowSpacing(contentHeight) {
-  return Math.max(7, Math.min(22, Math.round(contentHeight * 0.06)));
-}
-
-function buildWorksheetLayoutRows(questions, contentWidth, maxImageHeight) {
-  const rows = [];
-  let index = 0;
-  while (index < questions.length) {
-    const current = questions[index];
-    const currentAspect = Number(current.width || 1) / Math.max(1, Number(current.height || 1));
-    const next = questions[index + 1];
-    const nextAspect = next ? Number(next.width || 1) / Math.max(1, Number(next.height || 1)) : 0;
-    const isCompact = currentAspect >= 0.72 && currentAspect <= 1.45;
-    const nextIsCompact = next && nextAspect >= 0.72 && nextAspect <= 1.45;
-
-    if (isCompact && nextIsCompact) {
-      const cellWidth = (contentWidth - 12) / 2;
-      const imageWidth = Math.max(80, cellWidth - 33);
-      const first = fitWorksheetQuestion(current, imageWidth, maxImageHeight);
-      const second = fitWorksheetQuestion(next, imageWidth, maxImageHeight);
-      const contentHeight = Math.max(first.height, second.height);
-      rows.push({
-        type: 'two',
-        spacing: getWorksheetRowSpacing(contentHeight),
-        height: contentHeight + getWorksheetRowSpacing(contentHeight),
-        items: [
-          { question: current, number: index + 1, ...first },
-          { question: next, number: index + 2, ...second }
-        ]
-      });
-      index += 2;
-      continue;
-    }
-
-    const fitted = fitWorksheetQuestion(current, Math.max(120, contentWidth - 34), maxImageHeight);
-    const contentHeight = Math.max(fitted.height, 26);
-    rows.push({
-      type: 'full',
-      spacing: getWorksheetRowSpacing(contentHeight),
-      height: contentHeight + getWorksheetRowSpacing(contentHeight),
-      items: [{ question: current, number: index + 1, ...fitted }]
-    });
-    index += 1;
-  }
-  return rows;
-}
-
-function paginateWorksheetRows(rows, usableHeight) {
-  const pages = [[]];
-  let currentHeight = 0;
-  rows.forEach((row) => {
-    if (currentHeight + row.height > usableHeight && pages[pages.length - 1].length) {
-      pages.push([]);
-      currentHeight = 0;
-    }
-    pages[pages.length - 1].push(row);
-    currentHeight += row.height;
-  });
-  return pages;
 }
 
 function estimateWorksheetTextHeight(text, charactersPerLine) {
@@ -8601,7 +8615,7 @@ function renderWorksheetPreview() {
     <div class="worksheet-question-row">
       <input class="input-field worksheet-question-order" type="number" min="1" max="${worksheetQuestions.length}" value="${index + 1}" onchange="setWorksheetQuestionNumber(${index}, this.value)" aria-label="Soru numarası">
       <img src="${question.source}" alt="Soru ${index + 1}">
-      <span style="font-size:0.78rem; color:#475569;">Sayfa ${Number(question.layout?.page || 0) + 1} • Sürükleyerek konumlandırın</span>
+      <span style="font-size:0.78rem; color:#475569;">Sayfa ${Number(question.layout?.page || 0) + 1} • Ok tuşlarıyla sırala</span>
       <div class="worksheet-question-actions">
         <button type="button" class="worksheet-icon-button" onclick="moveWorksheetQuestion(${index}, -1)" aria-label="Yukarı taşı">↑</button>
         <button type="button" class="worksheet-icon-button" onclick="moveWorksheetQuestion(${index}, 1)" aria-label="Aşağı taşı">↓</button>
@@ -8611,7 +8625,13 @@ function renderWorksheetPreview() {
   `).join('') : '';
 
   if (!worksheetQuestions.length) {
-    preview.innerHTML = '<div class="worksheet-empty-preview">Henüz soru görseli eklenmedi.</div>';
+    preview.innerHTML = '';
+    const page = createWorksheetPreviewPage(0);
+    const canvas = document.createElement('div');
+    canvas.className = 'worksheet-canvas';
+    canvas.innerHTML = '<div class="worksheet-empty-preview">Henüz soru görseli eklenmedi.</div>';
+    page.appendChild(canvas);
+    preview.appendChild(page);
     return;
   }
 
@@ -8619,7 +8639,7 @@ function renderWorksheetPreview() {
   const pageCount = getWorksheetPageCount();
   preview.innerHTML = '';
   Array.from({ length: pageCount }, (_, pageIndex) => pageIndex).forEach((pageIndex) => {
-    const page = createWorksheetPreviewPage();
+    const page = createWorksheetPreviewPage(pageIndex);
     const canvas = document.createElement('div');
     canvas.className = 'worksheet-canvas';
     canvas.dataset.page = String(pageIndex);
@@ -8627,23 +8647,45 @@ function renderWorksheetPreview() {
       if (Number(question.layout?.page || 0) !== pageIndex) return;
       const item = document.createElement('div');
       item.className = 'worksheet-draggable-question';
-      item.style.left = `${question.layout.x}px`;
+      item.style.left = `${question.layout.x || 0}px`;
       item.style.top = `${question.layout.y}px`;
-      item.style.width = `${question.layout.width + 20}px`;
+      item.style.width = `${question.layout.width + WORKSHEET_NUMBER_GUTTER}px`;
       item.onpointerdown = (event) => startWorksheetQuestionDrag(event, index);
-      item.innerHTML = `<span class="worksheet-question-number">${index + 1}.</span><img src="${question.source}" alt="Soru ${index + 1}" style="width:${question.layout.width}px; height:${question.layout.height}px;">`;
+      item.innerHTML = `<div><span class="worksheet-question-number">${index + 1}.</span><div class="worksheet-question-size-controls"><button type="button" class="worksheet-question-size-button" onpointerdown="event.stopPropagation()" onclick="resizeWorksheetQuestion(${index}, 0.9)" aria-label="Görseli küçült" title="Görseli küçült">−</button></div></div><div class="worksheet-question-media"><img src="${question.source}" alt="Soru ${index + 1}" style="width:${question.layout.width}px;"><button type="button" class="worksheet-question-resize" aria-label="Görsel boyutunu değiştir">↘</button></div>`;
+      item.querySelector('.worksheet-question-resize').onpointerdown = (event) => startWorksheetQuestionResize(event, index);
       canvas.appendChild(item);
     });
     page.appendChild(canvas);
     preview.appendChild(page);
   });
-  setWorksheetAnalysisStatus(`${worksheetQuestions.length} soru temizlendi • ${pageCount} A4 sayfasına yerleştirildi. Soruları sayfa üzerinde sürükleyebilirsiniz.`);
+  setWorksheetAnalysisStatus(`${worksheetQuestions.length} soru temizlendi • ${pageCount} A4 sayfasına yerleştirildi.`);
 }
 
-function createWorksheetPreviewPage() {
+function createWorksheetPreviewPage(pageIndex) {
+  const template = getWorksheetTemplate();
   const page = document.createElement('div');
   page.className = 'worksheet-page';
-  page.innerHTML = `<div class="worksheet-page-header"><div class="worksheet-page-title">${escapeHtml(getWorksheetTitle())}</div><div class="worksheet-page-meta">${escapeHtml(getWorksheetSubtitle())}</div></div>`;
+  if (pageIndex !== 0) return page;
+  page.innerHTML = `
+    <div class="worksheet-page-header">
+      <div class="worksheet-exam-header">
+        <div>
+          <span class="worksheet-exam-header-label">ÖĞRENCİ</span>
+          <div class="worksheet-exam-student-line">ADI: ................................</div>
+          <div class="worksheet-exam-student-line">SOYADI: ............................</div>
+          <div class="worksheet-exam-student-line">SINIFI: .............. NO: .........</div>
+        </div>
+        <div class="worksheet-exam-center">
+          <div contenteditable="true" oninput="updateWorksheetTemplateField('year', this.textContent)">${escapeHtml(template.year)}</div>
+          <div class="worksheet-exam-year" contenteditable="true" oninput="updateWorksheetTemplateField('subtitle', this.textContent)">${escapeHtml(template.subtitle)}</div>
+          <div contenteditable="true" oninput="updateWorksheetTemplateField('title', this.textContent)">${escapeHtml(template.title)}</div>
+        </div>
+        <div>
+          <span class="worksheet-exam-header-label" contenteditable="true" oninput="updateWorksheetTemplateField('note', this.textContent)">${escapeHtml(template.note)}</span>
+        </div>
+      </div>
+      <div class="worksheet-exam-notes"><span>Sınav süresi <span contenteditable="true" oninput="updateWorksheetTemplateField('duration', this.textContent)">${escapeHtml(template.duration)}</span>.</span><span contenteditable="true" oninput="updateWorksheetTemplateField('pointNote', this.textContent)">${escapeHtml(template.pointNote)}</span></div>
+    </div>`;
   return page;
 }
 
@@ -8664,25 +8706,58 @@ async function downloadWorksheetPdf() {
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 42;
   const contentWidth = pageWidth - (margin * 2);
-  const contentBottom = pageHeight - margin;
   let y = margin;
 
   const drawHeader = () => {
+    const template = getWorksheetTemplate();
+    const headerTop = y;
+    const headerHeight = 96;
+    const leftColumnEnd = margin + (contentWidth * 0.28);
+    const centerColumnEnd = margin + (contentWidth * 0.75);
+    const centerX = (leftColumnEnd + centerColumnEnd) / 2;
+    const dottedLine = (x, lineY, width) => {
+      doc.setLineDashPattern([1.5, 2], 0);
+      doc.line(x, lineY, x + width, lineY);
+      doc.setLineDashPattern([], 0);
+    };
+
     doc.setTextColor(16, 32, 64);
-    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.text(pdfSafeText(getWorksheetTitle()), margin, y);
-    const subtitle = getWorksheetSubtitle();
-    if (subtitle) {
-      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(100, 116, 139);
-      doc.text(pdfSafeText(subtitle), margin, y + 15);
-    }
-    doc.setDrawColor(16, 32, 64);
+    doc.setDrawColor(17, 24, 39);
     doc.setLineWidth(1);
-    doc.line(margin, y + 24, pageWidth - margin, y + 24);
-    y += 42;
+    doc.roundedRect(margin, headerTop, contentWidth, headerHeight, 13, 13, 'S');
+    doc.line(leftColumnEnd, headerTop, leftColumnEnd, headerTop + headerHeight);
+    doc.line(centerColumnEnd, headerTop, centerColumnEnd, headerTop + headerHeight);
+
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.text('ÖĞRENCİ', margin + ((leftColumnEnd - margin) / 2), headerTop + 15, { align: 'center' });
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text('ADI:', margin + 10, headerTop + 32);
+    doc.text('SOYADI:', margin + 10, headerTop + 51);
+    doc.text('SINIFI:', margin + 10, headerTop + 70);
+    doc.text('NO:', margin + ((leftColumnEnd - margin) * 0.62), headerTop + 70);
+    dottedLine(margin + 34, headerTop + 34, (leftColumnEnd - margin) * 0.68);
+    dottedLine(margin + 48, headerTop + 53, (leftColumnEnd - margin) * 0.61);
+    dottedLine(margin + 43, headerTop + 72, (leftColumnEnd - margin) * 0.25);
+    dottedLine(margin + ((leftColumnEnd - margin) * 0.75), headerTop + 72, (leftColumnEnd - margin) * 0.17);
+
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(pdfSafeText(template.year), centerX, headerTop + 25, { align: 'center', maxWidth: centerColumnEnd - leftColumnEnd - 20 });
+    doc.text(pdfSafeText(template.subtitle), centerX, headerTop + 47, { align: 'center', maxWidth: centerColumnEnd - leftColumnEnd - 20 });
+    doc.text(pdfSafeText(template.title), centerX, headerTop + 69, { align: 'center', maxWidth: centerColumnEnd - leftColumnEnd - 20 });
+
+    doc.setFontSize(8.5);
+    doc.text(pdfSafeText(template.note), centerColumnEnd + ((pageWidth - margin - centerColumnEnd) / 2), headerTop + 22, { align: 'center', maxWidth: pageWidth - margin - centerColumnEnd - 16 });
+
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.text(pdfSafeText(`Sınav süresi ${template.duration}.`), margin, headerTop + headerHeight + 16);
+    doc.text(pdfSafeText(template.pointNote), pageWidth - margin, headerTop + headerHeight + 16, { align: 'right' });
+    doc.setLineWidth(1.2);
+    doc.line(margin, headerTop + headerHeight + 23, pageWidth - margin, headerTop + headerHeight + 23);
+    y = headerTop + headerHeight + 32;
   };
 
   ensureWorksheetQuestionLayouts();
@@ -8692,15 +8767,15 @@ async function downloadWorksheetPdf() {
   for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
     if (pageIndex > 0) doc.addPage();
     y = margin;
-    drawHeader();
+    if (pageIndex === 0) drawHeader();
     const canvasTop = y;
     worksheetQuestions
       .map((question, index) => ({ question, index }))
       .filter((item) => Number(item.question.layout?.page || 0) === pageIndex)
-      .sort((a, b) => a.question.layout.y - b.question.layout.y || a.question.layout.x - b.question.layout.x)
+      .sort((a, b) => a.question.layout.y - b.question.layout.y)
       .forEach(({ question, index }) => {
         const layout = question.layout;
-        const questionX = margin + (layout.x * scale);
+        const questionX = margin;
         const questionY = canvasTop + (layout.y * scale);
         doc.setTextColor(16, 32, 64);
         doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
@@ -8709,12 +8784,12 @@ async function downloadWorksheetPdf() {
         doc.addImage(
           question.source,
           'PNG',
-          questionX + (20 * scale),
+          questionX + (WORKSHEET_NUMBER_GUTTER * scale),
           questionY,
           layout.width * scale,
           layout.height * scale,
           undefined,
-          'FAST'
+          'NONE'
         );
       });
   }

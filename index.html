@@ -515,10 +515,18 @@
     .worksheet-icon-button.delete { background: #fef2f2; color: #dc2626; }
     .worksheet-question-editor { grid-column: 1 / -1; width: 100%; min-height: 94px; resize: vertical; margin: 0; line-height: 1.45; }
     .worksheet-preview-wrap { overflow: auto; max-height: 74vh; padding: 8px; background: #e8eef6; border-radius: 8px; }
-    .worksheet-page { width: min(100%, 660px); min-height: 880px; margin: 0 auto 18px; padding: 42px; background: #fff; box-shadow: 0 4px 16px rgba(15,23,42,0.16); }
-    .worksheet-page-header { border-bottom: 2px solid #102040; padding-bottom: 10px; margin-bottom: 18px; color: #102040; }
-    .worksheet-page-title { font-size: 1.1rem; font-weight: 800; }
-    .worksheet-page-meta { font-size: 0.76rem; color: #64748b; margin-top: 4px; }
+    .worksheet-page { box-sizing: border-box; width: min(100%, 660px); min-height: 880px; margin: 0 auto 18px; padding: 20px; background: #fff; box-shadow: 0 4px 16px rgba(15,23,42,0.16); }
+    .worksheet-page-header { margin-bottom: 18px; color: #111827; font-family: Arial, sans-serif; }
+    .worksheet-page-header [contenteditable="true"] { cursor: text; outline: 0; }
+    .worksheet-page-header [contenteditable="true"]:focus { background: #fff7ed; box-shadow: 0 0 0 2px #fb923c; border-radius: 2px; }
+    .worksheet-exam-header { display: grid; grid-template-columns: 1.05fr 1.8fr 0.95fr; min-height: 112px; border: 1.5px solid #111827; border-radius: 18px 18px 0 0; overflow: hidden; }
+    .worksheet-exam-header > div { padding: 10px 12px; }
+    .worksheet-exam-header > div + div { border-left: 1.5px solid #111827; }
+    .worksheet-exam-header-label { display: block; margin-bottom: 6px; text-align: center; font-size: 0.72rem; font-weight: 800; }
+    .worksheet-exam-student-line, .worksheet-exam-school-line { font-size: 0.7rem; line-height: 1.65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .worksheet-exam-center { display: grid; align-content: center; gap: 4px; text-align: center; font-size: 0.7rem; font-weight: 800; line-height: 1.2; }
+    .worksheet-exam-center .worksheet-exam-year { margin-top: 4px; }
+    .worksheet-exam-notes { display: flex; justify-content: space-between; gap: 12px; border-bottom: 2px solid #111827; padding: 6px 0 7px; font-size: 0.68rem; font-weight: 600; }
     .worksheet-question-preview { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: start; margin: 0 0 16px; break-inside: avoid; }
     .worksheet-question-number { display: block; color: #102040; font-size: 0.95rem; font-weight: 800; line-height: 1.25; padding-top: 2px; }
     .worksheet-question-preview img { width: 100%; height: auto; display: block; }
@@ -528,11 +536,16 @@
     .worksheet-question-cell img { width: 100%; height: auto; display: block; }
     .worksheet-analysis-status { margin-top: 10px; min-height: 18px; font-size: 0.76rem; color: #64748b; line-height: 1.4; }
     .worksheet-empty-preview { min-height: 480px; display: grid; place-items: center; color: #64748b; text-align: center; }
-    .worksheet-canvas { position: relative; min-height: 700px; }
-    .worksheet-draggable-question { position: absolute; display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 6px; align-items: start; cursor: grab; touch-action: none; user-select: none; }
+    .worksheet-canvas { position: relative; width: min(100%, 576px); min-height: 650px; margin: 0 auto; }
+    .worksheet-draggable-question { position: absolute; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 3px; align-items: start; min-width: 0; cursor: grab; touch-action: none; user-select: none; }
     .worksheet-draggable-question:active { cursor: grabbing; }
+    .worksheet-draggable-question .worksheet-question-number { padding-top: 2px; }
+    .worksheet-question-size-controls { display: grid; gap: 4px; margin-top: 6px; }
+    .worksheet-question-size-button { width: 22px; height: 22px; padding: 0; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #334155; cursor: pointer; font-size: 1rem; font-weight: 800; line-height: 1; }
+    .worksheet-question-size-button:hover { border-color: #fb923c; color: #c2410c; }
+    .worksheet-question-media { position: relative; min-width: 0; }
     .worksheet-draggable-question img { display: block; max-width: 100%; height: auto; pointer-events: none; }
-    .worksheet-draggable-question .worksheet-question-number { pointer-events: none; }
+    .worksheet-question-resize { position: absolute; right: -7px; bottom: -7px; width: 18px; height: 18px; padding: 0; border: 1px solid #334155; border-radius: 3px; background: #fff; color: #334155; cursor: nwse-resize; font-size: 12px; font-weight: 800; line-height: 1; }
     .worksheet-text-row { display: grid; gap: 0; margin-bottom: 0; break-inside: avoid; }
     .worksheet-text-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .worksheet-text-question { min-height: 108px; padding: 14px; border: 1px dashed #334155; color: #111827; font-family: Georgia, 'Times New Roman', serif; font-size: 0.88rem; line-height: 1.45; white-space: pre-wrap; }
@@ -2183,14 +2196,6 @@
 
             <div class="worksheet-layout">
               <div class="worksheet-tool-panel">
-                <div class="form-group">
-                  <label class="form-label">Yazılı Başlığı</label>
-                  <input id="worksheetTitle" class="input-field" type="text" value="Yazılı Sınavı" oninput="renderWorksheetPreview()">
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Ders / Açıklama</label>
-                  <input id="worksheetSubtitle" class="input-field" type="text" placeholder="Örn: Matematik - 1. Dönem" oninput="renderWorksheetPreview()">
-                </div>
                 <input id="worksheetImageInput" type="file" accept="image/*" multiple style="display:none;" onchange="addWorksheetImages(this.files); this.value='';">
                 <div id="worksheetDropzone" class="worksheet-dropzone" onclick="document.getElementById('worksheetImageInput').click()">
                   <div><strong>Görselleri ekle</strong><div style="font-size:0.8rem; margin-top:6px;">Yükle, sürükle-bırak veya yapıştır</div></div>
