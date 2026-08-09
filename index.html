@@ -88,7 +88,7 @@
     }
     .instagram-nav-link svg { width: 20px; height: 20px; }
     .brand-icon { background: var(--color-teal); color: #fff; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; }
-    .brand-icon-img { width: 36px; height: 36px; object-fit: contain; border-radius: 12px; margin-right: 8px; }
+    .brand-icon-img { width: 42px; height: 42px; object-fit: contain; border-radius: 12px; margin-right: 8px; }
     .logo-badge img { width: 48px; height: 48px; object-fit: contain; border-radius: 12px; }
     .sidebar-logo img { width: 38px; height: 38px; object-fit: contain; border-radius: 12px; }
     .nav-buttons { display: flex; gap: 12px; align-items: center; }
@@ -341,6 +341,107 @@
     }
     .feature-card h3 { color: #102040; font-size: 0.96rem; margin-bottom: 6px; }
     .feature-card p { color: #64748b; font-size: 0.84rem; line-height: 1.55; }
+
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      align-items: stretch;
+    }
+    .pricing-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      min-height: 408px;
+      padding: 20px;
+      background: #ffffff;
+      border: 1px solid #d8e4f4;
+      border-radius: 8px;
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+    }
+    .pricing-card.featured {
+      border: 2px solid #ff9c32;
+      box-shadow: 0 14px 28px rgba(255, 136, 0, 0.16);
+    }
+    .pricing-badge {
+      align-self: flex-start;
+      min-height: 24px;
+      padding: 5px 9px;
+      background: #fff1df;
+      color: #b45309;
+      border: 1px solid #fed7aa;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+    .pricing-badge.neutral {
+      background: #edf2f9;
+      border-color: #d4deec;
+      color: #16325c;
+    }
+    .pricing-card h3 {
+      margin: 16px 0 4px;
+      color: #102040;
+      font-size: 1.18rem;
+    }
+    .pricing-limit {
+      color: #64748b;
+      font-size: 0.86rem;
+      min-height: 36px;
+      line-height: 1.45;
+    }
+    .pricing-price {
+      margin: 20px 0 2px;
+      color: #102040;
+      font-size: 2rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .pricing-price span {
+      color: #64748b;
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+    .pricing-list {
+      display: grid;
+      gap: 10px;
+      padding: 18px 0;
+      margin: 0 0 auto;
+      list-style: none;
+    }
+    .pricing-list li {
+      color: #475569;
+      font-size: 0.84rem;
+      line-height: 1.42;
+      padding-left: 18px;
+      position: relative;
+    }
+    .pricing-list li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: #d97706;
+      font-weight: 900;
+    }
+    .pricing-card .btn-action,
+    .pricing-card .btn-nav-outline { width: 100%; justify-content: center; }
+
+    .plan-upgrade-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .plan-upgrade-option {
+      border: 1px solid #d8e4f4;
+      border-radius: 8px;
+      padding: 12px;
+      background: #f8fbff;
+    }
+    .plan-upgrade-option.featured { border-color: #ffad55; background: #fff8ef; }
+    .plan-upgrade-option strong { display: block; color: #102040; font-size: 0.92rem; }
+    .plan-upgrade-option span { display: block; margin-top: 4px; color: #64748b; font-size: 0.78rem; }
+    .plan-upgrade-option b { display: block; margin-top: 10px; color: #c2410c; font-size: 0.88rem; }
 
     .testimonial-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; grid-auto-rows: 1fr; }
     .testimonial-card {
@@ -1520,6 +1621,8 @@
       .apply-grid { grid-template-columns: 1fr; }
       .process-grid,
       .feature-grid,
+      .pricing-grid,
+      .plan-upgrade-grid,
       .testimonial-grid,
       .stats-row { grid-template-columns: 1fr 1fr; }
       .section-head { min-height: 0; }
@@ -1535,6 +1638,8 @@
       .hero-title { font-size: 1.84rem; }
       .process-grid,
       .feature-grid,
+      .pricing-grid,
+      .plan-upgrade-grid,
       .testimonial-grid,
       .stats-row { grid-template-columns: 1fr; }
       .section-head { min-height: 0; }
@@ -1709,7 +1814,7 @@
     <div class="brand-social-wrap">
       <div class="brand-badge" onclick="sayfaAcs('promoPage')" style="display:flex; align-items:center; gap:10px;">
         <img src="icons/icon.png" alt="Parabol logo" class="brand-icon-img" loading="lazy">
-        <span>Parabol Koçluk Sistemi</span>
+        <span>Parabol Koçluk Platformu</span>
       </div>
       <a class="instagram-nav-link" href="https://www.instagram.com/parabolkocluk/" target="_blank" rel="noopener noreferrer" aria-label="Parabol Koçluk Instagram">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1772,7 +1877,7 @@
             <h1 class="hero-title">Öğrencilerinizi <span>Parabol Koçluk</span> ile tek panelde yönetin, planlayın ve takip edin.</h1>
             <p class="promo-subtext light">Özel ders öğretmenleri ve eğitim koçları için geliştirilmiş bu platformla haftalık ders programı hazırlayın, ilerlemeyi izleyin ve deneme sonuçlarını tek ekranda yönetin.</p>
             <div class="hero-actions">
-              <button class="btn-action btn-coral" onclick="scrollToLandingSection('landingApply')">Hemen Başvur</button>
+              <button class="btn-action btn-coral" onclick="scrollToLandingSection('landingPricing')">Hemen Başla</button>
               <button class="btn-ghost-light" onclick="scrollToLandingSection('landingProcess')">Nasıl Çalışıyoruz?</button>
             </div>
           </div>
@@ -1843,6 +1948,68 @@
               <div class="feature-icon">SP</div>
               <h3>Takip ve Geri Bildirim</h3>
               <p>Haftalık değerlendirme, not paylaşımı ve anlık geri bildirimlerle öğrenciyi dağılmadan sürecin içinde tutun.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="promo-section" id="landingPricing">
+        <div class="promo-container">
+          <div class="section-head">
+            <h2 class="promo-heading">Size Uyan Paketi Seçin</h2>
+            <p class="promo-subtext">Öğrenci sayınıza göre net bir aylık paket seçin. Ödeme altyapısı açıldığında paketiniz başvuru sonrası aktive edilir.</p>
+          </div>
+          <div class="pricing-grid">
+            <article class="pricing-card">
+              <span class="pricing-badge neutral">Bireysel başlangıç</span>
+              <h3>Mini</h3>
+              <div class="pricing-limit">En fazla 5 aktif öğrenci</div>
+              <div class="pricing-price">249 TL <span>/ ay</span></div>
+              <ul class="pricing-list">
+                <li>Haftalık program yönetimi</li>
+                <li>Deneme ve gelişim takibi</li>
+                <li>Veliye program ve rapor paylaşımı</li>
+              </ul>
+              <button type="button" class="btn-nav-outline" onclick="selectPricingPlan('Mini', '5 öğrenci', '249 TL/ay')">Paketi Seç</button>
+            </article>
+
+            <article class="pricing-card featured">
+              <span class="pricing-badge">En çok tercih edilen</span>
+              <h3>Başlangıç</h3>
+              <div class="pricing-limit">En fazla 15 aktif öğrenci</div>
+              <div class="pricing-price">399 TL <span>/ ay</span></div>
+              <ul class="pricing-list">
+                <li>Mini paket özelliklerinin tamamı</li>
+                <li>Öğrenciye özel kaynak seçimi</li>
+                <li>Detaylı PDF performans raporları</li>
+              </ul>
+              <button type="button" class="btn-action btn-coral" onclick="selectPricingPlan('Başlangıç', '15 öğrenci', '399 TL/ay')">Paketi Seç</button>
+            </article>
+
+            <article class="pricing-card">
+              <span class="pricing-badge neutral">Aktif koçlar için</span>
+              <h3>Profesyonel</h3>
+              <div class="pricing-limit">En fazla 50 aktif öğrenci</div>
+              <div class="pricing-price">699 TL <span>/ ay</span></div>
+              <ul class="pricing-list">
+                <li>Başlangıç paketinin tüm özellikleri</li>
+                <li>Yoğun öğrenci ve veli takibi</li>
+                <li>Gelişmiş raporlama iş akışları</li>
+              </ul>
+              <button type="button" class="btn-nav-outline" onclick="selectPricingPlan('Profesyonel', '50 öğrenci', '699 TL/ay')">Paketi Seç</button>
+            </article>
+
+            <article class="pricing-card">
+              <span class="pricing-badge neutral">Küçük ekipler için</span>
+              <h3>Ekip / Ofis</h3>
+              <div class="pricing-limit">50+ öğrenci için özel kurulum</div>
+              <div class="pricing-price" style="font-size:1.55rem; line-height:1.24;">Özel fiyat</div>
+              <ul class="pricing-list">
+                <li>Koçluk ofisine uygun öğrenci kotası</li>
+                <li>Mevcut özelliklerle özel kurulum desteği</li>
+                <li>Yeni ekip özellikleri için erken erişim</li>
+              </ul>
+              <button type="button" class="btn-nav-outline" onclick="selectPricingPlan('Ekip / Ofis', '50+ öğrenci', 'Özel fiyat')">Teklif İste</button>
             </article>
           </div>
         </div>
@@ -2032,6 +2199,35 @@
 
         <button type="submit" class="btn-action btn-cta" style="width:100%; margin-top:10px;">Kayıt Ol</button>
       </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="planUpgradeModal" style="display:none;" onclick="if(event.target === this) modalKapat('planUpgradeModal')">
+    <div class="modal-card" style="max-width:720px;">
+      <button class="modal-close" onclick="modalKapat('planUpgradeModal')">✕</button>
+      <h3 style="margin:0; color:var(--color-dark-teal);">Paketi Seçerek Devam Edin</h3>
+      <p id="planUpgradeDescription" style="margin:10px 0 0; color:#64748b; font-size:0.9rem; line-height:1.55;">Bu özellik Keşfet modunda kullanıma açık değildir.</p>
+      <div class="plan-upgrade-grid">
+        <div class="plan-upgrade-option">
+          <strong>Mini</strong>
+          <span>5 aktif öğrenci</span>
+          <b>249 TL / ay</b>
+        </div>
+        <div class="plan-upgrade-option featured">
+          <strong>Başlangıç</strong>
+          <span>15 aktif öğrenci</span>
+          <b>399 TL / ay</b>
+        </div>
+        <div class="plan-upgrade-option">
+          <strong>Profesyonel</strong>
+          <span>50 aktif öğrenci</span>
+          <b>699 TL / ay</b>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:18px; flex-wrap:wrap;">
+        <button type="button" class="btn-nav-outline" onclick="modalKapat('planUpgradeModal')">Daha Sonra</button>
+        <button type="button" class="btn-action btn-coral" style="padding:10px 18px;" onclick="openPlanPricingFromDashboard()">Paketleri İncele</button>
+      </div>
     </div>
   </div>
 
@@ -2312,6 +2508,7 @@
               </div>
               <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
                 <button id="programExportPdfBtn" class="btn-nav-outline" style="padding: 8px 18px; font-size: 0.85rem;" onclick="exportProgramPdf()">PDF İndir</button>
+                <button id="programSendToStudentBtn" class="btn-nav-outline" style="padding: 8px 18px; font-size: 0.85rem;" onclick="sendProgramToStudentAndParent()">Öğrenciye/Veliye Gönder</button>
                 <select id="programTaskDaySelect" class="input-field" style="min-width:140px; margin-bottom:0; padding:8px 10px; font-size:0.82rem;">
                   <option value="pzt">Pazartesi</option>
                   <option value="sal">Salı</option>
@@ -2704,6 +2901,7 @@
                 <h2 style="margin:0; font-size:1.25rem; color: var(--color-dark-teal);">Öğrenci Kaynak Seçimi</h2>
                 <p style="margin:8px 0 0; color:#64748b; font-size:0.9rem;">Bu öğrencinin kullanacağı kaynakları seçin.</p>
               </div>
+              <button id="studentResourcesSendToParentBtn" type="button" class="btn-nav-outline" onclick="sendStudentResourcesToParent()">Veliye Gönder</button>
             </div>
 
             <div class="form-row" style="margin-bottom:10px;">
@@ -2969,6 +3167,11 @@
         Tüm zamanlar
       </label>
 
+      <label style="display:flex; align-items:center; gap:10px; margin-top:12px; font-size:0.9rem; font-weight:700; color:#334155;">
+        <input id="ogrenciRaporSendToParent" type="checkbox">
+        Veli uygulamasına da gönder
+      </label>
+
       <div class="form-row" style="margin-top:12px;">
         <div class="form-group">
           <label class="form-label">Başlangıç Tarihi</label>
@@ -2982,7 +3185,7 @@
 
       <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px; flex-wrap:wrap;">
         <button class="btn-nav-outline" type="button" onclick="modalKapat('ogrenciRaporDateModal')">İptal</button>
-        <button class="btn-action btn-coral" type="button" style="padding:10px 18px;" onclick="confirmOgrenciGenelRaporDateFilter()">PDF Oluştur</button>
+        <button id="ogrenciRaporCreateBtn" class="btn-action btn-coral" type="button" style="padding:10px 18px;" onclick="confirmOgrenciGenelRaporDateFilter()">PDF Oluştur</button>
       </div>
     </div>
   </div>

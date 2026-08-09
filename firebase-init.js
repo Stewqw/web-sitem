@@ -59,6 +59,15 @@
     },
     async saveWorkspaceSettings() {
       return null;
+    },
+    async publishStudentProgram() {
+      throw new Error("Firebase hazir degil");
+    },
+    async publishParentResources() {
+      throw new Error("Firebase hazir degil");
+    },
+    async publishParentReport() {
+      throw new Error("Firebase hazir degil");
     }
   };
 
@@ -289,6 +298,8 @@
       phone: payload.phone || "",
       branch: payload.branch || "",
       role: "coach",
+      plan: "explore",
+      studentLimit: 1,
       createdAtIso: nowIso,
       updatedAtIso: nowIso
     };
@@ -435,6 +446,8 @@
       name: (profile && (profile.displayName || profile.name)) || credential.user.displayName || "Kullanici",
       branch: (profile && profile.branch) || "",
       role,
+      plan: (profile && profile.plan) || "",
+      studentLimit: profile && typeof profile.studentLimit === "number" ? profile.studentLimit : null,
       linkedStudentIds: (profile && profile.linkedStudentIds) || [],
     };
   };
@@ -489,7 +502,9 @@
       uid: user.uid,
       email: user.email || "",
       name: (profile && profile.name) || user.displayName || "Kullanici",
-      branch: (profile && profile.branch) || ""
+      branch: (profile && profile.branch) || "",
+      plan: (profile && profile.plan) || "",
+      studentLimit: profile && typeof profile.studentLimit === "number" ? profile.studentLimit : null
     };
   };
 
@@ -583,6 +598,122 @@
     );
 
     return safeStudents;
+  };
+
+  services.publishStudentProgram = async function publishStudentProgram(payload) {
+    const user = auth.currentUser;
+    if (!user || !db || !fieldValue) {
+      const missingDbError = new Error("Firestore kullanima hazir degil.");
+      missingDbError.code = "app/firestore-unavailable";
+      throw missingDbError;
+    }
+
+    const studentUid = String(payload && payload.studentUid || "").trim();
+    const parentUid = String(payload && payload.parentUid || "").trim();
+    const program = payload && payload.program && typeof payload.program === "object" ? payload.program : null;
+    if (!studentUid || !parentUid || !program) {
+      throw new Error("Öğrenci, veli ve program bilgisi gerekli.");
+    }
+
+    const sharedProgram = {
+      studentId: String(payload.studentId || "").trim(),
+      studentName: String(payload.studentName || "").trim(),
+      classLevel: String(payload.classLevel || "").trim(),
+      program,
+      publishedAtIso: new Date().toISOString(),
+      publishedByUid: user.uid
+    };
+
+    const batch = db.batch();
+    batch.set(db.collection("users").doc(studentUid), {
+      sharedProgram,
+      updatedAt: fieldValue.serverTimestamp()
+    }, { merge: true });
+    batch.set(db.collection("users").doc(parentUid), {
+      sharedProgram,
+      updatedAt: fieldValue.serverTimestamp()
+    }, { merge: true });
+
+    await withTimeout(
+      batch.commit(),
+      10000,
+      "app/program-publish-timeout",
+      "Program öğrenci ve veliye gönderilirken zaman aşımı oluştu."
+    );
+
+    return sharedProgram;
+  };
+
+  services.publishParentResources = async function publishParentResources(payload) {
+    const user = auth.currentUser;
+    if (!user || !db || !fieldValue) {
+      const missingDbError = new Error("Firestore kullanima hazir degil.");
+      missingDbError.code = "app/firestore-unavailable";
+      throw missingDbError;
+    }
+
+    const parentUid = String(payload && payload.parentUid || "").trim();
+    const resources = Array.isArray(payload && payload.resources) ? payload.resources : null;
+    if (!parentUid || !resources) {
+      throw new Error("Veli ve kaynak bilgisi gerekli.");
+    }
+
+    const sharedResources = {
+      studentId: String(payload.studentId || "").trim(),
+      studentName: String(payload.studentName || "").trim(),
+      classLevel: String(payload.classLevel || "").trim(),
+      resources,
+      publishedAtIso: new Date().toISOString(),
+      publishedByUid: user.uid
+    };
+
+    await withTimeout(
+      db.collection("users").doc(parentUid).set({
+        sharedResources,
+        updatedAt: fieldValue.serverTimestamp()
+      }, { merge: true }),
+      10000,
+      "app/resources-publish-timeout",
+      "Kaynaklar veliye gönderilirken zaman aşımı oluştu."
+    );
+
+    return sharedResources;
+  };
+
+  services.publishParentReport = async function publishParentReport(payload) {
+    const user = auth.currentUser;
+    if (!user || !db || !fieldValue) {
+      const missingDbError = new Error("Firestore kullanima hazir degil.");
+      missingDbError.code = "app/firestore-unavailable";
+      throw missingDbError;
+    }
+
+    const parentUid = String(payload && payload.parentUid || "").trim();
+    const report = payload && payload.report && typeof payload.report === "object" ? payload.report : null;
+    if (!parentUid || !report) {
+      throw new Error("Veli ve rapor bilgisi gerekli.");
+    }
+
+    const sharedReport = {
+      studentId: String(payload.studentId || "").trim(),
+      studentName: String(payload.studentName || "").trim(),
+      classLevel: String(payload.classLevel || "").trim(),
+      report,
+      publishedAtIso: new Date().toISOString(),
+      publishedByUid: user.uid
+    };
+
+    await withTimeout(
+      db.collection("users").doc(parentUid).set({
+        sharedReport,
+        updatedAt: fieldValue.serverTimestamp()
+      }, { merge: true }),
+      10000,
+      "app/report-publish-timeout",
+      "Rapor veliye gönderilirken zaman aşımı oluştu."
+    );
+
+    return sharedReport;
   };
 
   services.getCoachUserCount = async function getCoachUserCount() {

@@ -20,6 +20,8 @@ let programWeekOffset = 0;
 let currentUserEmail = null;
 let currentUserName = null;
 let currentUserBranch = null;
+let currentUserPlan = '';
+let currentUserStudentLimit = null;
 let savedResourceSuggestions = [];
 let registerFormOpenedAt = Date.now();
 let studentStorageHydrated = false;
@@ -53,6 +55,14 @@ function shouldUseFirebaseAuth() {
 function shouldUseFirestoreForms() {
   const services = getFirebaseServices();
   return !!(isFirebaseReady() && services.settings && services.settings.useFirestoreForms);
+}
+
+function isExplorePlan() {
+  return currentUserPlan === 'explore';
+}
+
+function canAddStudent() {
+  return !isExplorePlan() || getStoredOgrenciler().length < Number(currentUserStudentLimit || 1);
 }
 
 let isSignUpSubmitting = false;
@@ -161,6 +171,25 @@ function isCustomClassLevel(value) {
   return normalizeClassLevel(value).startsWith('CUSTOM:');
 }
 
+function compareClassLevels(leftValue, rightValue) {
+  const getSortData = (value) => {
+    const normalizedValue = normalizeClassLevel(value);
+    const className = normalizedValue.startsWith('CUSTOM:')
+      ? normalizedValue.slice('CUSTOM:'.length).trim()
+      : normalizedValue;
+    const numericMatch = className.match(/^(\d+)(?:\s*\.?\s*SINIF)?$/);
+    if (numericMatch) return { group: 0, value: Number(numericMatch[1]), label: className };
+    if (className === 'YKS') return { group: 2, value: 0, label: className };
+    return { group: 1, value: 0, label: getClassDisplayLabel(value) };
+  };
+
+  const left = getSortData(leftValue);
+  const right = getSortData(rightValue);
+  if (left.group !== right.group) return left.group - right.group;
+  if (left.group === 0 && left.value !== right.value) return left.value - right.value;
+  return left.label.localeCompare(right.label, 'tr', { sensitivity: 'base' });
+}
+
 function getCustomClassStorageKey() {
   const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
   return `custom_class_levels_${email}`;
@@ -227,9 +256,14 @@ function createCustomClassLevel(name) {
 function populateClassSelect(selectEl, selectedValue) {
   if (!selectEl) return;
   const standardOptions = [['4', '4'], ['5', '5'], ['6', '6'], ['7', '7'], ['8', 'LGS'], ['9', '9'], ['10', '10'], ['11', '11'], ['YKS', 'YKS']];
+  const hiddenClassLevels = new Set(getHiddenClassLevels().map(normalizeClassLevel));
   const activeValue = selectedValue || selectEl.value || '8';
+  const availableOptions = standardOptions
+    .concat(getCustomClassLevels().map((value) => [value, getClassDisplayLabel(value)]))
+    .filter(([value]) => !hiddenClassLevels.has(normalizeClassLevel(value)))
+    .sort(([leftValue], [rightValue]) => compareClassLevels(leftValue, rightValue));
   selectEl.innerHTML = '';
-  standardOptions.concat(getCustomClassLevels().map((value) => [value, getClassDisplayLabel(value)])).forEach(([value, label]) => {
+  availableOptions.forEach(([value, label]) => {
     const option = document.createElement('option');
     option.value = value;
     option.textContent = label;
@@ -239,7 +273,8 @@ function populateClassSelect(selectEl, selectedValue) {
   customOption.value = '__custom__';
   customOption.textContent = '+ Özel sınıf / sınav ekle';
   selectEl.appendChild(customOption);
-  selectEl.value = Array.from(selectEl.options).some((option) => option.value === activeValue) ? activeValue : '8';
+  const fallbackValue = availableOptions.length ? availableOptions[0][0] : '__custom__';
+  selectEl.value = Array.from(selectEl.options).some((option) => option.value === activeValue) ? activeValue : fallbackValue;
 }
 
 function toggleCustomClassNameInput(selectId, inputId) {
@@ -398,6 +433,26 @@ function modalKapat(id) {
   document.getElementById(id).style.display = 'none';
 }
 
+function openPlanUpgradeModal(featureName = 'Bu özellik') {
+  const descriptionEl = document.getElementById('planUpgradeDescription');
+  if (descriptionEl) {
+    descriptionEl.textContent = `${featureName}, Keşfet modunda görüntülenebilir ancak kullanıma açık değildir. Devam etmek için paketinizi seçin.`;
+  }
+  modalAc('planUpgradeModal');
+}
+
+function openPlanPricingFromDashboard() {
+  modalKapat('planUpgradeModal');
+  sayfaAcs('promoPage');
+  window.setTimeout(() => scrollToLandingSection('landingPricing'), 0);
+}
+
+function requirePaidPlan(featureName) {
+  if (!isExplorePlan()) return true;
+  openPlanUpgradeModal(featureName);
+  return false;
+}
+
 const LEGAL_TEXTS = {
   privacy: {
     title: 'Gizlilik Politikasi ve KVKK Aydinlatma Metni',
@@ -502,6 +557,18 @@ function scrollToLandingSection(sectionId) {
   const target = document.getElementById(sectionId);
   if (!target) return;
   target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function selectPricingPlan(planName, studentLimit, monthlyPrice) {
+  const noteEl = document.getElementById('landingApplyNote');
+  const levelEl = document.getElementById('landingApplyLevel');
+  if (noteEl) {
+    noteEl.value = `${planName} paketiyle ilgileniyorum (${studentLimit}, ${monthlyPrice}).`;
+  }
+  if (levelEl && planName === 'Ekip / Ofis') {
+    levelEl.value = 'Kurum / Ofis';
+  }
+  scrollToLandingSection('landingApply');
 }
 
 function toggleLandingFaq(buttonEl) {
@@ -998,6 +1065,8 @@ async function paneleGirisYap(nereden) {
       currentUserEmail = userEmail;
       currentUserName = session && session.name ? session.name : currentUserName;
       currentUserBranch = session && session.branch ? session.branch : currentUserBranch;
+      currentUserPlan = session && session.plan ? session.plan : '';
+      currentUserStudentLimit = session && typeof session.studentLimit === 'number' ? session.studentLimit : null;
       loadSavedResourceSuggestions();
       await syncStudentStorageFromCloud();
       await syncWorkspaceSettingsFromCloud();
@@ -1087,6 +1156,8 @@ async function attemptAutoLogin() {
         currentUserEmail = email;
         currentUserName = session.name || currentUserName;
         currentUserBranch = session.branch || currentUserBranch;
+        currentUserPlan = session.plan || '';
+        currentUserStudentLimit = typeof session.studentLimit === 'number' ? session.studentLimit : null;
         loadSavedResourceSuggestions();
         await syncStudentStorageFromCloud();
         await syncWorkspaceSettingsFromCloud();
@@ -1974,6 +2045,7 @@ async function indirTumBransDenemelerPdf() {
 }
 
 function kaydetBransDenemesi() {
+  if (!requirePaidPlan('Branş denemesi kaydı')) return;
   if (!activeStudentId) {
     alert('Önce bir öğrenci seçin.');
     return;
@@ -2489,6 +2561,7 @@ function deleteGenelExam(recordId) {
 }
 
 function kaydetGenelDeneme() {
+  if (!requirePaidPlan('Genel deneme kaydı')) return;
   if (!activeStudentId) {
     alert('Önce bir öğrenci seçin.');
     return;
@@ -2553,6 +2626,8 @@ async function cikisYap() {
   currentUserEmail = null;
   currentUserName = null;
   currentUserBranch = null;
+  currentUserPlan = '';
+  currentUserStudentLimit = null;
   ekranıGoster('promoPage');
   updatePageHistory('promoPage', 'replace');
 }
@@ -2920,6 +2995,10 @@ function refreshCustomClassNavigation() {
       item.appendChild(createClassMenuDeleteButton(classLevel));
       submenu.appendChild(item);
     });
+
+    Array.from(submenu.querySelectorAll('.submenu-item'))
+      .sort((leftItem, rightItem) => compareClassLevels(leftItem.dataset.sinif, rightItem.dataset.sinif))
+      .forEach((item) => submenu.appendChild(item));
   });
 }
 
@@ -3540,6 +3619,7 @@ onUniteKonuLessonChange = function() {
 };
 
 function addKaynakOnerisi() {
+  if (!requirePaidPlan('Kaynak önerisi ekleme')) return;
   const name = document.getElementById('resourceNameInput').value.trim();
   const level = document.getElementById('resourceLevelSelect').value;
   const url = document.getElementById('resourceUrlInput').value.trim();
@@ -3697,6 +3777,12 @@ function addBulkKaynakOnerileri() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  const pricingSection = document.getElementById('landingPricing');
+  const whySection = document.getElementById('landingWhy');
+  if (pricingSection && whySection) {
+    whySection.parentNode.insertBefore(pricingSection, whySection);
+  }
+
   refreshRegisterSpamGuards();
   populateClassSelect(document.getElementById('ogrenciSinifInput'), '8');
   populateClassSelect(document.getElementById('editStudentClass'), '8');
@@ -4282,6 +4368,10 @@ function closeUsersModal() {
 }
 
 function ogrenciEkle() {
+  if (!canAddStudent()) {
+    openPlanUpgradeModal('Birden fazla öğrenci ekleme');
+    return;
+  }
   const name = document.getElementById('ogrenciAdiInput').value.trim();
   const email = document.getElementById('ogrenciEmailInput').value.trim();
   const phone = document.getElementById('ogrenciTelefonInput').value.trim();
@@ -5261,6 +5351,7 @@ function renderCozulenSoruRecords() {
 }
 
 function saveCozulenSoruRecord() {
+  if (!requirePaidPlan('Çözülen soru kaydı')) return;
   if (!activeStudentId) {
     alert('Önce bir öğrenci seçin.');
     return;
@@ -5752,6 +5843,7 @@ function renderStudentResourceSelectionPanel() {
 }
 
 function addStudentResourceAssignment() {
+  if (!requirePaidPlan('Öğrenciye kaynak atama')) return;
   const student = getActiveStudentRecord();
   const selectEl = document.getElementById('studentResourceSelect');
   if (!student || !selectEl) return;
@@ -5810,6 +5902,7 @@ function closeVeliEditMode(slot = 1) {
 }
 
 function saveStudentParentInfo(slot = 1) {
+  if (!requirePaidPlan('Veli bilgisi kaydı')) return;
   const safeSlot = slot === 2 ? 2 : 1;
   if (!activeStudentId) {
     alert('Önce bir öğrenci seçin.');
@@ -5921,6 +6014,7 @@ function renderMuhasebeStudentCards() {
 }
 
 function openMuhasebeDetailModal(studentId) {
+  if (!requirePaidPlan('Muhasebe ve ödeme takibi')) return;
   const students = getStoredOgrenciler();
   const student = students.find((s) => String(s.id) === String(studentId));
   if (!student) {
@@ -6371,6 +6465,8 @@ async function exportProgramPdf() {
   try {
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF('l', 'pt', 'a4');
+    const hasUnicodeFont = await applyPdfUnicodeFont(pdf);
+    const pdfFont = hasUnicodeFont ? 'NotoSans' : 'helvetica';
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
     const marginLeft = 18;
@@ -6450,7 +6546,7 @@ async function exportProgramPdf() {
       const textHeight = lines.length * lineGap;
       let textY = startY + Math.max(0, (height - 10 - textHeight) / 2);
 
-      pdf.setFont('helvetica', options.bold ? 'bold' : 'normal');
+      pdf.setFont(pdfFont, options.bold ? 'bold' : 'normal');
       pdf.setFontSize(fontSize);
       pdf.setTextColor(color[0], color[1], color[2]);
       lines.forEach((line) => {
@@ -6474,7 +6570,7 @@ async function exportProgramPdf() {
           pdf.addImage(logoDataUrl, 'PNG', boxX + 10, boxY + 10, 58, 58, undefined, 'FAST');
         } catch (error) {
           pdf.setTextColor(16, 32, 64);
-          pdf.setFont('helvetica', 'bold');
+          pdf.setFont(pdfFont, 'bold');
           pdf.setFontSize(10);
           pdf.text('PARABOL', boxX + 39, boxY + 31, { align: 'center' });
           pdf.setFontSize(9);
@@ -6482,7 +6578,7 @@ async function exportProgramPdf() {
         }
       } else {
         pdf.setTextColor(16, 32, 64);
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFont(pdfFont, 'bold');
         pdf.setFontSize(10);
         pdf.text('PARABOL', boxX + 39, boxY + 31, { align: 'center' });
         pdf.setFontSize(9);
@@ -6490,29 +6586,29 @@ async function exportProgramPdf() {
       }
 
       pdf.setTextColor(16, 32, 64);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont(pdfFont, 'normal');
       pdf.setFontSize(9);
-      pdf.text(pdfSafeText('LGS MATEMATIK'), boxX + 86, boxY + 20);
-      pdf.setFont('helvetica', 'bold');
+      pdf.text(pdfSafeText('LGS MATEMATİK'), boxX + 86, boxY + 20);
+      pdf.setFont(pdfFont, 'bold');
       pdf.setFontSize(18);
-      pdf.text(pdfSafeText('HAFTALIK CALISMA PROGRAMI'), boxX + 86, boxY + 40);
-      pdf.setFont('helvetica', 'normal');
+      pdf.text(pdfSafeText('HAFTALIK ÇALIŞMA PROGRAMI'), boxX + 86, boxY + 40);
+      pdf.setFont(pdfFont, 'normal');
       pdf.setFontSize(8);
       pdf.setTextColor(107, 114, 128);
-      pdf.text(pdfSafeText('Bir gune birden fazla ders ve gorev alinabilir.'), boxX + 86, boxY + 56);
+      pdf.text(pdfSafeText('Bir güne birden fazla ders ve görev alınabilir.'), boxX + 86, boxY + 56);
 
       const rightX = boxX + boxW - 250;
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont(pdfFont, 'bold');
       pdf.setFontSize(9);
       pdf.setTextColor(16, 32, 64);
-      pdf.text(pdfSafeText('Ogrenci:'), rightX, boxY + 24);
+      pdf.text(pdfSafeText('Öğrenci:'), rightX, boxY + 24);
       pdf.text(pdfSafeText('Hafta:'), rightX, boxY + 42);
       pdf.setDrawColor(186, 198, 214);
       pdf.setLineWidth(1.15);
       pdf.line(rightX + 46, boxY + 24, boxX + boxW - 16, boxY + 24);
       pdf.line(rightX + 46, boxY + 42, boxX + boxW - 16, boxY + 42);
       pdf.setLineWidth(0.2);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont(pdfFont, 'normal');
       pdf.setFontSize(8);
       pdf.text(pdfSafeText(student.name || '-'), rightX + 52, boxY + 21);
       pdf.text(pdfSafeText(formatWeekRange(weekStart)), rightX + 52, boxY + 39);
@@ -6537,7 +6633,7 @@ async function exportProgramPdf() {
         pdf.setDrawColor(16, 32, 64);
         pdf.rect(x, startY, header.width, tableHeaderHeight, 'FD');
         pdf.setTextColor(255, 255, 255);
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFont(pdfFont, 'bold');
         pdf.setFontSize(headerFontSize);
         pdf.text(pdfSafeText(header.label), x + header.width / 2, startY + 15, { align: 'center' });
         x += header.width;
@@ -6590,7 +6686,7 @@ async function exportProgramPdf() {
         let rowY = currentY;
 
         drawCell(marginLeft, dayCellY, dayWidth, dayCellHeight, [247, 249, 251], [210, 217, 226]);
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFont(pdfFont, 'bold');
         pdf.setFontSize(9);
         pdf.setTextColor(31, 41, 55);
         pdf.text(pdfSafeText(dayTitle), marginLeft + dayWidth / 2, dayCellY + dayCellHeight / 2 + 3, { align: 'center', baseline: 'middle' });
@@ -6941,6 +7037,94 @@ function getResourceOptionsForClass(classLevel, lesson = '') {
 function getActiveStudentRecord() {
   if (!activeStudentId) return null;
   return getStoredOgrenciler().find((student) => String(student.id) === String(activeStudentId)) || null;
+}
+
+async function sendProgramToStudentAndParent() {
+  const student = getActiveStudentRecord();
+  if (!student) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  const credentials = getStudentAccessCredentials(student);
+  const studentUid = String(student.firebaseUid || (credentials && credentials.student && credentials.student.uid) || '').trim();
+  const parentUid = String(credentials && credentials.parent && credentials.parent.uid || '').trim();
+  if (!studentUid || !parentUid) {
+    alert('Programı göndermek için önce öğrenci ve veli giriş kodlarını oluşturun.');
+    return;
+  }
+
+  const services = getFirebaseServices();
+  if (!services || typeof services.publishStudentProgram !== 'function' || !isFirebaseReady()) {
+    alert('Firebase bağlantısı hazır değil. Program gönderilemedi.');
+    return;
+  }
+
+  const sendButton = document.getElementById('programSendToStudentBtn');
+  setSubmitButtonLoading(sendButton, true, 'Gönderiliyor...');
+  try {
+    await services.publishStudentProgram({
+      studentId: student.id,
+      studentUid,
+      parentUid,
+      studentName: student.name || '',
+      classLevel: student.classLevel || '',
+      program: student.program && typeof student.program === 'object' ? student.program : { weeks: {} }
+    });
+    alert(`${student.name || 'Öğrenci'} için program öğrenci ve veli uygulamasına gönderildi.`);
+  } catch (error) {
+    console.error('Program öğrenci ve veliye gönderilemedi:', error);
+    const message = error && error.message ? error.message : 'Program gönderilemedi. Firebase bağlantısını kontrol edip tekrar deneyin.';
+    alert(message);
+  } finally {
+    setSubmitButtonLoading(sendButton, false);
+  }
+}
+
+async function sendStudentResourcesToParent() {
+  const student = getActiveStudentRecord();
+  if (!student) {
+    alert('Önce bir öğrenci seçin.');
+    return;
+  }
+
+  const resources = getStudentAssignedResources(student);
+  if (!resources.length) {
+    alert('Veliye göndermek için önce en az bir kaynak seçin.');
+    return;
+  }
+
+  const credentials = getStudentAccessCredentials(student);
+  const parentUid = String(credentials && credentials.parent && credentials.parent.uid || '').trim();
+  if (!parentUid) {
+    alert('Kaynakları göndermek için önce veli giriş kodunu oluşturun.');
+    return;
+  }
+
+  const services = getFirebaseServices();
+  if (!services || typeof services.publishParentResources !== 'function' || !isFirebaseReady()) {
+    alert('Firebase bağlantısı hazır değil. Kaynaklar gönderilemedi.');
+    return;
+  }
+
+  const sendButton = document.getElementById('studentResourcesSendToParentBtn');
+  setSubmitButtonLoading(sendButton, true, 'Gönderiliyor...');
+  try {
+    await services.publishParentResources({
+      studentId: student.id,
+      parentUid,
+      studentName: student.name || '',
+      classLevel: student.classLevel || '',
+      resources
+    });
+    alert(`${student.name || 'Öğrenci'} için kaynak listesi veliye gönderildi.`);
+  } catch (error) {
+    console.error('Kaynak listesi veliye gönderilemedi:', error);
+    const message = error && error.message ? error.message : 'Kaynaklar veliye gönderilemedi. Firebase bağlantısını kontrol edip tekrar deneyin.';
+    alert(message);
+  } finally {
+    setSubmitButtonLoading(sendButton, false);
+  }
 }
 
 function getStudentAssignedResources(student) {
@@ -7660,6 +7844,7 @@ function openOgrenciGenelRaporDateModal(studentId) {
   const endEl = document.getElementById('ogrenciRaporEndDate');
   const allTimeEl = document.getElementById('ogrenciRaporAllTime');
   const typeEl = document.getElementById('ogrenciRaporType');
+  const sendToParentEl = document.getElementById('ogrenciRaporSendToParent');
   const infoEl = document.getElementById('ogrenciRaporDateInfo');
   const student = getStoredOgrenciler().find((s) => String(s.id) === String(studentId));
 
@@ -7669,6 +7854,7 @@ function openOgrenciGenelRaporDateModal(studentId) {
   endEl.value = '';
   allTimeEl.checked = true;
   typeEl.value = 'full';
+  if (sendToParentEl) sendToParentEl.checked = false;
   if (infoEl) {
     infoEl.textContent = student ? `${student.name || 'Öğrenci'} için tarih aralığı seçin.` : 'Tarih aralığı seçin.';
   }
@@ -7685,11 +7871,12 @@ function onOgrenciRaporAllTimeChange() {
   if (endEl) endEl.disabled = disabled;
 }
 
-function confirmOgrenciGenelRaporDateFilter() {
+async function confirmOgrenciGenelRaporDateFilter() {
   const allTime = !!document.getElementById('ogrenciRaporAllTime')?.checked;
   const startDate = String(document.getElementById('ogrenciRaporStartDate')?.value || '').trim();
   const endDate = String(document.getElementById('ogrenciRaporEndDate')?.value || '').trim();
   const reportType = String(document.getElementById('ogrenciRaporType')?.value || 'full').trim() || 'full';
+  const sendToParent = !!document.getElementById('ogrenciRaporSendToParent')?.checked;
 
   if (!pendingOgrenciRaporStudentId) {
     alert('Öğrenci raporu başlatılamadı.');
@@ -7713,17 +7900,98 @@ function confirmOgrenciGenelRaporDateFilter() {
     }
   }
 
+  const dateFilter = allTime ? { allTime: true, reportType } : { allTime: false, startDate, endDate, reportType };
+  if (sendToParent) {
+    const createButton = document.getElementById('ogrenciRaporCreateBtn');
+    setSubmitButtonLoading(createButton, true, 'Veliye gönderiliyor...');
+    try {
+      await sendOgrenciRaporToParent(pendingOgrenciRaporStudentId, dateFilter);
+    } catch (error) {
+      console.error('Rapor veliye gönderilemedi:', error);
+      const message = error && error.message ? error.message : 'Rapor veliye gönderilemedi. Firebase bağlantısını kontrol edip tekrar deneyin.';
+      alert(message);
+      return;
+    } finally {
+      setSubmitButtonLoading(createButton, false);
+    }
+  }
+
   modalKapat('ogrenciRaporDateModal');
-  indirOgrenciGenelRaporPdf(
-    pendingOgrenciRaporStudentId,
-    allTime ? { allTime: true, reportType } : { allTime: false, startDate, endDate, reportType }
-  );
+  indirOgrenciGenelRaporPdf(pendingOgrenciRaporStudentId, dateFilter);
 }
 
 function filterReportRecordsByDateRange(records, getDateValue, filter) {
   if (!Array.isArray(records)) return [];
   if (!filter || filter.allTime) return records.slice();
   return records.filter((item) => isDateInTrRange(getDateValue(item), filter.startDate, filter.endDate));
+}
+
+function buildParentReportPayload(student, dateFilter) {
+  const reportType = String(dateFilter?.reportType || 'full').toLocaleLowerCase('tr-TR');
+  const includeAll = reportType === 'full';
+  const sections = {};
+
+  if (includeAll || reportType === 'genel') {
+    sections.genelDenemeler = filterReportRecordsByDateRange(
+      getStoredGenelExamsForStudent(student.id),
+      (item) => item.examDate,
+      dateFilter
+    );
+  }
+  if (includeAll || reportType === 'brans') {
+    sections.bransDenemeler = filterReportRecordsByDateRange(
+      getStoredBransExamsForStudent(student.id),
+      (item) => item.examDate,
+      dateFilter
+    );
+  }
+  if (includeAll || reportType === 'kaynak') {
+    const topicDetails = getKaynakKonuSummaryForStudent(student.id).finishedTopicDetails || [];
+    sections.kaynakKonuIlerlemesi = filterReportRecordsByDateRange(
+      topicDetails,
+      (item) => item.finishedDate,
+      dateFilter
+    );
+  }
+  if (includeAll || reportType === 'cozulen') {
+    sections.cozulenSorular = filterReportRecordsByDateRange(
+      getCozulenBreakdownForStudent(student),
+      (item) => item.examDate,
+      dateFilter
+    );
+  }
+
+  return {
+    reportType,
+    allTime: !!dateFilter?.allTime,
+    startDate: dateFilter?.allTime ? '' : String(dateFilter?.startDate || ''),
+    endDate: dateFilter?.allTime ? '' : String(dateFilter?.endDate || ''),
+    sections
+  };
+}
+
+async function sendOgrenciRaporToParent(studentId, dateFilter) {
+  const student = getStoredOgrenciler().find((item) => String(item.id) === String(studentId));
+  if (!student) throw new Error('Öğrenci bulunamadı.');
+
+  const credentials = getStudentAccessCredentials(student);
+  const parentUid = String(credentials && credentials.parent && credentials.parent.uid || '').trim();
+  if (!parentUid) throw new Error('Raporu göndermek için önce veli giriş kodunu oluşturun.');
+
+  const services = getFirebaseServices();
+  if (!services || typeof services.publishParentReport !== 'function' || !isFirebaseReady()) {
+    throw new Error('Firebase bağlantısı hazır değil. Rapor gönderilemedi.');
+  }
+
+  await services.publishParentReport({
+    studentId: student.id,
+    parentUid,
+    studentName: student.name || '',
+    classLevel: student.classLevel || '',
+    report: buildParentReportPayload(student, dateFilter)
+  });
+
+  alert(`${student.name || 'Öğrenci'} için seçili rapor veli uygulamasına gönderildi.`);
 }
 
 async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true, reportType: 'full' }) {
@@ -9032,6 +9300,7 @@ function createWorksheetPreviewPage(pageIndex) {
 }
 
 async function downloadWorksheetPdf() {
+  if (!requirePaidPlan('Yazılı PDF oluşturma')) return;
   if (!worksheetQuestions.length) {
     alert('Önce en az bir soru görseli ekleyin.');
     return;
