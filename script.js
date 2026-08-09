@@ -4383,23 +4383,37 @@ async function createStudentAccessCredentials(studentId) {
     return;
   }
 
-  const result = await services.provisionStudentAccounts({
-    studentId: String(student.firebaseUid || student.id),
-    studentName: student.name || '',
-    branch: currentUserBranch || '',
-    classLevel: student.classLevel || '',
-    parentDisplayName: `${student.name || 'Ogrenci'} Velisi`
-  });
+  const createButton = document.getElementById('studentAccessCreateBtn');
+  setSubmitButtonLoading(createButton, true, 'Kodlar oluşturuluyor...');
 
-  student.firebaseUid = result.student && result.student.uid ? result.student.uid : student.firebaseUid;
-  student.accessCredentials = {
-    student: result.student,
-    parent: result.parent
-  };
+  try {
+    const result = await services.provisionStudentAccounts({
+      studentId: String(student.firebaseUid || student.id),
+      studentName: student.name || '',
+      branch: currentUserBranch || '',
+      classLevel: student.classLevel || '',
+      parentDisplayName: `${student.name || 'Ogrenci'} Velisi`
+    });
 
-  setStoredOgrenciler(students);
-  renderStoredOgrenciler();
-  renderStudentAccessCredentials(student);
+    if (!result || !result.student || !result.parent) {
+      throw new Error('Giriş kodları oluşturulamadı.');
+    }
+
+    student.firebaseUid = result.student.uid || student.firebaseUid;
+    student.accessCredentials = {
+      student: result.student,
+      parent: result.parent
+    };
+
+    setStoredOgrenciler(students);
+    renderStoredOgrenciler();
+    renderStudentAccessCredentials(student);
+  } catch (error) {
+    console.error('Öğrenci ve veli giriş kodları oluşturulamadı:', error);
+    alert(getFirebaseAuthErrorMessage(error, 'Giriş kodları oluşturulamadı. Firebase bağlantısını ve ayarlarını kontrol edip tekrar deneyin.'));
+  } finally {
+    setSubmitButtonLoading(createButton, false);
+  }
 }
 
 function openStudentEditModal(studentId) {
