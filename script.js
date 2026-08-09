@@ -58,7 +58,11 @@ function shouldUseFirestoreForms() {
 }
 
 function isExplorePlan() {
-  return currentUserPlan === 'explore';
+  return !['mini', 'baslangic', 'profesyonel', 'ekip'].includes(String(currentUserPlan || '').toLocaleLowerCase('tr-TR'));
+}
+
+function shouldShowDefaultCurriculumContent() {
+  return !isExplorePlan();
 }
 
 function canAddStudent() {
@@ -2750,6 +2754,7 @@ function startQuickStartProgramSetup() {
   closeQuickStart();
   openStudentInfoPage(student.id);
   openStudentProgramPage();
+  openTaskModal('pzt');
 }
 
 function getResourceSignature(resource) {
@@ -2859,7 +2864,10 @@ function getVisibleTopicNamesForScope(lesson, unit) {
 
 function getSortedVisibleResources() {
   const hiddenSignatures = new Set(getStoredHiddenResourceSuggestions());
-  const allResources = [...initialResourceSuggestions, ...savedResourceSuggestions];
+  const allResources = [
+    ...(shouldShowDefaultCurriculumContent() ? initialResourceSuggestions : []),
+    ...savedResourceSuggestions
+  ];
 
   return allResources
     .filter((item) => item.sinif === selectedKaynakSinif && !hiddenSignatures.has(getResourceSignature(item)))
@@ -4427,6 +4435,13 @@ function renderStudentAccessCredentials(student) {
   const parentCodeEl = document.getElementById('parentAccessCode');
   const createBtn = document.getElementById('studentAccessCreateBtn');
 
+  if (isExplorePlan()) {
+    if (studentCodeEl) studentCodeEl.value = '';
+    if (parentCodeEl) parentCodeEl.value = '';
+    if (createBtn) createBtn.style.display = 'inline-flex';
+    return;
+  }
+
   if (studentCodeEl) studentCodeEl.value = credentials && credentials.student ? credentials.student.loginCode || '' : '';
   if (parentCodeEl) parentCodeEl.value = credentials && credentials.parent ? credentials.parent.loginCode || '' : '';
 
@@ -4468,6 +4483,7 @@ function copyStudentAccessField(fieldId, label) {
 }
 
 async function createStudentAccessCredentials(studentId) {
+  if (!requirePaidPlan('Öğrenci ve veli giriş kodu oluşturma')) return;
   const students = getStoredOgrenciler();
   const student = students.find((item) => item.id.toString() === studentId.toString());
   if (!student) {
@@ -5135,7 +5151,15 @@ function removeGlobalKaynakResource(btnEl) {
 
   const removed = kaynakIlerlemeState.resourcePool[index];
   if (!removed) return;
-  openKaynakSilmeModal(removed, index);
+  kaynakIlerlemeState.resourcePool.splice(index, 1);
+  Object.keys(kaynakIlerlemeState.data || {}).forEach((topicKey) => {
+    const entry = kaynakIlerlemeState.data[topicKey];
+    if (!entry || !Array.isArray(entry.doneResources)) return;
+    entry.doneResources = entry.doneResources.filter((name) => name !== removed);
+  });
+
+  saveKaynakIlerlemeState(false);
+  renderKaynakIlerlemeRows();
 }
 
 function getKaynakTopicPercent(entry, totalResources) {
@@ -6924,7 +6948,7 @@ function getLessonOptionsForClass(classLevel) {
     'YKS': ['Matematik', 'Geometri', 'Fizik', 'Kimya', 'Biyoloji', 'Türkçe', 'Tarih', 'Coğrafya']
   };
   const normalizedClassLevel = normalizeClassLevel(classLevel);
-  const defaultLessons = isCustomClassLevel(normalizedClassLevel)
+  const defaultLessons = !shouldShowDefaultCurriculumContent() || isCustomClassLevel(normalizedClassLevel)
     ? []
     : lessonsByClass[normalizedClassLevel] || ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'];
   const hiddenLessons = getHiddenClassLessons(normalizedClassLevel);
@@ -6933,14 +6957,18 @@ function getLessonOptionsForClass(classLevel) {
 }
 
 function getUnitOptionsForLesson(classLevel, lesson) {
-  const defaultUnits = (DEFAULT_UNITS_BY_CLASS[String(classLevel)] && DEFAULT_UNITS_BY_CLASS[String(classLevel)][lesson]) || [];
+  const defaultUnits = shouldShowDefaultCurriculumContent()
+    ? (DEFAULT_UNITS_BY_CLASS[String(classLevel)] && DEFAULT_UNITS_BY_CLASS[String(classLevel)][lesson]) || []
+    : [];
   const customLessonData = getCustomUnitTopicLessonData(classLevel, lesson);
   const visibleDefaultUnits = defaultUnits.filter((unitName) => !customLessonData.hiddenUnits.includes(unitName));
   return sortNumberedUnitTopicItems([].concat(visibleDefaultUnits, customLessonData.units));
 }
 
 function getTopicOptionsForLesson(classLevel, lesson, unit) {
-  const lessonTopics = DEFAULT_TOPICS_BY_CLASS[String(classLevel)] && DEFAULT_TOPICS_BY_CLASS[String(classLevel)][lesson];
+  const lessonTopics = shouldShowDefaultCurriculumContent()
+    ? DEFAULT_TOPICS_BY_CLASS[String(classLevel)] && DEFAULT_TOPICS_BY_CLASS[String(classLevel)][lesson]
+    : null;
   const customLessonData = getCustomUnitTopicLessonData(classLevel, lesson);
 
   let defaultTopics = [];
@@ -7026,7 +7054,10 @@ function populateTaskTopicOptions(classLevel, lesson, unit) {
 
 function getResourceOptionsForClass(classLevel, lesson = '') {
   const hiddenSignatures = new Set(getStoredHiddenResourceSuggestions());
-  const allResources = [...initialResourceSuggestions, ...savedResourceSuggestions];
+  const allResources = [
+    ...(shouldShowDefaultCurriculumContent() ? initialResourceSuggestions : []),
+    ...savedResourceSuggestions
+  ];
   return Array.from(new Set(
     allResources
       .filter(item => item.sinif === classLevel && (!lesson || item.lesson === lesson) && !hiddenSignatures.has(getResourceSignature(item)))
@@ -7155,7 +7186,10 @@ function getStudentResourceOptions(student, classLevel, lesson = '') {
 
 function getAssignableResourceEntriesForStudent(student, classLevel, lesson = '') {
   const hiddenSignatures = new Set(getStoredHiddenResourceSuggestions());
-  const allResources = [...initialResourceSuggestions, ...savedResourceSuggestions];
+  const allResources = [
+    ...(shouldShowDefaultCurriculumContent() ? initialResourceSuggestions : []),
+    ...savedResourceSuggestions
+  ];
   const assignedKeys = new Set(
     getStudentAssignedResources(student).map((item) => `${item.lesson}|||${item.name}`)
   );
