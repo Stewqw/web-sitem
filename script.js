@@ -1165,6 +1165,8 @@ function sekmeAcs(sekmeAd) {
   if (genelEl) genelEl.style.display = 'none';
   const kaynakIlerlemeEl = document.getElementById('tabKaynakIlerleme');
   if (kaynakIlerlemeEl) kaynakIlerlemeEl.style.display = 'none';
+  const ogrenciKaynakSecimiEl = document.getElementById('tabOgrenciKaynakSecimi');
+  if (ogrenciKaynakSecimiEl) ogrenciKaynakSecimiEl.style.display = 'none';
   const veliBilgiEl = document.getElementById('tabVeliBilgi');
   if (veliBilgiEl) veliBilgiEl.style.display = 'none';
   const cozulenSoruEl = document.getElementById('tabCozulenSoru');
@@ -2559,7 +2561,107 @@ function renderKokpitUserCard() {
   renderKokpitTodoDate();
   loadKokpitAgendaEvents();
   loadKokpitAgendaDragScalePreference();
+  loadKokpitCardCollapsePreferences();
   renderKokpitAgenda();
+  renderQuickStart();
+  showQuickStartOnFirstVisit();
+}
+
+function getQuickStartStorageKey() {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  return `quick_start_completed_${email}`;
+}
+
+function openQuickStart() {
+  if (isQuickStartComplete()) return;
+  renderQuickStart();
+  const modal = document.getElementById('quickStartModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeQuickStart() {
+  const modal = document.getElementById('quickStartModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function showQuickStartOnFirstVisit() {
+  if (isQuickStartComplete()) return;
+  window.setTimeout(openQuickStart, 250);
+}
+
+function hasQuickStartProgramTask(student) {
+  return Object.values(student?.program?.weeks || {}).some((week) => {
+    return Object.values(week || {}).some((dayTasks) => Array.isArray(dayTasks) && dayTasks.length > 0);
+  });
+}
+
+function getQuickStartState() {
+  const students = getStoredOgrenciler();
+  return {
+    hasStudent: students.length > 0,
+    hasProgramTask: students.some(hasQuickStartProgramTask)
+  };
+}
+
+function isQuickStartComplete() {
+  if (localStorage.getItem(getQuickStartStorageKey()) === 'true') return true;
+  const state = getQuickStartState();
+  return state.hasStudent && state.hasProgramTask;
+}
+
+function renderQuickStart() {
+  const menuItem = document.getElementById('menu-quick-start');
+  const modal = document.getElementById('quickStartModal');
+  const stepsEl = document.getElementById('quickStartSteps');
+  const progressEl = document.getElementById('quickStartProgress');
+  if (!menuItem || !modal || !stepsEl || !progressEl) return;
+
+  const state = getQuickStartState();
+  const completedCount = Number(state.hasStudent) + Number(state.hasProgramTask);
+  if (state.hasStudent && state.hasProgramTask) {
+    localStorage.setItem(getQuickStartStorageKey(), 'true');
+    menuItem.style.display = 'none';
+    modal.style.display = 'none';
+    return;
+  }
+
+  menuItem.style.display = '';
+  progressEl.textContent = `${completedCount} / 2 adım tamamlandı. İlk öğrenci programınızı oluşturmak için aşağıdaki yönlendirmeleri izleyin.`;
+  stepsEl.innerHTML = `
+    <div class="quick-start-step ${state.hasStudent ? 'is-complete' : ''}">
+      <div class="quick-start-step-number">${state.hasStudent ? '✓' : '1'}</div>
+      <div>
+        <strong>Öğrenci ekleyin</strong>
+        <span>Öğrenci Yönetimi bölümünde “Öğrenci Ekle” ile öğrencinin adını ve sınıfını kaydedin.</span>
+        ${state.hasStudent ? '' : '<button type="button" class="quick-start-step-action" onclick="startQuickStartStudentSetup()">Öğrenci eklemeye git</button>'}
+      </div>
+    </div>
+    <div class="quick-start-step ${state.hasProgramTask ? 'is-complete' : ''}">
+      <div class="quick-start-step-number">${state.hasProgramTask ? '✓' : '2'}</div>
+      <div>
+        <strong>İlk program görevini oluşturun</strong>
+        <span>Öğrenci kartından “Program”a basın, ilgili günün “+ Görev Ekle” düğmesine basıp görevi kaydedin.</span>
+        ${state.hasProgramTask ? '' : '<button type="button" class="quick-start-step-action" onclick="startQuickStartProgramSetup()">Program oluşturmaya git</button>'}
+      </div>
+    </div>
+  `;
+}
+
+function startQuickStartStudentSetup() {
+  closeQuickStart();
+  sekmeAcs('ogrenci');
+  modalAc('ogrenciEkleModal');
+}
+
+function startQuickStartProgramSetup() {
+  const student = getStoredOgrenciler()[0];
+  if (!student) {
+    startQuickStartStudentSetup();
+    return;
+  }
+  closeQuickStart();
+  openStudentInfoPage(student.id);
+  openStudentProgramPage();
 }
 
 function getResourceSignature(resource) {
@@ -2865,27 +2967,86 @@ function initUniteKonuPanel() {
     lessonEl.value = lessonEl.options[1].value;
   }
 
+  renderUniteKonuLessonList();
   onUniteKonuLessonChange();
 }
 
-function addCustomClassLesson() {
-  if (!isCustomClassLevel(selectedUniteKonuSinif)) {
-    alert('Ders ekleme yalnızca özel sınıf veya sınav türlerinde kullanılabilir.');
+function renderUniteKonuLessonList() {
+  const listEl = document.getElementById('uniteKonuLessonList');
+  if (!listEl) return;
+
+  const lessons = getLessonOptionsForClass(selectedUniteKonuSinif);
+  if (!lessons.length) {
+    listEl.innerHTML = '<div class="exam-history-empty">Henüz ders yok.</div>';
     return;
   }
 
-  const cleanLesson = String(window.prompt(`${getClassDisplayLabel(selectedUniteKonuSinif)} için ders adı girin.`) || '').trim().replace(/\s+/g, ' ');
-  if (!cleanLesson) return;
+  listEl.innerHTML = lessons.map((lesson) => `
+    <div style="display:inline-flex; align-items:center; gap:6px; padding:7px 8px 7px 10px; border:1px solid #dbe3ee; border-radius:8px; background:#f8fafc; color:#334155; font-size:0.84rem; font-weight:700;">
+      <span>${escapeHtml(lesson)}</span>
+      <button type="button" onclick="removeUniteKonuLesson(decodeURIComponent('${encodeURIComponent(lesson)}'))" title="${escapeHtml(lesson)} dersini sil" aria-label="${escapeHtml(lesson)} dersini sil" style="width:22px; height:22px; padding:0; border:0; border-radius:50%; background:#fee2e2; color:#dc2626; font-size:1rem; font-weight:900; line-height:1; cursor:pointer;">x</button>
+    </div>
+  `).join('');
+}
+
+function openUniteKonuLessonModal() {
+  const modal = document.getElementById('uniteKonuLessonModal');
+  const descriptionEl = document.getElementById('uniteKonuLessonModalDescription');
+  const inputEl = document.getElementById('uniteKonuLessonInput');
+  if (!modal || !inputEl) return;
+
+  if (descriptionEl) descriptionEl.textContent = `${getClassDisplayLabel(selectedUniteKonuSinif)} için yeni ders ekleyin.`;
+  inputEl.value = '';
+  modal.style.display = 'flex';
+  window.setTimeout(() => inputEl.focus(), 0);
+}
+
+function closeUniteKonuLessonModal() {
+  const modal = document.getElementById('uniteKonuLessonModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function addUniteKonuLesson() {
+  const inputEl = document.getElementById('uniteKonuLessonInput');
+  if (!inputEl) return;
+  const cleanLesson = inputEl.value.trim().replace(/\s+/g, ' ');
+  if (!cleanLesson) {
+    inputEl.focus();
+    return;
+  }
 
   const all = readCustomUnitTopicData();
   const classKey = String(selectedUniteKonuSinif);
   if (!all[classKey] || typeof all[classKey] !== 'object') all[classKey] = {};
   all[classKey].__customLessons = ensureUniqueList([].concat(all[classKey].__customLessons || [], cleanLesson));
+  all[classKey].__hiddenLessons = ensureUniqueList(all[classKey].__hiddenLessons).filter((lesson) => lesson !== cleanLesson);
   writeCustomUnitTopicData(all);
+  closeUniteKonuLessonModal();
   initUniteKonuPanel();
   const lessonEl = document.getElementById('uniteKonuLesson');
   if (lessonEl) lessonEl.value = cleanLesson;
   onUniteKonuLessonChange();
+}
+
+function removeUniteKonuLesson(lesson) {
+  const lessonName = String(lesson || '').trim();
+  if (!lessonName) return;
+
+  const all = readCustomUnitTopicData();
+  const classKey = String(selectedUniteKonuSinif);
+  if (!all[classKey] || typeof all[classKey] !== 'object') all[classKey] = {};
+  const classData = all[classKey];
+  const customLessons = ensureUniqueList(classData.__customLessons);
+
+  if (customLessons.includes(lessonName)) {
+    classData.__customLessons = customLessons.filter((name) => name !== lessonName);
+    delete classData[lessonName];
+  } else {
+    classData.__hiddenLessons = ensureUniqueList([].concat(classData.__hiddenLessons || [], lessonName));
+  }
+
+  writeCustomUnitTopicData(all);
+  initUniteKonuPanel();
 }
 
 function onUniteKonuLessonChange() {
@@ -2992,7 +3153,6 @@ function closeBulkUniteKonuTopicModal() {
   const modal = document.getElementById('bulkTopicModal');
   if (modal) modal.style.display = 'none';
 }
-
 function addBulkUniteKonuUnits() {
   const lesson = document.getElementById('bulkUniteLessonSelect')?.value || '';
   const textareaEl = document.getElementById('bulkUniteTextarea');
@@ -3002,7 +3162,6 @@ function addBulkUniteKonuUnits() {
     alert('Önce ders seçin.');
     return;
   }
-
   const unitNames = splitBulkUniteKonuValues(textareaEl.value);
   if (!unitNames.length) {
     alert('Ünite adlarını girin.');
@@ -3644,11 +3803,45 @@ function getKokpitAgendaDragScaleStorageKey() {
   return `kokpit_agenda_drag_scale_${email}`;
 }
 
+function getKokpitCardCollapseStorageKey() {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  return `kokpit_card_collapse_${email}`;
+}
+
+function applyKokpitCardCollapse(cardId, isCollapsed) {
+  const cardEl = document.getElementById(cardId);
+  const buttonId = cardId === 'kokpitAgendaCard' ? 'kokpitAgendaCollapseButton' : 'kokpitNotebookCollapseButton';
+  const buttonEl = document.getElementById(buttonId);
+  if (!cardEl || !buttonEl) return;
+
+  cardEl.classList.toggle('is-collapsed', isCollapsed);
+  const label = cardId === 'kokpitAgendaCard' ? 'Ajanda' : 'Notlar';
+  buttonEl.textContent = isCollapsed ? '+' : '−';
+  buttonEl.title = `${label} ${isCollapsed ? 'aç' : 'küçült'}`;
+  buttonEl.setAttribute('aria-label', buttonEl.title);
+  buttonEl.setAttribute('aria-expanded', String(!isCollapsed));
+}
+
+function loadKokpitCardCollapsePreferences() {
+  const stored = safeJsonParse(localStorage.getItem(getKokpitCardCollapseStorageKey()), {});
+  applyKokpitCardCollapse('kokpitNotebookCard', Boolean(stored.kokpitNotebookCard));
+  applyKokpitCardCollapse('kokpitAgendaCard', Boolean(stored.kokpitAgendaCard));
+}
+
+function toggleKokpitCardCollapse(cardId) {
+  const cardEl = document.getElementById(cardId);
+  if (!cardEl) return;
+
+  const isCollapsed = !cardEl.classList.contains('is-collapsed');
+  const stored = safeJsonParse(localStorage.getItem(getKokpitCardCollapseStorageKey()), {});
+  stored[cardId] = isCollapsed;
+  localStorage.setItem(getKokpitCardCollapseStorageKey(), JSON.stringify(stored));
+  applyKokpitCardCollapse(cardId, isCollapsed);
+}
+
 function loadKokpitAgendaDragScalePreference() {
-  const savedScaleRaw = localStorage.getItem(getKokpitAgendaDragScaleStorageKey());
-  const parsedScale = Number(savedScaleRaw);
-  kokpitAgendaDragScale = Number.isFinite(parsedScale) ? parsedScale : 1;
-  kokpitAgendaDragScale = Math.max(0.72, Math.min(1.12, kokpitAgendaDragScale));
+  kokpitAgendaDragScale = 1;
+  localStorage.removeItem(getKokpitAgendaDragScaleStorageKey());
   applyKokpitAgendaDragScale(kokpitAgendaDragScale);
 }
 
@@ -4077,6 +4270,7 @@ function ogrenciEkle() {
   students.push(student);
   setStoredOgrenciler(students);
   renderStoredOgrenciler();
+  renderQuickStart();
   updateUserCountLabel();
 
   document.getElementById('ogrenciAdiInput').value = '';
@@ -6517,10 +6711,15 @@ function getCustomUnitTopicLessonData(classLevel, lesson) {
 }
 
 function getCustomClassLessons(classLevel) {
-  if (!isCustomClassLevel(classLevel)) return [];
   const all = readCustomUnitTopicData();
   const classData = all[String(classLevel)] && typeof all[String(classLevel)] === 'object' ? all[String(classLevel)] : {};
   return ensureUniqueList(classData.__customLessons);
+}
+
+function getHiddenClassLessons(classLevel) {
+  const all = readCustomUnitTopicData();
+  const classData = all[String(classLevel)] && typeof all[String(classLevel)] === 'object' ? all[String(classLevel)] : {};
+  return ensureUniqueList(classData.__hiddenLessons);
 }
 
 function updateCustomUnitTopicLessonData(classLevel, lesson, updater) {
@@ -6552,8 +6751,12 @@ function getLessonOptionsForClass(classLevel) {
     'YKS': ['Matematik', 'Geometri', 'Fizik', 'Kimya', 'Biyoloji', 'Türkçe', 'Tarih', 'Coğrafya']
   };
   const normalizedClassLevel = normalizeClassLevel(classLevel);
-  if (isCustomClassLevel(normalizedClassLevel)) return getCustomClassLessons(normalizedClassLevel);
-  return lessonsByClass[normalizedClassLevel] || ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'];
+  const defaultLessons = isCustomClassLevel(normalizedClassLevel)
+    ? []
+    : lessonsByClass[normalizedClassLevel] || ['Matematik', 'Fen Bilimleri', 'Türkçe', 'Tarih', 'Coğrafya', 'İngilizce'];
+  const hiddenLessons = getHiddenClassLessons(normalizedClassLevel);
+  return ensureUniqueList([].concat(defaultLessons, getCustomClassLessons(normalizedClassLevel)))
+    .filter((lesson) => !hiddenLessons.includes(lesson));
 }
 
 function getUnitOptionsForLesson(classLevel, lesson) {
@@ -7040,6 +7243,7 @@ function saveTaskFromModal() {
 
   setStoredOgrenciler(students);
   renderProgramForStudent(student);
+  renderQuickStart();
   modalKapat('taskAddModal');
   pendingTaskEditIndex = null;
   updateUserCountLabel();
@@ -8282,17 +8486,22 @@ async function addWorksheetImages(files) {
   if (!images.length) return;
 
   setWorksheetAnalysisStatus(`${images.length} görselin arka planı temizleniyor ve sayfaya yerleştiriliyor...`);
+  const addedQuestions = [];
 
   for (const file of images) {
     try {
       const source = await readWorksheetFile(file);
       const cleaned = await cleanWorksheetImage(source);
-      worksheetQuestions.push({ id: Date.now() + Math.random(), ...cleaned });
+      addedQuestions.push({ id: Date.now() + Math.random(), ...cleaned });
     } catch (error) {
       console.warn('Soru görseli eklenemedi:', error);
     }
   }
-  autoArrangeWorksheetQuestions();
+  if (!addedQuestions.length) return;
+
+  ensureWorksheetQuestionLayouts();
+  worksheetQuestions.push(...addedQuestions);
+  appendWorksheetQuestions(addedQuestions);
   renderWorksheetPreview();
 }
 
@@ -8397,6 +8606,29 @@ function autoArrangeWorksheetQuestions() {
   });
 }
 
+function appendWorksheetQuestions(newQuestions) {
+  const newQuestionSet = new Set(newQuestions);
+  const existingQuestions = worksheetQuestions.filter((question) => !newQuestionSet.has(question));
+  const maxImageWidth = WORKSHEET_CANVAS_WIDTH - WORKSHEET_NUMBER_GUTTER;
+  const maxImageHeight = WORKSHEET_CANVAS_HEIGHT - 20;
+  let page = existingQuestions.length
+    ? Math.max(...existingQuestions.map((question) => Number(question.layout?.page || 0)))
+    : 0;
+  let y = existingQuestions
+    .filter((question) => Number(question.layout?.page || 0) === page)
+    .reduce((bottom, question) => Math.max(bottom, Number(question.layout?.y || 0) + Number(question.layout?.height || 0) + WORKSHEET_ITEM_GAP), 0);
+
+  newQuestions.forEach((question) => {
+    const fitted = fitWorksheetQuestion(question, maxImageWidth, maxImageHeight);
+    if (y > 0 && y + fitted.height > WORKSHEET_CANVAS_HEIGHT) {
+      page += 1;
+      y = 0;
+    }
+    question.layout = { page, x: 0, y, width: fitted.width, height: fitted.height };
+    y += fitted.height + WORKSHEET_ITEM_GAP;
+  });
+}
+
 function ensureWorksheetQuestionLayouts() {
   if (worksheetQuestions.some((question) => !question.layout)) autoArrangeWorksheetQuestions();
 }
@@ -8463,6 +8695,8 @@ function moveWorksheetPointer(event) {
     question.layout.y = Math.max(0, Math.min(maxY, ((event.clientY - rect.top) * scale) - state.offsetY));
     state.element.style.left = `${question.layout.x}px`;
     state.element.style.top = `${question.layout.y}px`;
+    state.lastClientX = event.clientX;
+    state.lastClientY = event.clientY;
     return;
   }
 
@@ -8481,9 +8715,40 @@ function moveWorksheetPointer(event) {
   if (image) image.style.width = `${width}px`;
 }
 
-function endWorksheetPointer() {
+function getWorksheetCanvasAtPoint(clientX, clientY) {
+  return Array.from(document.querySelectorAll('.worksheet-canvas')).find((canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  }) || null;
+}
+
+function endWorksheetPointer(event) {
   window.removeEventListener('pointermove', moveWorksheetPointer);
+  const state = worksheetPointerState;
   worksheetPointerState = null;
+  if (state?.type !== 'drag') return;
+
+  const question = worksheetQuestions[state.index];
+  const clientX = event?.clientX ?? state.lastClientX;
+  const clientY = event?.clientY ?? state.lastClientY;
+  const targetCanvas = Number.isFinite(clientX) && Number.isFinite(clientY)
+    ? getWorksheetCanvasAtPoint(clientX, clientY)
+    : null;
+  if (!question?.layout || !targetCanvas) {
+    renderWorksheetPreview();
+    return;
+  }
+
+  const targetRect = targetCanvas.getBoundingClientRect();
+  if (targetRect.width) {
+    const scale = WORKSHEET_CANVAS_WIDTH / targetRect.width;
+    const maxX = Math.max(0, WORKSHEET_CANVAS_WIDTH - question.layout.width - WORKSHEET_NUMBER_GUTTER);
+    const maxY = Math.max(0, WORKSHEET_CANVAS_HEIGHT - question.layout.height);
+    question.layout.page = Number(targetCanvas.dataset.page || 0);
+    question.layout.x = Math.max(0, Math.min(maxX, ((clientX - targetRect.left) * scale) - state.offsetX));
+    question.layout.y = Math.max(0, Math.min(maxY, ((clientY - targetRect.top) * scale) - state.offsetY));
+  }
+  renderWorksheetPreview();
 }
 
 function resizeWorksheetQuestion(index, multiplier) {
