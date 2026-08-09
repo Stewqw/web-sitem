@@ -131,6 +131,8 @@ function getFirebaseAuthErrorMessage(error, fallbackMessage) {
       return 'İşlem beklenenden uzun sürdü. Lütfen tekrar deneyin.';
     case 'app/firestore-unavailable':
       return 'Veritabanına bağlanılamadı. Lütfen daha sonra tekrar deneyin.';
+    case 'app/teacher-session-missing':
+      return 'Firebase öğretmen oturumu bulunamadı. Sayfayı yenileyip tekrar giriş yapın.';
     case 'app/email-not-verified':
       return 'E-posta doğrulaması tamamlanmamış. Mail kutunuzu kontrol edip hesabınızı doğrulayın.';
     case 'app/email-verification-send-failed':
@@ -4421,7 +4423,8 @@ async function createStudentAccessCredentials(studentId) {
     renderStudentAccessCredentials(student);
   } catch (error) {
     console.error('Öğrenci ve veli giriş kodları oluşturulamadı:', error);
-    alert(getFirebaseAuthErrorMessage(error, 'Giriş kodları oluşturulamadı. Firebase bağlantısını ve ayarlarını kontrol edip tekrar deneyin.'));
+    const errorCode = error && (error.code || error.message) ? String(error.code || error.message) : 'BILINMEYEN_HATA';
+    alert(`${getFirebaseAuthErrorMessage(error, 'Giriş kodları oluşturulamadı. Firebase bağlantısını ve ayarlarını kontrol edip tekrar deneyin.')}\n\nHata kodu: ${errorCode}`);
   } finally {
     setSubmitButtonLoading(createButton, false);
   }

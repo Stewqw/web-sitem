@@ -167,6 +167,16 @@
     return `${prefix}-${suffix}`;
   }
 
+  async function getAuthenticatedUser() {
+    if (auth.currentUser) return auth.currentUser;
+    return new Promise((resolve) => {
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        unsubscribe();
+        resolve(user);
+      });
+    });
+  }
+
   async function createFirebaseAuthAccount({
     loginCode,
     displayName,
@@ -316,7 +326,8 @@
   };
 
   services.provisionStudentAccounts = async function provisionStudentAccounts(payload) {
-    if (!auth.currentUser) {
+    const teacherUser = await getAuthenticatedUser();
+    if (!teacherUser) {
       const error = new Error("Ogretmen oturumu bulunamadi.");
       error.code = "app/teacher-session-missing";
       throw error;
@@ -334,8 +345,6 @@
 
     const studentLoginCode = generateLoginCode("OG");
     const parentLoginCode = generateLoginCode("VL");
-    const studentPassword = generatePassword();
-    const parentPassword = generatePassword();
 
     const studentAccount = await createFirebaseAuthAccount({
       loginCode: studentLoginCode,
