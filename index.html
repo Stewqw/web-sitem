@@ -3444,7 +3444,7 @@
       <button class="modal-close" onclick="closeBulkKaynakModal()">✕</button>
       <h3 style="margin-bottom: 12px; color: var(--color-dark-teal);">Toplu Kaynak Yapıştır</h3>
       <p style="margin-bottom: 14px; color: #64748b; line-height: 1.5; font-size: 0.9rem;">
-        Sadece kaynak adlarını alt alta yazın veya aralarına virgül koyun. Zorluk belirtmek isterseniz kaynak adının sonuna <strong>zor</strong>, <strong>orta</strong> ya da <strong>kolay</strong> ekleyin; belirtilmezse hepsi orta düzey atanır.
+        Her kaynak adını ayrı bir satıra yazın. Zorluk belirtmek isterseniz kaynak adının sonuna <strong>zor</strong>, <strong>orta</strong> ya da <strong>kolay</strong> ekleyin; belirtilmezse hepsi orta düzey atanır.
       </p>
       <div class="form-row" style="gap:12px; margin-bottom: 12px;">
         <div class="form-group" style="margin-bottom:0; flex:1;">
@@ -3460,7 +3460,7 @@
           </select>
         </div>
       </div>
-      <textarea id="bulkKaynakTextarea" class="input-field" rows="10" placeholder="Deneme 3 zor, Fen Test 4, Paragraf 1 kolay" style="min-height:240px;"></textarea>
+      <textarea id="bulkKaynakTextarea" class="input-field" rows="10" placeholder="Deneme 3 zor&#10;Fen Test 4&#10;Paragraf 1 kolay" style="min-height:240px;"></textarea>
       <div style="display:flex; justify-content:flex-end; gap:10px; margin-top: 12px; flex-wrap:wrap;">
         <button type="button" class="btn-nav-outline" onclick="closeBulkKaynakModal()">İptal</button>
         <button type="button" class="btn-action btn-coral" onclick="addBulkKaynakOnerileri()">Hepsini Ekle</button>
@@ -3484,12 +3484,24 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="uniteKonuLessonDeleteModal" style="display:none;" onclick="if(event.target === this) closeUniteKonuLessonDeleteModal()">
+    <div class="modal-card" style="max-width:460px; border-color:#fecaca;">
+      <button type="button" class="modal-close" onclick="closeUniteKonuLessonDeleteModal()" aria-label="Kapat">x</button>
+      <h3 style="margin:0; color:var(--color-dark-teal);">Dersi Sil</h3>
+      <p id="uniteKonuLessonDeleteMessage" style="margin:10px 0 0; color:#475569; line-height:1.5;"></p>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px; flex-wrap:wrap;">
+        <button type="button" class="btn-nav-outline" onclick="closeUniteKonuLessonDeleteModal()">İptal</button>
+        <button type="button" class="btn-action btn-coral" onclick="confirmUniteKonuLessonDelete()">Sil</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="bulkUniteModal" style="display:none;">
     <div class="modal-card modal-card-lg">
       <button class="modal-close" onclick="closeBulkUniteKonuUnitModal()">✕</button>
       <h3 style="margin-bottom: 12px; color: var(--color-dark-teal);">Toplu Ünite Ekle</h3>
       <p style="margin-bottom: 14px; color: #64748b; line-height: 1.5; font-size: 0.9rem;">
-        Sadece ünite adlarını alt alta yazın veya aralarına virgül koyun.
+        Her ünite adını ayrı bir satıra yazın.
       </p>
       <div class="form-group" style="margin-bottom: 12px;">
         <label class="form-label">Ders</label>
@@ -3497,7 +3509,7 @@
           <option value="">Ders seçin</option>
         </select>
       </div>
-      <textarea id="bulkUniteTextarea" class="input-field" rows="10" placeholder="1. Ünite: Çarpanlar ve Katlar, 2. Ünite: Üslü İfadeler" style="min-height:220px;"></textarea>
+      <textarea id="bulkUniteTextarea" class="input-field" rows="10" placeholder="1. Ünite: Çarpanlar ve Katlar&#10;2. Ünite: Üslü İfadeler" style="min-height:220px;"></textarea>
       <div style="display:flex; justify-content:flex-end; gap:10px; margin-top: 12px; flex-wrap:wrap;">
         <button type="button" class="btn-nav-outline" onclick="closeBulkUniteKonuUnitModal()">İptal</button>
         <button type="button" class="btn-action btn-coral" onclick="addBulkUniteKonuUnits()">Hepsini Ekle</button>
@@ -3510,7 +3522,7 @@
       <button class="modal-close" onclick="closeBulkUniteKonuTopicModal()">✕</button>
       <h3 style="margin-bottom: 12px; color: var(--color-dark-teal);">Toplu Konu Ekle</h3>
       <p style="margin-bottom: 14px; color: #64748b; line-height: 1.5; font-size: 0.9rem;">
-        Önce ünite seçin, sonra sadece konu adlarını alt alta yazın veya aralarına virgül koyun.
+        Önce ünite seçin, sonra her konu adını ayrı bir satıra yazın.
       </p>
       <div class="form-group" style="margin-bottom: 12px;">
         <label class="form-label">Ders / Ünite</label>
@@ -3518,7 +3530,7 @@
           <option value="">Ünite seçin</option>
         </select>
       </div>
-      <textarea id="bulkTopicTextarea" class="input-field" rows="10" placeholder="Konu 1, Konu 2\nKonu 3" style="min-height:220px;"></textarea>
+      <textarea id="bulkTopicTextarea" class="input-field" rows="10" placeholder="Konu 1&#10;Konu 2&#10;Konu 3" style="min-height:220px;"></textarea>
       <div style="display:flex; justify-content:flex-end; gap:10px; margin-top: 12px; flex-wrap:wrap;">
         <button type="button" class="btn-nav-outline" onclick="closeBulkUniteKonuTopicModal()">İptal</button>
         <button type="button" class="btn-action btn-coral" onclick="addBulkUniteKonuTopics()">Hepsini Ekle</button>

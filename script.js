@@ -2640,7 +2640,7 @@ function renderQuickStart() {
       <div class="quick-start-step-number">${state.hasProgramTask ? '✓' : '2'}</div>
       <div>
         <strong>İlk program görevini oluşturun</strong>
-        <span>Öğrenci kartından “Program”a basın, ilgili günün “+ Görev Ekle” düğmesine basıp görevi kaydedin.</span>
+        <span>Öğrenci Yönetimi bölümünde öğrencinin kartına tıklayın. Açılan öğrenci sayfasında “Program”a basın, ilgili günün “+ Görev Ekle” düğmesine basıp görevi kaydedin.</span>
         ${state.hasProgramTask ? '' : '<button type="button" class="quick-start-step-action" onclick="startQuickStartProgramSetup()">Program oluşturmaya git</button>'}
       </div>
     </div>
@@ -3032,6 +3032,35 @@ function removeUniteKonuLesson(lesson) {
   const lessonName = String(lesson || '').trim();
   if (!lessonName) return;
 
+  openUniteKonuLessonDeleteModal(lessonName);
+}
+
+function openUniteKonuLessonDeleteModal(lessonName) {
+  const modal = document.getElementById('uniteKonuLessonDeleteModal');
+  const messageEl = document.getElementById('uniteKonuLessonDeleteMessage');
+  if (!modal || !messageEl) return;
+
+  const classLabel = getClassDisplayLabel(selectedUniteKonuSinif);
+  messageEl.textContent = `${classLabel} sınıfı için "${lessonName}" dersini silmek istediğinizden emin misiniz?`;
+  modal.dataset.lessonName = lessonName;
+  modal.style.display = 'flex';
+}
+
+function closeUniteKonuLessonDeleteModal() {
+  const modal = document.getElementById('uniteKonuLessonDeleteModal');
+  if (modal) {
+    delete modal.dataset.lessonName;
+    modal.style.display = 'none';
+  }
+}
+
+function confirmUniteKonuLessonDelete() {
+  const modal = document.getElementById('uniteKonuLessonDeleteModal');
+  const lessonName = String(modal?.dataset.lessonName || '').trim();
+  if (!lessonName) return;
+
+  closeUniteKonuLessonDeleteModal();
+
   const all = readCustomUnitTopicData();
   const classKey = String(selectedUniteKonuSinif);
   if (!all[classKey] || typeof all[classKey] !== 'object') all[classKey] = {};
@@ -3079,7 +3108,7 @@ function onUniteKonuUnitSelectChange() {
 
 function splitBulkUniteKonuValues(text) {
   return String(text || '')
-    .split(/[\n,]/)
+    .split(/\r?\n/)
     .map((value) => value.trim())
     .filter(Boolean);
 }
@@ -3580,8 +3609,7 @@ function addBulkKaynakOnerileri() {
   const defaultLesson = document.getElementById('bulkKaynakLessonSelect')?.value || document.getElementById('resourceLessonSelect')?.value || '';
   const rawLines = String(textarea.value || '')
     .replace(/\r\n/g, '\n')
-    .replace(/\n/g, ',')
-    .split(',')
+    .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
 
