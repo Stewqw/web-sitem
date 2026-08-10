@@ -14,17 +14,91 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_this';
 const UNLIMITED_USER_EMAILS = String(process.env.UNLIMITED_USER_EMAILS || '');
 const USERS_FILE = path.join(__dirname, 'users.json');
 const FIREBASE_SERVICE_ACCOUNT_FILE = String(process.env.FIREBASE_SERVICE_ACCOUNT_FILE || path.join(__dirname, 'serviceAccount.json'));
+const CORS_ORIGINS = String(process.env.CORS_ORIGINS || 'https://parabol-kocluk.web.app,https://parabolkocluk.com,http://127.0.0.1:5500,http://localhost:5500,http://localhost:3000,http://127.0.0.1:3000');
 const RESET_CODE_EXPIRE_MS = 10 * 60 * 1000;
 const RESET_CODE_RESEND_MS = 60 * 1000;
 const RESET_CODE_MAX_ATTEMPTS = 5;
 const ACCESS_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ACCESS_CODE_SUFFIX_LENGTH = 6;
+const ACCESS_CODE_EXPIRE_MS = Number(process.env.ACCESS_CODE_EXPIRE_MS || 180 * 24 * 60 * 60 * 1000);
+const ACCESS_CODE_MAX_EXCHANGES = Number(process.env.ACCESS_CODE_MAX_EXCHANGES || 0);
 const pendingResetCodes = new Map();
 
 const app = express();
-app.use(cors());
+
+if (JWT_SECRET === 'dev_secret_change_this') {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET zorunlu. Uretim ortaminda varsayilan secret kullanilamaz.');
+  }
+  console.warn('UYARI: Varsayilan JWT_SECRET kullaniliyor. Gelistirme disinda degistirin.');
+}
+
+const allowedOrigins = CORS_ORIGINS
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Bu origin icin CORS izni yok.'));
+  }
+}));
 app.use(bodyParser.json());
-app.use(express.static(__dirname));
+
+const blockedStaticPathPattern = /(^\/(server\.js|users\.json|package\.json|package-lock\.json|render\.ya?ml|\.env|\.git|\.github|memories)(\/|$))|(\.(pem|key|crt|p12|sqlite|db)$)/i;
+app.use((req, res, next) => {
+  if (blockedStaticPathPattern.test(req.path || '')) {
+    return res.status(404).send('Not Found');
+  }
+  return next();
+});
+
+app.use(express.static(__dirname, {
+  index: false,
+  dotfiles: 'deny'
+}));
+
+const rateLimitStore = new Map();
+
+function getRateLimitKey(req, bucketName) {
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || 'unknown').split(',')[0].trim();
+  return `${bucketName}:${ip}`;
+}
+
+function createRateLimiter(options) {
+  const windowMs = Number(options.windowMs);
+  const maxRequests = Number(options.maxRequests);
+  const bucketName = String(options.bucketName || 'default');
+
+  return function rateLimiter(req, res, next) {
+    const key = getRateLimitKey(req, bucketName);
+    const now = Date.now();
+    const current = rateLimitStore.get(key);
+
+    if (!current || current.resetAt <= now) {
+      rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    if (current.count >= maxRequests) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfterSeconds));
+      return res.status(429).json({ error: 'Cok fazla istek gonderildi. Lutfen tekrar deneyin.' });
+    }
+
+    current.count += 1;
+    rateLimitStore.set(key, current);
+    return next();
+  };
+}
+
+const loginRateLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxRequests: 25, bucketName: 'login' });
+const registerRateLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxRequests: 20, bucketName: 'register' });
+const forgotRateLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, maxRequests: 15, bucketName: 'forgot' });
+const accessProvisionRateLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, maxRequests: 40, bucketName: 'access-provision' });
+const accessExchangeRateLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, maxRequests: 60, bucketName: 'access-exchange' });
 
 function readUsers() {
   try {
@@ -308,9 +382,10 @@ async function sendResetCodeEmail(email, code) {
   return true;
 }
 
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', registerRateLimiter, async (req, res) => {
   const { name, email, password, phone, branch } = req.body;
   if (!name || !email || !password) return res.status(400).json({ error: 'Eksik alanlar' });
+  if (!isValidPasswordRule(password)) return res.status(400).json({ error: 'Sifre kurallara uymuyor' });
 
   const users = readUsers();
   const normalizedEmail = normalizeEmail(email);
@@ -340,7 +415,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', loginRateLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Eksik alanlar' });
 
@@ -379,7 +454,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-app.post('/api/forgot-password/request-code', async (req, res) => {
+app.post('/api/forgot-password/request-code', forgotRateLimiter, async (req, res) => {
   const email = normalizeEmail(req.body && req.body.email);
   if (!email || !email.includes('@')) {
     return res.status(400).json({ error: 'Geçerli bir e-posta adresi girin.' });
@@ -421,7 +496,7 @@ app.post('/api/forgot-password/request-code', async (req, res) => {
   }
 });
 
-app.post('/api/forgot-password/confirm-code', async (req, res) => {
+app.post('/api/forgot-password/confirm-code', forgotRateLimiter, async (req, res) => {
   const email = normalizeEmail(req.body && req.body.email);
   const code = String((req.body && req.body.code) || '').trim();
   const newPassword = String((req.body && req.body.newPassword) || '');
@@ -596,7 +671,7 @@ app.listen(PORT, () => {
   ensureInitialAdmin();
 });
 
-app.post('/api/student-access/provision', async (req, res) => {
+app.post('/api/student-access/provision', accessProvisionRateLimiter, async (req, res) => {
   try {
     if (!firebaseDb || !firebaseAuth) {
       return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış. Sunucuda servis hesabı tanımlayın.' });
@@ -725,7 +800,7 @@ app.post('/api/student-access/provision', async (req, res) => {
   }
 });
 
-app.post('/api/student-access/exchange', async (req, res) => {
+app.post('/api/student-access/exchange', accessExchangeRateLimiter, async (req, res) => {
   try {
     if (!firebaseDb || !firebaseAuth) {
       return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış.' });
@@ -747,6 +822,28 @@ app.post('/api/student-access/exchange', async (req, res) => {
       return res.status(403).json({ error: 'Kod pasif durumda.' });
     }
 
+    const createdAtMs = Date.parse(String(codeData.createdAtIso || ''));
+    if (Number.isFinite(createdAtMs) && (Date.now() - createdAtMs) > ACCESS_CODE_EXPIRE_MS) {
+      await codeDoc.ref.set({
+        isActive: false,
+        disabledReason: 'expired',
+        disabledAtIso: new Date().toISOString(),
+        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      return res.status(403).json({ error: 'Kodun suresi dolmus. Ogretmeninizden yeni kod isteyin.' });
+    }
+
+    const exchangeCount = Number(codeData.exchangeCount || 0);
+    if (ACCESS_CODE_MAX_EXCHANGES > 0 && exchangeCount >= ACCESS_CODE_MAX_EXCHANGES) {
+      await codeDoc.ref.set({
+        isActive: false,
+        disabledReason: 'max-usage',
+        disabledAtIso: new Date().toISOString(),
+        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      return res.status(403).json({ error: 'Kod kullanim limiti doldu. Ogretmeninizden yeni kod isteyin.' });
+    }
+
     const uid = String(codeData.uid || '').trim();
     const role = String(codeData.role || '').trim();
     if (!uid || !role) {
@@ -762,6 +859,13 @@ app.post('/api/student-access/exchange', async (req, res) => {
     };
 
     const token = await firebaseAuth.createCustomToken(uid, customClaims);
+
+    await codeDoc.ref.set({
+      exchangeCount: exchangeCount + 1,
+      lastUsedAtIso: new Date().toISOString(),
+      updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
     return res.json({
       token,
       uid,
