@@ -3934,6 +3934,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     renderResourceSuggestions();
   });
+
+  window.addEventListener('storage', (event) => {
+    if (!event || event.key !== getUserStorageKey()) return;
+    if (document.getElementById('dashboardApp')?.style.display !== 'block') return;
+    renderStoredOgrenciler();
+    renderQuickStart();
+    updateUserCountLabel();
+  });
+
+  window.addEventListener('focus', () => {
+    if (document.getElementById('dashboardApp')?.style.display !== 'block') return;
+    Promise.resolve(syncStudentStorageFromCloud())
+      .catch((error) => {
+        console.warn('Sekme odaginda ogrenci verisi yenilenemedi:', error);
+      })
+      .finally(() => {
+        renderStoredOgrenciler();
+        renderQuickStart();
+        updateUserCountLabel();
+      });
+  });
 });
 
 // Canlı saat ve tarih güncellemesi
@@ -7768,24 +7789,24 @@ async function syncStudentStorageFromCloud() {
   studentStorageHydratingPromise = (async () => {
     const localStudents = readLocalStudentRecords();
     let remoteStudents = [];
+    let remoteReadSuccessful = false;
 
     try {
       const cloudRecords = await loadStudentRecordsFromCloud();
       remoteStudents = normalizeStudentRecords(cloudRecords);
+      remoteReadSuccessful = true;
     } catch (error) {
       console.warn('Öğrenci verisi buluttan okunamadı:', error);
     }
 
-    let mergedStudents = [];
-    if (remoteStudents.length && localStudents.length) {
-      mergedStudents = mergeStudentRecords(localStudents, remoteStudents);
-    } else if (remoteStudents.length) {
-      mergedStudents = remoteStudents;
-    } else {
-      mergedStudents = localStudents;
+    if (remoteReadSuccessful && remoteStudents.length) {
+      // Cloud is source of truth: avoids bringing back deleted students from stale local snapshots.
+      writeLocalStudentRecords(remoteStudents);
+      studentStorageHydrated = true;
+      return remoteStudents;
     }
 
-    if (!remoteStudents.length && localStudents.length) {
+    if (remoteReadSuccessful && !remoteStudents.length && localStudents.length) {
       try {
         await saveStudentRecordsToCloud(localStudents);
       } catch (error) {
@@ -7793,11 +7814,11 @@ async function syncStudentStorageFromCloud() {
       }
     }
 
-    if (remoteStudents.length && !localStudents.length) {
-      writeLocalStudentRecords(remoteStudents);
-    } else if (mergedStudents.length) {
-      writeLocalStudentRecords(mergedStudents);
-    }
+    const mergedStudents = remoteReadSuccessful
+      ? localStudents
+      : mergeStudentRecords(localStudents, remoteStudents);
+
+    if (mergedStudents.length) writeLocalStudentRecords(mergedStudents);
 
     studentStorageHydrated = true;
     return mergedStudents;
