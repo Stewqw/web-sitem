@@ -2830,11 +2830,22 @@ async function cikisYap() {
     }
   }
 
+  clearAuthSessionStorage();
+  resetCurrentUserSessionState();
+  ekranıGoster('promoPage');
+  updatePageHistory('promoPage', 'replace');
+}
+
+function clearAuthSessionStorage() {
   // Oturum kapatma sırasında token temizlenir
   localStorage.removeItem('koclukToken');
   sessionStorage.removeItem('koclukToken');
   localStorage.removeItem('koclukUserEmail');
   sessionStorage.removeItem('koclukUserEmail');
+  sessionStorage.removeItem('koclukAnonymousOwnerKey');
+}
+
+function resetCurrentUserSessionState() {
   currentUserEmail = null;
   currentUserName = null;
   currentUserBranch = null;
@@ -2843,10 +2854,67 @@ async function cikisYap() {
   currentUserCreatedAtIso = '';
   currentUserUnlimitedAccess = false;
   currentUserIsDemoAccount = null;
+  activeStudentId = null;
+  activeMuhasebeStudentId = null;
+  activeNotificationStudentId = null;
+  studentStorageHydrated = false;
+  studentStorageHydratingPromise = null;
   hasShownExploreDemoNotice = false;
   pendingQuickStartAfterDemoNotice = false;
+}
+
+function clearLocalCacheForOwner(ownerKey) {
+  if (!ownerKey) return;
+
+  const exactKeys = new Set([
+    `ogrenciler_${ownerKey}`,
+    `explore_demo_anchor_${ownerKey}`,
+    `custom_class_levels_${ownerKey}`,
+    `custom_class_levels_${ownerKey}_hidden`,
+    `last_dashboard_section_${ownerKey}`,
+    `quick_start_completed_${ownerKey}`,
+    `kokpit_notebook_${ownerKey}`,
+    `kokpit_agenda_${ownerKey}`,
+    `kokpit_agenda_drag_scale_${ownerKey}`,
+    `kokpit_card_collapse_${ownerKey}`,
+    `unit_topic_overrides_${ownerKey}`
+  ]);
+
+  const keyPrefixes = [
+    `brans_exam_${ownerKey}_`,
+    `genel_exam_${ownerKey}_`,
+    `kaynak_ilerleme_${ownerKey}_`
+  ];
+
+  for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    if (exactKeys.has(key) || keyPrefixes.some((prefix) => key.startsWith(prefix))) {
+      localStorage.removeItem(key);
+    }
+  }
+}
+
+async function guvenliSifirla() {
+  const ownerKey = getStorageOwnerEmail();
+  const confirmed = window.confirm('Güvenli sıfırlama yalnızca bu cihazdaki oturum ve önbelleği temizler. Buluttaki öğrencileriniz silinmez. Devam etmek istiyor musunuz?');
+  if (!confirmed) return;
+
+  if (shouldUseFirebaseAuth()) {
+    try {
+      const services = getFirebaseServices();
+      await services.signOut();
+    } catch (error) {
+      console.warn('Firebase çıkış işlemi tamamlanamadı:', error);
+    }
+  }
+
+  clearLocalCacheForOwner(ownerKey);
+  clearAuthSessionStorage();
+  resetCurrentUserSessionState();
   ekranıGoster('promoPage');
   updatePageHistory('promoPage', 'replace');
+  alert('Güvenli sıfırlama tamamlandı. Şimdi hesabınızla yeniden giriş yapabilirsiniz.');
 }
 
 function renderKokpitUserCard() {
