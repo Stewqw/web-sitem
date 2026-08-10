@@ -1,4 +1,5 @@
 function resolveApiBaseUrl() {
+  const defaultProductionApiUrl = 'https://parabol-kocluk-api.onrender.com';
   const runtimeOverride = String(window.__KOCLUK_API_BASE_URL__ || localStorage.getItem('koclukApiBaseUrl') || '').trim();
   if (runtimeOverride) return runtimeOverride.replace(/\/$/, '');
 
@@ -11,6 +12,10 @@ function resolveApiBaseUrl() {
 
   if (isLocalhost && loc.port && loc.port !== '3000') {
     return loc.protocol + '//' + loc.hostname + ':3000';
+  }
+
+  if (!isLocalhost && loc.protocol !== 'file:') {
+    return defaultProductionApiUrl;
   }
 
   return loc.origin;
@@ -37,6 +42,28 @@ const REGISTER_MAX_TEXT_LEN = 120;
 const GENERATED_LOGIN_DOMAIN = 'parabol.kocluk';
 const EXPLORE_DEMO_DAYS = 3;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const STUDENT_ACCESS_RETRY_DELAY_MS = 12000;
+
+function waitForMs(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, Number(ms) || 0);
+  });
+}
+
+function shouldRetryStudentAccessProvision(error) {
+  const raw = String((error && (error.code || error.message)) || '').toLocaleLowerCase('tr-TR');
+  if (!raw) return false;
+  return raw.includes('failed to fetch')
+    || raw.includes('networkerror')
+    || raw.includes('timeout')
+    || raw.includes('429')
+    || raw.includes('500')
+    || raw.includes('502')
+    || raw.includes('503')
+    || raw.includes('504')
+    || raw.includes('service unavailable')
+    || raw.includes('gateway');
+}
 
 function getFirebaseServices() {
   return window.firebaseServices || null;
@@ -4591,14 +4618,29 @@ async function createStudentAccessCredentials(studentId) {
   setSubmitButtonLoading(createButton, true, 'Kodlar oluşturuluyor...');
 
   try {
-    const result = await services.provisionStudentAccounts({
+    const provisionPayload = {
       studentId: String(student.id),
       studentUid: String(student.firebaseUid || '').trim(),
       studentName: student.name || '',
       branch: currentUserBranch || '',
       classLevel: student.classLevel || '',
       parentDisplayName: `${student.name || 'Ogrenci'} Velisi`
-    });
+    };
+
+    let result;
+    let hasRetried = false;
+    try {
+      result = await services.provisionStudentAccounts(provisionPayload);
+    } catch (firstError) {
+      if (!shouldRetryStudentAccessProvision(firstError)) {
+        throw firstError;
+      }
+
+      hasRetried = true;
+      setSubmitButtonLoading(createButton, true, 'Sunucu uyanıyor, tekrar deneniyor...');
+      await waitForMs(STUDENT_ACCESS_RETRY_DELAY_MS);
+      result = await services.provisionStudentAccounts(provisionPayload);
+    }
 
     if (!result || !result.student || !result.parent) {
       throw new Error('Giriş kodları oluşturulamadı.');
@@ -4613,6 +4655,9 @@ async function createStudentAccessCredentials(studentId) {
     setStoredOgrenciler(students);
     renderStoredOgrenciler();
     renderStudentAccessCredentials(student);
+    if (hasRetried) {
+      alert('Kodlar ikinci denemede başarıyla oluşturuldu.');
+    }
   } catch (error) {
     console.error('Öğrenci ve veli giriş kodları oluşturulamadı:', error);
     const errorCode = error && (error.code || error.message) ? String(error.code || error.message) : 'BILINMEYEN_HATA';

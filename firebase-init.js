@@ -104,6 +104,7 @@
   }
 
   function resolveApiBaseUrl() {
+    const defaultProductionApiUrl = "https://parabol-kocluk-api.onrender.com";
     const runtimeOverride = String(window.__KOCLUK_API_BASE_URL__ || localStorage.getItem("koclukApiBaseUrl") || "").trim();
     if (runtimeOverride) return runtimeOverride.replace(/\/$/, "");
 
@@ -116,6 +117,10 @@
 
     if (isLocalhost && loc.port && loc.port !== "3000") {
       return `${loc.protocol}//${loc.hostname}:3000`;
+    }
+
+    if (!isLocalhost && loc.protocol !== "file:") {
+      return defaultProductionApiUrl;
     }
 
     return loc.origin;
@@ -862,14 +867,27 @@
   services.getCoachUserCount = async function getCoachUserCount() {
     if (!db) return null;
 
+    const coachQuery = db.collection("users").where("role", "==", "coach");
+
+    // Some compat SDK versions do not support aggregation count().
+    if (typeof coachQuery.count === "function") {
+      const snapshot = await withTimeout(
+        coachQuery.count().get(),
+        10000,
+        "app/user-count-timeout",
+        "Kullanıcı sayısı okunurken zaman aşımı oluştu."
+      );
+      const data = snapshot.data();
+      return typeof data.count === "number" ? data.count : 0;
+    }
+
     const snapshot = await withTimeout(
-      db.collection("users").where("role", "==", "coach").count().get(),
+      coachQuery.get(),
       10000,
       "app/user-count-timeout",
       "Kullanıcı sayısı okunurken zaman aşımı oluştu."
     );
-    const data = snapshot.data();
-    return typeof data.count === "number" ? data.count : 0;
+    return typeof snapshot.size === "number" ? snapshot.size : 0;
   };
 
   services.loadWorkspaceSettings = async function loadWorkspaceSettings() {

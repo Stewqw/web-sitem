@@ -105,3 +105,19 @@ Alternatif olarak `index.html` icinde `script.js` yuklenmeden once:
 ```html
 <script>window.__KOCLUK_API_BASE_URL__ = 'https://YOUR_BACKEND_DOMAIN';</script>
 ```
+
+## Render ile Hemen Kurulum
+
+Bu repoda `render.yaml` hazir. Render uzerinden Blueprint deploy yapabilirsiniz.
+
+1. Render > New > Blueprint secin.
+2. Bu repoyu baglayin.
+3. `parabol-kocluk-api` servisini olusturun.
+4. `FIREBASE_SERVICE_ACCOUNT_JSON` degiskenine Firebase service account JSON metnini yapistirin.
+5. Deploy tamamlaninca API adresiniz varsayilan olarak:
+
+```text
+https://parabol-kocluk-api.onrender.com
+```
+
+Frontend bu adrese otomatik baglanacak sekilde ayarlanmistir.
