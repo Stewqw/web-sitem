@@ -175,6 +175,11 @@ function shouldShowDefaultCurriculumContent() {
   return !isPlanUpgradeRequired();
 }
 
+function shouldShowSystemSeedContent() {
+  // Yeni demo hesaplarda panel temiz başlasın: varsayılan kaynak ve ünite/konular gizlenir.
+  return shouldShowDefaultCurriculumContent() && !isExploreDemoAccount();
+}
+
 function canAddStudent() {
   return canAddStudentsByCount(1);
 }
@@ -3099,7 +3104,7 @@ function getVisibleTopicNamesForScope(lesson, unit) {
 function getSortedVisibleResources() {
   const hiddenSignatures = new Set(getStoredHiddenResourceSuggestions());
   const allResources = [
-    ...(shouldShowDefaultCurriculumContent() ? initialResourceSuggestions : []),
+    ...(shouldShowSystemSeedContent() ? initialResourceSuggestions : []),
     ...savedResourceSuggestions
   ];
 
@@ -7240,7 +7245,7 @@ function getLessonOptionsForClass(classLevel) {
 }
 
 function getUnitOptionsForLesson(classLevel, lesson) {
-  const defaultUnits = shouldShowDefaultCurriculumContent()
+  const defaultUnits = shouldShowSystemSeedContent()
     ? (DEFAULT_UNITS_BY_CLASS[String(classLevel)] && DEFAULT_UNITS_BY_CLASS[String(classLevel)][lesson]) || []
     : [];
   const customLessonData = getCustomUnitTopicLessonData(classLevel, lesson);
@@ -7249,7 +7254,7 @@ function getUnitOptionsForLesson(classLevel, lesson) {
 }
 
 function getTopicOptionsForLesson(classLevel, lesson, unit) {
-  const lessonTopics = shouldShowDefaultCurriculumContent()
+  const lessonTopics = shouldShowSystemSeedContent()
     ? DEFAULT_TOPICS_BY_CLASS[String(classLevel)] && DEFAULT_TOPICS_BY_CLASS[String(classLevel)][lesson]
     : null;
   const customLessonData = getCustomUnitTopicLessonData(classLevel, lesson);
@@ -7338,7 +7343,7 @@ function populateTaskTopicOptions(classLevel, lesson, unit) {
 function getResourceOptionsForClass(classLevel, lesson = '') {
   const hiddenSignatures = new Set(getStoredHiddenResourceSuggestions());
   const allResources = [
-    ...(shouldShowDefaultCurriculumContent() ? initialResourceSuggestions : []),
+    ...(shouldShowSystemSeedContent() ? initialResourceSuggestions : []),
     ...savedResourceSuggestions
   ];
   return Array.from(new Set(
@@ -7470,7 +7475,7 @@ function getStudentResourceOptions(student, classLevel, lesson = '') {
 function getAssignableResourceEntriesForStudent(student, classLevel, lesson = '') {
   const hiddenSignatures = new Set(getStoredHiddenResourceSuggestions());
   const allResources = [
-    ...(shouldShowDefaultCurriculumContent() ? initialResourceSuggestions : []),
+    ...(shouldShowSystemSeedContent() ? initialResourceSuggestions : []),
     ...savedResourceSuggestions
   ];
   const assignedKeys = new Set(
