@@ -3428,6 +3428,17 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="studentNotificationModal" style="display:none;" onclick="if(event.target === this) closeStudentNotificationModal()">
+    <div class="modal-card" style="max-width:620px; border-color:#fed7aa;">
+      <button class="modal-close" onclick="closeStudentNotificationModal()">✕</button>
+      <h3 id="studentNotificationModalTitle" style="margin:0 0 10px; color: var(--color-dark-teal);">Öğrenci Bildirimleri</h3>
+      <div id="studentNotificationModalList" style="display:grid; gap:10px; max-height:58vh; overflow:auto; padding-right:2px;"></div>
+      <div style="display:flex; justify-content:flex-end; margin-top:14px;">
+        <button type="button" class="btn-nav-outline" onclick="closeStudentNotificationModal()">Kapat</button>
+      </div>
+    </div>
+  </div>
+
   <div class="ogrenci-panel-overlay" id="ogrenciDetailsPanel">
     <div class="ogrenci-panel-card">
       <div class="ogrenci-panel-header">

@@ -33,6 +33,7 @@ let currentUserStudentLimit = null;
 let currentUserCreatedAtIso = '';
 let currentUserUnlimitedAccess = false;
 let currentUserIsDemoAccount = null;
+let activeNotificationStudentId = null;
 let pendingStudentDeleteId = null;
 let pendingStudentDeleteStep = 1;
 let hasShownExploreDemoNotice = false;
@@ -4946,6 +4947,116 @@ function setStudentDetailSection(section) {
   setStudentDetailButtonState(section);
 }
 
+function openStudentNotificationModal(studentId) {
+  activeNotificationStudentId = String(studentId);
+  const students = getStoredOgrenciler();
+  const student = students.find((item) => String(item.id) === String(studentId));
+  if (!student) return;
+
+  const pending = getPendingStudentNotifications(student);
+  if (!pending.length) {
+    return;
+  }
+
+  student.studentNotifications = student.studentNotifications.map((item) => {
+    if (!item || item.type !== 'cozulen-review' || item.status !== 'pending' || item.read === true) return item;
+    return { ...item, read: true, readAtIso: new Date().toISOString() };
+  });
+  student.updatedAt = Date.now();
+  setStoredOgrenciler(students);
+  renderStoredOgrenciler();
+
+  renderStudentNotificationModal();
+  modalAc('studentNotificationModal');
+}
+
+function closeStudentNotificationModal() {
+  activeNotificationStudentId = null;
+  modalKapat('studentNotificationModal');
+}
+
+function renderStudentNotificationModal() {
+  const titleEl = document.getElementById('studentNotificationModalTitle');
+  const listEl = document.getElementById('studentNotificationModalList');
+  if (!titleEl || !listEl || !activeNotificationStudentId) return;
+
+  const students = getStoredOgrenciler();
+  const student = students.find((item) => String(item.id) === String(activeNotificationStudentId));
+  if (!student) {
+    listEl.innerHTML = '<div class="exam-history-empty">Öğrenci bulunamadı.</div>';
+    return;
+  }
+
+  const pending = getPendingStudentNotifications(student);
+  titleEl.textContent = `${student.name || 'Öğrenci'} Bildirimleri`;
+
+  if (!pending.length) {
+    listEl.innerHTML = '<div class="exam-history-empty">Bekleyen bildirim yok.</div>';
+    return;
+  }
+
+  listEl.innerHTML = pending.map((notification) => {
+    const count = Number(notification.count || (Array.isArray(notification.pendingSolvedRecords) ? notification.pendingSolvedRecords.length : 0)) || 0;
+    const createdLabel = notification.createdAtIso ? new Date(notification.createdAtIso).toLocaleString('tr-TR') : '-';
+    return `
+      <div class="exam-history-item" style="display:block;">
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap;">
+          <strong>Öğrenciden ${count} çözülen soru kaydı geldi</strong>
+          <span class="exam-history-meta">${createdLabel}</span>
+        </div>
+        <div class="exam-history-meta" style="margin-top:6px;">Onaylarsanız öğretmen panelindeki Çözülen Soru kayıtlarına eklenir.</div>
+        <div class="exam-history-actions" style="margin-top:8px;">
+          <button type="button" class="exam-delete-btn exam-pdf-btn" onclick="approveStudentNotification(${Number(notification.id)})">Onayla</button>
+          <button type="button" class="exam-delete-btn" onclick="rejectStudentNotification(${Number(notification.id)})">Onaylama</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function resolveStudentNotification(notificationId, shouldApprove) {
+  if (!activeNotificationStudentId) return;
+  const students = getStoredOgrenciler();
+  const student = students.find((item) => String(item.id) === String(activeNotificationStudentId));
+  if (!student || !Array.isArray(student.studentNotifications)) return;
+
+  const notificationIndex = student.studentNotifications.findIndex((item) => Number(item && item.id) === Number(notificationId));
+  if (notificationIndex < 0) return;
+
+  const notification = student.studentNotifications[notificationIndex];
+  const pendingRecords = Array.isArray(notification && notification.pendingSolvedRecords) ? notification.pendingSolvedRecords : [];
+
+  if (shouldApprove && pendingRecords.length) {
+    if (!Array.isArray(student.cozulenSoruRecords)) student.cozulenSoruRecords = [];
+    const existingKeys = new Set(student.cozulenSoruRecords.map(getSolvedRecordDedupKey));
+    pendingRecords.forEach((record) => {
+      const normalizedRecord = normalizeIncomingSolvedRecord(record);
+      const dedupKey = getSolvedRecordDedupKey(normalizedRecord);
+      if (existingKeys.has(dedupKey)) return;
+      existingKeys.add(dedupKey);
+      student.cozulenSoruRecords.push(normalizedRecord);
+    });
+  }
+
+  student.studentNotifications.splice(notificationIndex, 1);
+  student.updatedAt = Date.now();
+  setStoredOgrenciler(students);
+
+  if (activeStudentId && String(activeStudentId) === String(student.id)) {
+    renderCozulenSoruRecords();
+  }
+  renderStoredOgrenciler();
+  renderStudentNotificationModal();
+}
+
+function approveStudentNotification(notificationId) {
+  resolveStudentNotification(notificationId, true);
+}
+
+function rejectStudentNotification(notificationId) {
+  resolveStudentNotification(notificationId, false);
+}
+
 function openStudentInfoPage(studentId) {
   const students = getStoredOgrenciler();
   const student = students.find(s => s.id.toString() === studentId.toString());
@@ -8022,6 +8133,135 @@ function normalizeStudentRecords(students) {
   return Array.isArray(students) ? students.map(normalizeStudentRecord) : [];
 }
 
+const MOBILE_SOLVED_QUEUE_FIELDS = ['incomingSolvedRecords', 'mobileSolvedRecords', 'studentSolvedQueue'];
+
+function normalizeIncomingSolvedRecord(record) {
+  const safe = record && typeof record === 'object' ? record : {};
+  const lesson = String(safe.lesson || '').trim();
+  const unit = String(safe.unit || '').trim();
+  const topic = String(safe.topic || '').trim();
+  const source = String(safe.source || '').trim();
+  const submittedAtIso = String(safe.submittedAtIso || safe.createdAtIso || new Date().toISOString()).trim();
+  const formattedDate = formatExamDate(String(safe.date || safe.examDate || getTodayTrDate()));
+
+  return {
+    id: Number(safe.id || Date.now() + Math.floor(Math.random() * 1000)),
+    lesson,
+    unit,
+    topic,
+    source,
+    date: formattedDate,
+    questionCount: Number(safe.questionCount || safe.question || 0),
+    correct: Number(safe.correct || 0),
+    wrong: Number(safe.wrong || 0),
+    blank: Number(safe.blank || 0),
+    submittedBy: String(safe.submittedBy || 'student').trim() || 'student',
+    submittedAtIso,
+    fromMobile: true
+  };
+}
+
+function getSolvedRecordDedupKey(record) {
+  return [
+    String(record.lesson || '').trim().toLocaleLowerCase('tr-TR'),
+    String(record.unit || '').trim().toLocaleLowerCase('tr-TR'),
+    String(record.topic || '').trim().toLocaleLowerCase('tr-TR'),
+    String(record.source || '').trim().toLocaleLowerCase('tr-TR'),
+    String(record.date || '').trim(),
+    Number(record.questionCount || 0),
+    Number(record.correct || 0),
+    Number(record.wrong || 0),
+    Number(record.blank || 0)
+  ].join('|||');
+}
+
+function ingestIncomingSolvedRecords(students) {
+  if (!Array.isArray(students) || !students.length) {
+    return { students: Array.isArray(students) ? students : [], changed: false };
+  }
+
+  let changed = false;
+  const nextStudents = students.map((student) => {
+    const safeStudent = normalizeStudentRecord(student);
+    const queueField = MOBILE_SOLVED_QUEUE_FIELDS.find((field) => Array.isArray(safeStudent[field]) && safeStudent[field].length > 0);
+    if (!queueField) return safeStudent;
+
+    const incoming = safeStudent[queueField]
+      .map(normalizeIncomingSolvedRecord)
+      .filter((item) => item.lesson && item.topic && item.source && isValidTrDate(item.date));
+
+    MOBILE_SOLVED_QUEUE_FIELDS.forEach((field) => {
+      if (Array.isArray(safeStudent[field]) && safeStudent[field].length > 0) {
+        safeStudent[field] = [];
+      }
+    });
+
+    if (!incoming.length) {
+      changed = true;
+      return safeStudent;
+    }
+
+    if (!Array.isArray(safeStudent.cozulenSoruRecords)) safeStudent.cozulenSoruRecords = [];
+    if (!Array.isArray(safeStudent.studentNotifications)) safeStudent.studentNotifications = [];
+
+    const existingSolvedKeys = new Set(safeStudent.cozulenSoruRecords.map(getSolvedRecordDedupKey));
+    const existingPendingKeys = new Set();
+    safeStudent.studentNotifications.forEach((notification) => {
+      if (!notification || notification.type !== 'cozulen-review') return;
+      const pending = Array.isArray(notification.pendingSolvedRecords) ? notification.pendingSolvedRecords : [];
+      pending.forEach((record) => {
+        existingPendingKeys.add(getSolvedRecordDedupKey(record));
+      });
+    });
+
+    const pendingSolvedRecords = [];
+    incoming.forEach((item) => {
+      const dedupKey = getSolvedRecordDedupKey(item);
+      if (existingSolvedKeys.has(dedupKey) || existingPendingKeys.has(dedupKey)) return;
+      existingPendingKeys.add(dedupKey);
+      pendingSolvedRecords.push(item);
+    });
+
+    if (pendingSolvedRecords.length > 0) {
+      safeStudent.studentNotifications.unshift({
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        type: 'cozulen-review',
+        status: 'pending',
+        read: false,
+        count: pendingSolvedRecords.length,
+        createdAtIso: new Date().toISOString(),
+        message: `Ogrenciden ${pendingSolvedRecords.length} yeni cozulen soru kaydi geldi.`,
+        pendingSolvedRecords
+      });
+      safeStudent.studentNotifications = safeStudent.studentNotifications.slice(0, 25);
+      safeStudent.updatedAt = Date.now();
+    }
+
+    changed = true;
+    return safeStudent;
+  });
+
+  return { students: nextStudents, changed };
+}
+
+function getUnreadStudentNotificationCount(student) {
+  const list = Array.isArray(student && student.studentNotifications) ? student.studentNotifications : [];
+  return list.filter((item) => item && item.type === 'cozulen-review' && item.status === 'pending' && item.read !== true).length;
+}
+
+function getLatestStudentNotificationText(student) {
+  const list = Array.isArray(student && student.studentNotifications) ? student.studentNotifications : [];
+  const pendingList = list.filter((item) => item && item.type === 'cozulen-review' && item.status === 'pending');
+  if (!pendingList.length) return '';
+  const latest = pendingList[0];
+  return String((latest && latest.message) || '').trim();
+}
+
+function getPendingStudentNotifications(student) {
+  const list = Array.isArray(student && student.studentNotifications) ? student.studentNotifications : [];
+  return list.filter((item) => item && item.type === 'cozulen-review' && item.status === 'pending');
+}
+
 function mergeStudentRecords(localStudents, remoteStudents) {
   const mergedMap = new Map();
   const addStudents = (list) => {
@@ -8078,7 +8318,17 @@ async function syncStudentStorageFromCloud() {
     try {
       const cloudRecords = await loadStudentRecordsFromCloud();
       remoteStudents = normalizeStudentRecords(cloudRecords);
+      const ingestedRemote = ingestIncomingSolvedRecords(remoteStudents);
+      remoteStudents = ingestedRemote.students;
       remoteReadSuccessful = true;
+
+      if (ingestedRemote.changed) {
+        try {
+          await saveStudentRecordsToCloud(remoteStudents);
+        } catch (error) {
+          console.warn('Gelen ogrenci kayitlari buluta geri yazilamadi:', error);
+        }
+      }
     } catch (error) {
       console.warn('Öğrenci verisi buluttan okunamadı:', error);
     }
@@ -8102,10 +8352,21 @@ async function syncStudentStorageFromCloud() {
       ? localStudents
       : mergeStudentRecords(localStudents, remoteStudents);
 
-    if (mergedStudents.length) writeLocalStudentRecords(mergedStudents);
+    const ingestedMerged = ingestIncomingSolvedRecords(mergedStudents);
+    const finalizedStudents = ingestedMerged.students;
+
+    if (finalizedStudents.length) writeLocalStudentRecords(finalizedStudents);
+
+    if (ingestedMerged.changed) {
+      try {
+        await saveStudentRecordsToCloud(finalizedStudents);
+      } catch (error) {
+        console.warn('Islenmis ogrenci kayitlari buluta yazilamadi:', error);
+      }
+    }
 
     studentStorageHydrated = true;
-    return mergedStudents;
+    return finalizedStudents;
   })().finally(() => {
     studentStorageHydratingPromise = null;
   });
@@ -9108,6 +9369,18 @@ function renderStoredOgrenciler() {
   container.innerHTML = '';
 
   stored.forEach(student => {
+    const unreadNotificationCount = getUnreadStudentNotificationCount(student);
+    const latestNotificationText = getLatestStudentNotificationText(student);
+    const notificationBlock = unreadNotificationCount > 0
+      ? `<div style="margin: 0 0 10px; padding: 8px 10px; border-radius: 10px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; font-size: 0.74rem; font-weight: 700; line-height: 1.35;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+            <span>🔔 ${unreadNotificationCount} yeni bildirim</span>
+            <button type="button" class="student-notify-btn" data-student-id="${String(student.id)}" style="border:1px solid #fdba74; background:#fff; color:#9a3412; border-radius:999px; padding:4px 9px; font-size:0.68rem; font-weight:800; cursor:pointer;">Bildirimler</button>
+          </div>
+          ${latestNotificationText ? `<div style="margin-top:5px; color:#7c2d12; font-weight:600;">${escapeHtml(latestNotificationText)}</div>` : ''}
+        </div>`
+      : '';
+
     const card = document.createElement('div');
     card.className = 'student-card-box';
     card.dataset.id = student.id;
@@ -9124,6 +9397,7 @@ function renderStoredOgrenciler() {
 
     card.innerHTML = `
       <button type="button" class="delete-student-btn" aria-label="Öğrenciyi sil" title="Öğrenciyi sil">🗑️</button>
+      ${notificationBlock}
       <div style="display: flex; align-items: center; gap: 10px;">
         <div style="width: 32px; height: 32px; background: var(--color-dark-teal); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800;">${student.name.charAt(0).toUpperCase()}</div>
         <strong style="font-size: 0.9rem;">${student.name}</strong>
@@ -9138,6 +9412,7 @@ function renderStoredOgrenciler() {
     `;
     const editBtn = card.querySelector('.edit-student-btn');
     const deleteBtn = card.querySelector('.delete-student-btn');
+    const notifyBtn = card.querySelector('.student-notify-btn');
     if (editBtn) {
       editBtn.addEventListener('click', e => {
         e.stopPropagation();
@@ -9148,6 +9423,12 @@ function renderStoredOgrenciler() {
       deleteBtn.addEventListener('click', e => {
         e.stopPropagation();
         deleteStudentFromCard(student.id);
+      });
+    }
+    if (notifyBtn) {
+      notifyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openStudentNotificationModal(student.id);
       });
     }
     container.appendChild(card);
