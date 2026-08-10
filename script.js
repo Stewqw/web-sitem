@@ -32,6 +32,8 @@ let currentUserPlan = '';
 let currentUserStudentLimit = null;
 let currentUserCreatedAtIso = '';
 let currentUserUnlimitedAccess = false;
+let pendingStudentDeleteId = null;
+let pendingStudentDeleteStep = 1;
 let savedResourceSuggestions = [];
 let registerFormOpenedAt = Date.now();
 let studentStorageHydrated = false;
@@ -8878,7 +8880,52 @@ function deleteStudentFromCard(studentId) {
     return;
   }
 
-  if (!confirm(`${student.name} adlı öğrenciyi silmek istiyor musunuz?`)) {
+  pendingStudentDeleteId = String(studentId);
+  pendingStudentDeleteStep = 1;
+  const messageEl = document.getElementById('studentDeleteConfirmMessage');
+  const primaryBtn = document.getElementById('studentDeleteConfirmPrimaryBtn');
+  if (messageEl) {
+    messageEl.textContent = `${student.name} adlı öğrenciyi silmek istiyor musunuz?`;
+  }
+  if (primaryBtn) {
+    primaryBtn.textContent = 'Evet, Sil';
+  }
+  modalAc('studentDeleteConfirmModal');
+}
+
+function closeStudentDeleteConfirmModal() {
+  pendingStudentDeleteId = null;
+  pendingStudentDeleteStep = 1;
+  modalKapat('studentDeleteConfirmModal');
+}
+
+function confirmStudentDeleteStep() {
+  if (!pendingStudentDeleteId) {
+    closeStudentDeleteConfirmModal();
+    return;
+  }
+
+  const messageEl = document.getElementById('studentDeleteConfirmMessage');
+  const primaryBtn = document.getElementById('studentDeleteConfirmPrimaryBtn');
+
+  if (pendingStudentDeleteStep === 1) {
+    pendingStudentDeleteStep = 2;
+    if (messageEl) {
+      messageEl.textContent = 'Son kararınız mı? Bu işlem geri alınamaz.';
+    }
+    if (primaryBtn) {
+      primaryBtn.textContent = 'Evet, Kesin Sil';
+    }
+    return;
+  }
+
+  const studentId = pendingStudentDeleteId;
+  closeStudentDeleteConfirmModal();
+
+  const students = getStoredOgrenciler();
+  const student = students.find(s => s.id.toString() === studentId.toString());
+  if (!student) {
+    alert('Öğrenci bulunamadı.');
     return;
   }
 

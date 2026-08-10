@@ -3412,6 +3412,18 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="studentDeleteConfirmModal" style="display:none;" onclick="if(event.target === this) closeStudentDeleteConfirmModal()">
+    <div class="modal-card" style="max-width:460px;">
+      <button class="modal-close" onclick="closeStudentDeleteConfirmModal()">✕</button>
+      <h3 style="margin:0 0 10px; color: var(--color-dark-teal);">Öğrenciyi Sil</h3>
+      <p id="studentDeleteConfirmMessage" style="margin:0; color:#475569; line-height:1.6;">Bu öğrenciyi silmek istiyor musunuz?</p>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
+        <button type="button" class="btn-nav-outline" onclick="closeStudentDeleteConfirmModal()">Vazgeç</button>
+        <button type="button" id="studentDeleteConfirmPrimaryBtn" class="btn-action btn-coral" onclick="confirmStudentDeleteStep()">Evet, Sil</button>
+      </div>
+    </div>
+  </div>
+
   <div class="ogrenci-panel-overlay" id="ogrenciDetailsPanel">
     <div class="ogrenci-panel-card">
       <div class="ogrenci-panel-header">
