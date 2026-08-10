@@ -42,10 +42,18 @@ app.use(cors({
   origin(origin, callback) {
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('Bu origin icin CORS izni yok.'));
+    return callback(null, false);
   }
 }));
 app.use(bodyParser.json());
+
+app.use('/api', (req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && !allowedOrigins.includes(String(origin))) {
+    return res.status(403).json({ error: 'Bu origin icin API erisimi kapali.' });
+  }
+  return next();
+});
 
 const blockedStaticPathPattern = /(^\/(server\.js|users\.json|package\.json|package-lock\.json|render\.ya?ml|\.env|\.git|\.github|memories)(\/|$))|(\.(pem|key|crt|p12|sqlite|db)$)/i;
 app.use((req, res, next) => {
@@ -62,18 +70,20 @@ app.use(express.static(__dirname, {
 
 const rateLimitStore = new Map();
 
-function getRateLimitKey(req, bucketName) {
+function getRateLimitKey(req, bucketName, keySuffix) {
   const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || 'unknown').split(',')[0].trim();
-  return `${bucketName}:${ip}`;
+  return `${bucketName}:${keySuffix || ip}`;
 }
 
 function createRateLimiter(options) {
   const windowMs = Number(options.windowMs);
   const maxRequests = Number(options.maxRequests);
   const bucketName = String(options.bucketName || 'default');
+  const keyFromRequest = typeof options.keyFromRequest === 'function' ? options.keyFromRequest : null;
 
   return function rateLimiter(req, res, next) {
-    const key = getRateLimitKey(req, bucketName);
+    const keySuffix = keyFromRequest ? keyFromRequest(req) : null;
+    const key = getRateLimitKey(req, bucketName, keySuffix);
     const now = Date.now();
     const current = rateLimitStore.get(key);
 
@@ -96,9 +106,35 @@ function createRateLimiter(options) {
 
 const loginRateLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxRequests: 25, bucketName: 'login' });
 const registerRateLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxRequests: 20, bucketName: 'register' });
-const forgotRateLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, maxRequests: 15, bucketName: 'forgot' });
+const forgotRateLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  maxRequests: 15,
+  bucketName: 'forgot',
+  keyFromRequest(req) {
+    const email = normalizeEmail(req.body && req.body.email);
+    return email || null;
+  }
+});
 const accessProvisionRateLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, maxRequests: 40, bucketName: 'access-provision' });
-const accessExchangeRateLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, maxRequests: 60, bucketName: 'access-exchange' });
+const accessExchangeRateLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  maxRequests: 60,
+  bucketName: 'access-exchange',
+  keyFromRequest(req) {
+    const code = normalizeAccessCode(req.body && req.body.code);
+    return code || null;
+  }
+});
+
+const loginIdentityRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 15,
+  bucketName: 'login-identity',
+  keyFromRequest(req) {
+    const email = normalizeEmail(req.body && req.body.email);
+    return email || null;
+  }
+});
 
 function readUsers() {
   try {
@@ -415,7 +451,7 @@ app.post('/api/register', registerRateLimiter, async (req, res) => {
   }
 });
 
-app.post('/api/login', loginRateLimiter, async (req, res) => {
+app.post('/api/login', loginRateLimiter, loginIdentityRateLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Eksik alanlar' });
 
