@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_this';
 const UNLIMITED_USER_EMAILS = String(process.env.UNLIMITED_USER_EMAILS || '');
 const USERS_FILE = path.join(__dirname, 'users.json');
+const FIREBASE_SERVICE_ACCOUNT_FILE = String(process.env.FIREBASE_SERVICE_ACCOUNT_FILE || path.join(__dirname, 'serviceAccount.json'));
 const RESET_CODE_EXPIRE_MS = 10 * 60 * 1000;
 const RESET_CODE_RESEND_MS = 60 * 1000;
 const RESET_CODE_MAX_ATTEMPTS = 5;
@@ -138,12 +139,27 @@ function parseServiceAccountFromEnv() {
   }
 }
 
+function parseServiceAccountFromFile() {
+  try {
+    if (!fs.existsSync(FIREBASE_SERVICE_ACCOUNT_FILE)) return null;
+    const raw = fs.readFileSync(FIREBASE_SERVICE_ACCOUNT_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed.private_key && typeof parsed.private_key === 'string') {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+    }
+    return parsed;
+  } catch (error) {
+    console.error('Firebase service account dosyasi okunamadi:', error.message || error);
+    return null;
+  }
+}
+
 function ensureFirebaseAdminApp() {
   if (firebaseAdmin.apps.length > 0) {
     return firebaseAdmin.app();
   }
 
-  const serviceAccount = parseServiceAccountFromEnv();
+  const serviceAccount = parseServiceAccountFromEnv() || parseServiceAccountFromFile();
   try {
     if (serviceAccount) {
       return firebaseAdmin.initializeApp({ credential: firebaseAdmin.credential.cert(serviceAccount) });
@@ -183,7 +199,8 @@ async function verifyFirebaseIdTokenFromRequest(req) {
   try {
     return await firebaseAuth.verifyIdToken(parts[1]);
   } catch (error) {
-    const err = new Error('Firebase oturumu doğrulanamadı.');
+    console.error('Firebase token dogrulama hatasi:', error && (error.code || error.message || error));
+    const err = new Error('Firebase oturumu doğrulanamadı. Service account dosyasının doğru projeye ait olduğunu kontrol edin.');
     err.status = 401;
     throw err;
   }

@@ -39,11 +39,19 @@ Kodlar backend tarafinda dogrulanir ve Firebase Custom Token verilir.
 Gerekli ortam degiskenleri:
 
 - `FIREBASE_SERVICE_ACCOUNT_JSON`: Firebase service account JSON icerigi (tek satir JSON string).
+- Alternatif: proje kokune `serviceAccount.json` koyabilirsiniz (backend otomatik okur).
 
 Ornek (PowerShell):
 
 ```powershell
 $env:FIREBASE_SERVICE_ACCOUNT_JSON = Get-Content .\serviceAccount.json -Raw
+npm start
+```
+
+Alternatif dosya yolu:
+
+```powershell
+$env:FIREBASE_SERVICE_ACCOUNT_FILE = "D:\webkocluk\web-sitem\serviceAccount.json"
 npm start
 ```
 
@@ -76,4 +84,24 @@ Yanıt ornegi:
 	"uid": "stu_xxxxx",
 	"role": "student"
 }
+```
+
+### Canli Hosting (404 sorunu icin)
+
+Eger frontend Firebase Hosting uzerinde, backend ise farkli bir origin (domain) uzerindeyse
+`/api/...` istekleri frontend domainine gider ve `404` donebilir.
+
+Bu durumda frontend'e API adresi override verin:
+
+Tarayici console:
+
+```javascript
+localStorage.setItem('koclukApiBaseUrl', 'https://YOUR_BACKEND_DOMAIN');
+location.reload();
+```
+
+Alternatif olarak `index.html` icinde `script.js` yuklenmeden once:
+
+```html
+<script>window.__KOCLUK_API_BASE_URL__ = 'https://YOUR_BACKEND_DOMAIN';</script>
 ```

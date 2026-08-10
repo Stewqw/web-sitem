@@ -104,6 +104,9 @@
   }
 
   function resolveApiBaseUrl() {
+    const runtimeOverride = String(window.__KOCLUK_API_BASE_URL__ || localStorage.getItem("koclukApiBaseUrl") || "").trim();
+    if (runtimeOverride) return runtimeOverride.replace(/\/$/, "");
+
     const loc = window.location;
     const isLocalhost = loc.hostname === "localhost" || loc.hostname === "127.0.0.1";
 
