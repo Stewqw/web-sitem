@@ -2528,7 +2528,10 @@
                 <button class="btn-nav-outline" onclick="goToCurrentProgramWeek()">Bugün</button>
                 <button class="btn-nav-outline" onclick="changeProgramWeek(1)" style="min-width:42px;">›</button>
               </div>
-              <div id="programWeekRange" style="font-weight:700; color:#475569;">27 Temmuz - 2 Ağustos 2026</div>
+              <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+                <button id="programCopyWeekBtn" class="btn-action btn-coral" style="font-size:0.8rem; padding:10px 16px;" onclick="copyCurrentWeekProgramToNextWeek()">Bu Haftayı Sonraki Haftaya Kopyala</button>
+                <div id="programWeekRange" style="font-weight:700; color:#475569;">27 Temmuz - 2 Ağustos 2026</div>
+              </div>
             </div>
             <div id="programDaysGrid" class="weekly-grid">
               <div class="day-column"><div class="day-header">Pzt</div><p style="font-size:0.75rem; color:#94a3b8; text-align:center;">Boş</p></div>
@@ -3500,11 +3503,12 @@
         </div>
         <div class="form-group">
           <label class="form-label">Program Tipi</label>
-          <select id="taskType" class="input-field">
-            <option>Deneme</option>
-            <option>Soru Çözümü</option>
-            <option>Konu Anlatımı</option>
-          </select>
+          <input id="taskType" type="text" class="input-field" list="taskTypeOptions" placeholder="Program tipi yazın veya seçin">
+          <datalist id="taskTypeOptions">
+            <option value="Deneme"></option>
+            <option value="Soru Çözümü"></option>
+            <option value="Konu Anlatımı"></option>
+          </datalist>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -3538,6 +3542,18 @@
           <button class="btn-nav-outline" onclick="modalKapat('taskAddModal')">İptal</button>
           <button class="btn-action btn-coral" onclick="saveTaskFromModal()">Kaydet</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="taskDeleteConfirmModal" style="display:none;" onclick="if(event.target === this) closeTaskDeleteConfirmModal()">
+    <div class="modal-card" style="max-width:440px; border-color:#ffd59a;">
+      <button class="modal-close" onclick="closeTaskDeleteConfirmModal()">✕</button>
+      <h3 style="margin:0; color:var(--color-dark-teal);">Görevi Sil</h3>
+      <p id="taskDeleteConfirmMessage" style="margin:12px 0 0; color:#64748b; line-height:1.5;">Bu görevi silmek istiyor musunuz?</p>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button type="button" class="btn-nav-outline" onclick="closeTaskDeleteConfirmModal()">Vazgeç</button>
+        <button type="button" class="btn-action btn-coral" onclick="confirmTaskDelete()">Sil</button>
       </div>
     </div>
   </div>

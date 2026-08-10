@@ -6722,6 +6722,71 @@ function goToCurrentProgramWeek() {
   }
 }
 
+function setProgramStatusMessage(message, tone = 'info') {
+  const info = document.getElementById('programStudentInfo');
+  if (!info) return;
+
+  info.textContent = String(message || '');
+  if (tone === 'error') {
+    info.style.color = '#dc2626';
+    return;
+  }
+  if (tone === 'success') {
+    info.style.color = '#166534';
+    return;
+  }
+  info.style.color = '#64748b';
+}
+
+function copyCurrentWeekProgramToNextWeek() {
+  if (!activeStudentId) {
+    setProgramStatusMessage('Önce bir öğrenci seçin.', 'error');
+    return;
+  }
+
+  const students = getStoredOgrenciler();
+  const student = students.find((s) => s.id === activeStudentId);
+  if (!student) {
+    setProgramStatusMessage('Öğrenci bulunamadı.', 'error');
+    return;
+  }
+
+  const dayKeys = ['pzt', 'sal', 'car', 'per', 'cum', 'cmt', 'paz'];
+  const currentWeekKey = getWeekStorageKey(programWeekOffset);
+  const nextWeekKey = getWeekStorageKey(programWeekOffset + 1);
+  const currentWeekProgram = ensureStudentWeekProgram(student, currentWeekKey);
+  const nextWeekProgram = ensureStudentWeekProgram(student, nextWeekKey);
+
+  const hasCurrentTasks = dayKeys.some((dayKey) => Array.isArray(currentWeekProgram[dayKey]) && currentWeekProgram[dayKey].length > 0);
+  if (!hasCurrentTasks) {
+    setProgramStatusMessage('Bu haftada kopyalanacak görev bulunamadı.', 'error');
+    return;
+  }
+
+  const hasNextWeekTasks = dayKeys.some((dayKey) => Array.isArray(nextWeekProgram[dayKey]) && nextWeekProgram[dayKey].length > 0);
+
+  const copiedWeekProgram = {};
+  dayKeys.forEach((dayKey) => {
+    const sourceTasks = Array.isArray(currentWeekProgram[dayKey]) ? currentWeekProgram[dayKey] : [];
+    copiedWeekProgram[dayKey] = sourceTasks.map((task) => {
+      if (task && typeof task === 'object') {
+        return { ...task };
+      }
+      return task;
+    });
+  });
+
+  student.program.weeks[nextWeekKey] = copiedWeekProgram;
+  setStoredOgrenciler(students);
+  renderProgramForStudent(student);
+  setProgramStatusMessage(
+    hasNextWeekTasks
+      ? 'Program bir sonraki haftaya kopyalandı ve mevcut kayıtlar güncellendi.'
+      : 'Bu haftanın programı bir sonraki haftaya kopyalandı.',
+    'success'
+  );
+}
+
 function renderProgramForStudent(student) {
   const header = document.getElementById('programHeaderTitle');
   const info = document.getElementById('programStudentInfo');
@@ -7043,6 +7108,8 @@ async function exportProgramPdf() {
 }
 
 let pendingTaskDayKey = 'pzt';
+let pendingTaskDeleteDayKey = null;
+let pendingTaskDeleteIndex = null;
 
 const DEFAULT_UNITS_BY_CLASS = {
   '8': {
@@ -7722,9 +7789,71 @@ function getTaskCardTypeClass(type) {
   return 'type-soru-cozumu';
 }
 
+const TASK_TYPE_COLOR_PALETTE = [
+  { cardGradient: 'linear-gradient(180deg, #0f766e 0%, #0f5f5a 100%)', chipBg: 'rgba(236,253,245,0.22)', chipColor: '#ecfeff', badgeBg: 'rgba(204,251,241,0.2)', badgeColor: '#ccfbf1' },
+  { cardGradient: 'linear-gradient(180deg, #1d4ed8 0%, #1e3a8a 100%)', chipBg: 'rgba(219,234,254,0.23)', chipColor: '#eff6ff', badgeBg: 'rgba(191,219,254,0.18)', badgeColor: '#dbeafe' },
+  { cardGradient: 'linear-gradient(180deg, #be123c 0%, #881337 100%)', chipBg: 'rgba(255,228,230,0.22)', chipColor: '#fff1f2', badgeBg: 'rgba(254,205,211,0.2)', badgeColor: '#ffe4e6' },
+  { cardGradient: 'linear-gradient(180deg, #7c2d12 0%, #9a3412 100%)', chipBg: 'rgba(255,237,213,0.22)', chipColor: '#fff7ed', badgeBg: 'rgba(254,215,170,0.18)', badgeColor: '#ffedd5' },
+  { cardGradient: 'linear-gradient(180deg, #4c1d95 0%, #3730a3 100%)', chipBg: 'rgba(237,233,254,0.22)', chipColor: '#f5f3ff', badgeBg: 'rgba(221,214,254,0.2)', badgeColor: '#ede9fe' },
+  { cardGradient: 'linear-gradient(180deg, #374151 0%, #1f2937 100%)', chipBg: 'rgba(243,244,246,0.2)', chipColor: '#f9fafb', badgeBg: 'rgba(209,213,219,0.16)', badgeColor: '#e5e7eb' },
+  { cardGradient: 'linear-gradient(180deg, #065f46 0%, #064e3b 100%)', chipBg: 'rgba(209,250,229,0.22)', chipColor: '#ecfdf5', badgeBg: 'rgba(167,243,208,0.18)', badgeColor: '#d1fae5' },
+  { cardGradient: 'linear-gradient(180deg, #0c4a6e 0%, #1e3a8a 100%)', chipBg: 'rgba(224,242,254,0.22)', chipColor: '#f0f9ff', badgeBg: 'rgba(186,230,253,0.18)', badgeColor: '#e0f2fe' }
+];
+
+function normalizeTaskType(value) {
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function getStableColorIndex(value, max) {
+  const text = normalizeTaskType(value);
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = ((hash * 31) + text.charCodeAt(i)) >>> 0;
+  }
+  return max > 0 ? hash % max : 0;
+}
+
+function getTaskTypeVisualStyle(type) {
+  const normalizedType = normalizeTaskType(type);
+  const fixedStyles = {
+    deneme: {
+      cardGradient: 'linear-gradient(180deg, #ff8800 0%, #cc6d00 100%)',
+      chipBg: 'rgba(255,255,255,0.18)',
+      chipColor: '#ffe4fd',
+      badgeBg: 'rgba(255,255,255,0.12)',
+      badgeColor: '#ffe4fd'
+    },
+    'soru cozumu': {
+      cardGradient: 'linear-gradient(180deg, #102040 0%, #1b325f 100%)',
+      chipBg: 'rgba(255,255,255,0.16)',
+      chipColor: '#dbeafe',
+      badgeBg: 'rgba(255,255,255,0.16)',
+      badgeColor: '#dbeafe'
+    },
+    'konu anlatimi': {
+      cardGradient: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
+      chipBg: 'rgba(255,255,255,0.14)',
+      chipColor: '#cbd5e1',
+      badgeBg: 'rgba(255,255,255,0.10)',
+      badgeColor: '#cbd5e1'
+    }
+  };
+
+  if (Object.prototype.hasOwnProperty.call(fixedStyles, normalizedType)) {
+    return fixedStyles[normalizedType];
+  }
+
+  return TASK_TYPE_COLOR_PALETTE[getStableColorIndex(normalizedType, TASK_TYPE_COLOR_PALETTE.length)];
+}
+
 function formatTaskHtml(task, dayKey, taskIndex) {
   if (typeof task === 'string') {
-    return `<div class="task-card type-soru-cozumu"><div class="task-card-subject">Görev</div><div class="task-card-title">${task}</div></div>`;
+    const defaultStyle = getTaskTypeVisualStyle('Soru Çözümü');
+    return `<div class="task-card type-soru-cozumu" style="background:${defaultStyle.cardGradient};"><div class="task-card-subject">Görev</div><div class="task-card-title">${task}</div></div>`;
   }
   const durationText = `${task.duration || 60} dk`;
   const subject = task.lesson || 'Ders';
@@ -7733,10 +7862,11 @@ function formatTaskHtml(task, dayKey, taskIndex) {
   const source = task.source || 'Kaynak yok';
   const note = task.note || '';
   const typeClass = getTaskCardTypeClass(type);
+  const typeStyle = getTaskTypeVisualStyle(type);
   const noteHtml = note ? `<div class="task-card-note">Not: ${escapeHtml(note)}</div>` : '';
 
   return `
-    <div class="task-card ${typeClass}">
+    <div class="task-card ${typeClass}" style="background:${typeStyle.cardGradient};">
       <div class="task-card-top">
         <div>
           <div class="task-card-subject">${subject}</div>
@@ -7748,9 +7878,9 @@ function formatTaskHtml(task, dayKey, taskIndex) {
         </div>
       </div>
       <div class="task-card-title">${topic}</div>
-      <div class="task-card-type">${type}</div>
+      <div class="task-card-type" style="background:${typeStyle.chipBg}; color:${typeStyle.chipColor};">${type}</div>
       <div class="task-card-footer">
-        <span class="task-card-badge">${source}</span>
+        <span class="task-card-badge" style="background:${typeStyle.badgeBg}; color:${typeStyle.badgeColor};">${source}</span>
       </div>
       ${noteHtml}
     </div>
@@ -7759,28 +7889,50 @@ function formatTaskHtml(task, dayKey, taskIndex) {
 
 function deleteTaskFromCard(dayKey, taskIndex) {
   if (!activeStudentId) {
-    alert('Önce bir öğrenci seçin.');
+    setProgramStatusMessage('Önce bir öğrenci seçin.', 'error');
     return;
   }
 
-  if (!confirm('Bu görevi silmek istiyor musunuz?')) {
+  pendingTaskDeleteDayKey = dayKey;
+  pendingTaskDeleteIndex = taskIndex;
+  modalAc('taskDeleteConfirmModal');
+}
+
+function closeTaskDeleteConfirmModal() {
+  pendingTaskDeleteDayKey = null;
+  pendingTaskDeleteIndex = null;
+  modalKapat('taskDeleteConfirmModal');
+}
+
+function confirmTaskDelete() {
+  if (!activeStudentId || pendingTaskDeleteDayKey === null || pendingTaskDeleteIndex === null) {
+    closeTaskDeleteConfirmModal();
     return;
   }
 
   const students = getStoredOgrenciler();
   const student = students.find(s => s.id === activeStudentId);
   if (!student) {
-    alert('Öğrenci bulunamadı.');
+    closeTaskDeleteConfirmModal();
+    setProgramStatusMessage('Öğrenci bulunamadı.', 'error');
     return;
   }
 
   const weekKey = getWeekStorageKey(programWeekOffset);
   const weekProgram = ensureStudentWeekProgram(student, weekKey);
+  const dayKey = pendingTaskDeleteDayKey;
+  const taskIndex = pendingTaskDeleteIndex;
   if (weekProgram[dayKey] && weekProgram[dayKey][taskIndex] !== undefined) {
     weekProgram[dayKey].splice(taskIndex, 1);
     setStoredOgrenciler(students);
+    closeTaskDeleteConfirmModal();
     renderProgramForStudent(student);
+    setProgramStatusMessage('Görev silindi.', 'success');
+    return;
   }
+
+  closeTaskDeleteConfirmModal();
+  setProgramStatusMessage('Silinecek görev bulunamadı.', 'error');
 }
 
 function saveTaskFromModal() {
