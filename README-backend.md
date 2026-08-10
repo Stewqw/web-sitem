@@ -30,3 +30,50 @@ ADMIN_EMAIL=admin@example.com ADMIN_PASS=Secret123 npm start
 ```
 
 Bu durumda `admin@example.com` ile kayıtlı bir admin oluşturulur (ilk çalıştırmada, `users.json` boşsa).
+
+## Ogrenci/Veli Kod Girisi (Custom Token)
+
+Bu surumde ogrenci ve veli giris kodlari Firebase Email/Password hesabi acmadan uretilir.
+Kodlar backend tarafinda dogrulanir ve Firebase Custom Token verilir.
+
+Gerekli ortam degiskenleri:
+
+- `FIREBASE_SERVICE_ACCOUNT_JSON`: Firebase service account JSON icerigi (tek satir JSON string).
+
+Ornek (PowerShell):
+
+```powershell
+$env:FIREBASE_SERVICE_ACCOUNT_JSON = Get-Content .\serviceAccount.json -Raw
+npm start
+```
+
+Ek notlar:
+
+- `FIREBASE_SERVICE_ACCOUNT_JSON` yoksa `/api/student-access/provision` ve `/api/student-access/exchange` endpointleri `503` donecektir.
+- Ogretmen paneli kod olustururken Firebase ogretmen oturumunun ID token bilgisini backend'e gonderir.
+
+### Endpointler
+
+1. `POST /api/student-access/provision`
+- Yetki: Firebase ogretmen oturumu (`Authorization: Bearer <firebase-id-token>`)
+- Islev: Ogrenci ve veli icin kod + uid uretir, Firestore'a kaydeder
+
+2. `POST /api/student-access/exchange`
+- Yetki: Gerekmez
+- Islev: Girilen kodu dogrular, Firebase `customToken` doner
+
+Istek ornegi:
+
+```json
+{ "code": "OG-ABC123" }
+```
+
+Yanıt ornegi:
+
+```json
+{
+	"token": "<firebase-custom-token>",
+	"uid": "stu_xxxxx",
+	"role": "student"
+}
+```

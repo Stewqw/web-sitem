@@ -13,7 +13,11 @@
     // true yaparsan kayit/giris/sifre sifirlama formlari Firebase Auth kullanir.
     useFirebaseAuth: true,
     // true ise anasayfa basvuru formu Firestore'a kaydedilir.
-    useFirestoreForms: true
+    useFirestoreForms: true,
+    // true ise ogrenci/veli kodlari backend custom token akisiyla uretilir.
+    useCustomTokenStudentAccess: true,
+    // custom token backendi ulasilamazsa eski e-posta tabanli olusturmaya geri don.
+    allowLegacyStudentAccessFallback: false
   };
 
   const isPlaceholder = (value) => String(value || "").startsWith("YOUR_");
@@ -37,6 +41,9 @@
       throw new Error("Firebase hazir degil");
     },
     async loginWithEmail() {
+      throw new Error("Firebase hazir degil");
+    },
+    async loginWithAccessCode() {
       throw new Error("Firebase hazir degil");
     },
     async resetPassword() {
@@ -96,6 +103,23 @@
     console.warn("Firebase Firestore SDK yuklenemedi. Profil kaydi ve formlar calismayabilir.");
   }
 
+  function resolveApiBaseUrl() {
+    const loc = window.location;
+    const isLocalhost = loc.hostname === "localhost" || loc.hostname === "127.0.0.1";
+
+    if (loc.protocol === "file:") {
+      return "http://localhost:3000";
+    }
+
+    if (isLocalhost && loc.port && loc.port !== "3000") {
+      return `${loc.protocol}//${loc.hostname}:3000`;
+    }
+
+    return loc.origin;
+  }
+
+  const API_BASE_URL = resolveApiBaseUrl();
+
   function withTimeout(promise, timeoutMs, timeoutCode, timeoutMessage) {
     let timerId;
     const timeoutPromise = new Promise((_, reject) => {
@@ -118,6 +142,22 @@
     }
 
     return null;
+  }
+
+  function resolveProfileCreatedAtIso(profile) {
+    if (!profile || typeof profile !== "object") return "";
+    if (profile.createdAtIso) return String(profile.createdAtIso);
+    if (profile.createdAt && typeof profile.createdAt.toDate === "function") {
+      return profile.createdAt.toDate().toISOString();
+    }
+    return "";
+  }
+
+  function hasProfileUnlimitedAccess(profile, role) {
+    if (!profile || typeof profile !== "object") return false;
+    if (profile.unlimitedAccess === true) return true;
+    if (profile.isAdmin === true) return true;
+    return role === "admin" || role === "owner";
   }
 
   function getStudentCollection(uid) {
@@ -174,6 +214,44 @@
     window.crypto.getRandomValues(randomValues);
     const suffix = Array.from(randomValues, (value) => generatedLoginChars[value % generatedLoginChars.length]).join("");
     return `${prefix}-${suffix}`;
+  }
+
+  async function requestBackendJson(path, options) {
+    const response = await fetch(`${API_BASE_URL}${path}`, options);
+    const text = await response.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (error) {
+      data = {};
+    }
+
+    if (!response.ok) {
+      const backendError = new Error(data && data.error ? data.error : `İstek başarısız (HTTP ${response.status}).`);
+      backendError.status = response.status;
+      throw backendError;
+    }
+
+    return data;
+  }
+
+  async function provisionStudentAccountsWithCustomToken(payload) {
+    const teacherUser = await getAuthenticatedUser();
+    if (!teacherUser) {
+      const error = new Error("Ogretmen oturumu bulunamadi.");
+      error.code = "app/teacher-session-missing";
+      throw error;
+    }
+
+    const idToken = await teacherUser.getIdToken();
+    return requestBackendJson("/api/student-access/provision", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify(payload || {})
+    });
   }
 
   async function getAuthenticatedUser() {
@@ -337,6 +415,17 @@
   };
 
   services.provisionStudentAccounts = async function provisionStudentAccounts(payload) {
+    if (integrationSettings.useCustomTokenStudentAccess) {
+      try {
+        return await provisionStudentAccountsWithCustomToken(payload);
+      } catch (customTokenError) {
+        if (!integrationSettings.allowLegacyStudentAccessFallback) {
+          throw customTokenError;
+        }
+        console.warn("Custom token ogrenci/veli kod olusturma basarisiz, legacy akis denenecek:", customTokenError);
+      }
+    }
+
     const teacherUser = await getAuthenticatedUser();
     if (!teacherUser) {
       const error = new Error("Ogretmen oturumu bulunamadi.");
@@ -448,7 +537,56 @@
       role,
       plan: (profile && profile.plan) || "",
       studentLimit: profile && typeof profile.studentLimit === "number" ? profile.studentLimit : null,
+      createdAtIso: resolveProfileCreatedAtIso(profile),
+      isUnlimitedAccess: hasProfileUnlimitedAccess(profile, role),
       linkedStudentIds: (profile && profile.linkedStudentIds) || [],
+    };
+  };
+
+  services.loginWithAccessCode = async function loginWithAccessCode(payload) {
+    const code = String(payload && payload.code || "").trim().toUpperCase();
+    if (!code) {
+      throw new Error("Giriş kodu gerekli.");
+    }
+
+    const exchange = await requestBackendJson("/api/student-access/exchange", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code })
+    });
+
+    if (!exchange || !exchange.token) {
+      throw new Error("Kod doğrulanamadı.");
+    }
+
+    const credential = await withTimeout(
+      auth.signInWithCustomToken(exchange.token),
+      20000,
+      "app/auth-signin-timeout",
+      "Kod ile giriş zaman aşımına uğradı."
+    );
+
+    let profile = null;
+    try {
+      profile = await withTimeout(
+        getProfileByUid(credential.user.uid),
+        10000,
+        "app/profile-read-timeout",
+        "Kullanıcı profili okunurken zaman aşımı oluştu."
+      );
+    } catch (error) {
+      console.warn("Profil okuma zamanında tamamlanamadı:", error);
+    }
+
+    const role = (profile && profile.role) || (exchange && exchange.role) || "";
+    return {
+      uid: credential.user.uid,
+      email: credential.user.email || "",
+      name: (profile && (profile.displayName || profile.name)) || credential.user.displayName || "Kullanici",
+      branch: (profile && profile.branch) || "",
+      role,
+      linkedStudentIds: (profile && profile.linkedStudentIds) || (exchange && exchange.profile && exchange.profile.linkedStudentIds) || [],
+      classLevel: (profile && profile.classLevel) || (exchange && exchange.profile && exchange.profile.classLevel) || ""
     };
   };
 
@@ -504,7 +642,9 @@
       name: (profile && profile.name) || user.displayName || "Kullanici",
       branch: (profile && profile.branch) || "",
       plan: (profile && profile.plan) || "",
-      studentLimit: profile && typeof profile.studentLimit === "number" ? profile.studentLimit : null
+      studentLimit: profile && typeof profile.studentLimit === "number" ? profile.studentLimit : null,
+      createdAtIso: resolveProfileCreatedAtIso(profile),
+      isUnlimitedAccess: hasProfileUnlimitedAccess(profile, String((profile && profile.role) || ""))
     };
   };
 

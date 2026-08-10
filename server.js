@@ -4,16 +4,20 @@ const path = require('path');
 const crypto = require('crypto');
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const firebaseAdmin = require('firebase-admin');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const nodemailer = require('nodemailer');
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_this';
+const UNLIMITED_USER_EMAILS = String(process.env.UNLIMITED_USER_EMAILS || '');
 const USERS_FILE = path.join(__dirname, 'users.json');
 const RESET_CODE_EXPIRE_MS = 10 * 60 * 1000;
 const RESET_CODE_RESEND_MS = 60 * 1000;
 const RESET_CODE_MAX_ATTEMPTS = 5;
+const ACCESS_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const ACCESS_CODE_SUFFIX_LENGTH = 6;
 const pendingResetCodes = new Map();
 
 const app = express();
@@ -36,6 +40,33 @@ function writeUsers(users) {
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+function isEmailInUnlimitedList(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return false;
+  return UNLIMITED_USER_EMAILS
+    .split(',')
+    .map((item) => normalizeEmail(item))
+    .filter(Boolean)
+    .includes(normalizedEmail);
+}
+
+function hasUnlimitedAccess(user) {
+  if (!user || typeof user !== 'object') return false;
+  if (user.isAdmin) return true;
+  if (user.unlimitedAccess === true) return true;
+  return isEmailInUnlimitedList(user.email);
+}
+
+function getUserCreatedAtIso(user) {
+  if (!user || typeof user !== 'object') return null;
+  if (user.createdAtIso) return String(user.createdAtIso);
+  const numericId = Number(user.id);
+  if (Number.isFinite(numericId) && numericId > 0) {
+    return new Date(numericId).toISOString();
+  }
+  return null;
 }
 
 function getAuthUserFromRequest(req) {
@@ -65,6 +96,163 @@ function generateResetCode() {
 
 function hashResetCode(code) {
   return crypto.createHash('sha256').update(String(code)).digest('hex');
+}
+
+function normalizeAccessCode(code) {
+  return String(code || '').trim().toUpperCase();
+}
+
+function hashAccessCode(code) {
+  return crypto.createHash('sha256').update(normalizeAccessCode(code)).digest('hex');
+}
+
+function randomTokenString(length) {
+  const bytes = crypto.randomBytes(length);
+  let value = '';
+  for (let i = 0; i < length; i += 1) {
+    value += ACCESS_CODE_CHARS[bytes[i] % ACCESS_CODE_CHARS.length];
+  }
+  return value;
+}
+
+function generateAccessCode(prefix) {
+  return `${String(prefix || '').toUpperCase()}-${randomTokenString(ACCESS_CODE_SUFFIX_LENGTH)}`;
+}
+
+function generateAccessUid(prefix) {
+  return `${String(prefix || '').toLowerCase()}_${crypto.randomBytes(10).toString('hex')}`;
+}
+
+function parseServiceAccountFromEnv() {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.private_key && typeof parsed.private_key === 'string') {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+    }
+    return parsed;
+  } catch (error) {
+    console.error('FIREBASE_SERVICE_ACCOUNT_JSON parse edilemedi:', error.message || error);
+    return null;
+  }
+}
+
+function ensureFirebaseAdminApp() {
+  if (firebaseAdmin.apps.length > 0) {
+    return firebaseAdmin.app();
+  }
+
+  const serviceAccount = parseServiceAccountFromEnv();
+  try {
+    if (serviceAccount) {
+      return firebaseAdmin.initializeApp({ credential: firebaseAdmin.credential.cert(serviceAccount) });
+    }
+    return firebaseAdmin.initializeApp({ credential: firebaseAdmin.credential.applicationDefault() });
+  } catch (error) {
+    console.error('Firebase Admin baslatilamadi:', error.message || error);
+    return null;
+  }
+}
+
+const firebaseAdminApp = ensureFirebaseAdminApp();
+const firebaseAuth = firebaseAdminApp ? firebaseAdmin.auth() : null;
+const firebaseDb = firebaseAdminApp ? firebaseAdmin.firestore() : null;
+
+async function verifyFirebaseIdTokenFromRequest(req) {
+  if (!firebaseAuth) {
+    const err = new Error('Firebase Admin yapılandırılmamış.');
+    err.status = 503;
+    throw err;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    const err = new Error('Yetkisiz');
+    err.status = 401;
+    throw err;
+  }
+
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2) {
+    const err = new Error('Yetkisiz');
+    err.status = 401;
+    throw err;
+  }
+
+  try {
+    return await firebaseAuth.verifyIdToken(parts[1]);
+  } catch (error) {
+    const err = new Error('Firebase oturumu doğrulanamadı.');
+    err.status = 401;
+    throw err;
+  }
+}
+
+async function getFirebaseUserProfile(uid) {
+  if (!firebaseDb) return null;
+  const doc = await firebaseDb.collection('users').doc(String(uid)).get();
+  return doc.exists ? doc.data() : null;
+}
+
+function isCoachRole(role) {
+  const normalizedRole = String(role || '').trim().toLowerCase();
+  return normalizedRole === 'coach' || normalizedRole === 'admin' || normalizedRole === 'owner';
+}
+
+async function resolveCoachIdentity(req) {
+  const decoded = await verifyFirebaseIdTokenFromRequest(req);
+  const profile = await getFirebaseUserProfile(decoded.uid);
+  if (!profile || !isCoachRole(profile.role)) {
+    const err = new Error('Öğretmen yetkisi gerekli.');
+    err.status = 403;
+    throw err;
+  }
+  return { decoded, profile };
+}
+
+async function storeAccessCodeRecord({
+  code,
+  uid,
+  role,
+  coachUid,
+  studentUid,
+  parentUid,
+  studentId,
+  classLevel,
+  branch,
+  displayName,
+  linkedStudentIds
+}) {
+  if (!firebaseDb) {
+    throw new Error('Firestore kullanıma hazır değil.');
+  }
+
+  const normalizedCode = normalizeAccessCode(code);
+  const codeHash = hashAccessCode(normalizedCode);
+  const nowIso = new Date().toISOString();
+
+  await firebaseDb.collection('accessCodes').doc(codeHash).set(
+    {
+      codeHash,
+      uid,
+      role,
+      coachUid,
+      studentUid,
+      parentUid,
+      studentId,
+      classLevel: String(classLevel || '').trim(),
+      branch: String(branch || '').trim(),
+      displayName: String(displayName || '').trim(),
+      linkedStudentIds: Array.isArray(linkedStudentIds) ? linkedStudentIds : [],
+      isActive: true,
+      createdAtIso: nowIso,
+      updatedAtIso: nowIso,
+      createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+    },
+    { merge: true }
+  );
 }
 
 function buildMailTransporter() {
@@ -113,7 +301,19 @@ app.post('/api/register', async (req, res) => {
 
   try {
     const hash = await bcryptjs.hash(password, 10);
-    const user = { id: Date.now(), name, email: normalizedEmail, password: hash, phone, branch: String(branch || '').trim(), isAdmin: false };
+    const createdAtIso = new Date().toISOString();
+    const user = {
+      id: Date.now(),
+      name,
+      email: normalizedEmail,
+      password: hash,
+      phone,
+      branch: String(branch || '').trim(),
+      isAdmin: false,
+      plan: 'explore',
+      studentLimit: 1,
+      createdAtIso
+    };
     users.push(user);
     writeUsers(users);
     return res.json({ ok: true });
@@ -137,7 +337,25 @@ app.post('/api/login', async (req, res) => {
     if (!ok) return res.status(401).json({ error: 'Hatalı şifre' });
 
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-    return res.json({ token, user: { name: user.name, email: user.email, phone: user.phone, branch: user.branch || '' } });
+    const normalizedPlan = String(user.plan || '').trim().toLowerCase();
+    const studentLimit = typeof user.studentLimit === 'number'
+      ? user.studentLimit
+      : (normalizedPlan === 'explore' || normalizedPlan === 'kesfet' ? 1 : null);
+    const createdAtIso = getUserCreatedAtIso(user);
+    const isUnlimitedAccess = hasUnlimitedAccess(user);
+    return res.json({
+      token,
+      user: {
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        branch: user.branch || '',
+        plan: user.plan || '',
+        studentLimit,
+        createdAtIso,
+        isUnlimitedAccess
+      }
+    });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'Sunucu hatası' });
@@ -256,7 +474,26 @@ app.get('/api/me', (req, res) => {
     const users = readUsers();
     const user = users.find(u => normalizeEmail(u.email) === normalizeEmail(payload.email) || u.id === payload.id);
     if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
-    return res.json({ user: { id: user.id, name: user.name, email: user.email, phone: user.phone, branch: user.branch || '', isAdmin: !!user.isAdmin } });
+    const normalizedPlan = String(user.plan || '').trim().toLowerCase();
+    const studentLimit = typeof user.studentLimit === 'number'
+      ? user.studentLimit
+      : (normalizedPlan === 'explore' || normalizedPlan === 'kesfet' ? 1 : null);
+    const createdAtIso = getUserCreatedAtIso(user);
+    const isUnlimitedAccess = hasUnlimitedAccess(user);
+    return res.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        branch: user.branch || '',
+        isAdmin: !!user.isAdmin,
+        plan: user.plan || '',
+        studentLimit,
+        createdAtIso,
+        isUnlimitedAccess
+      }
+    });
   } catch (e) {
     return res.status(401).json({ error: 'Token geçersiz' });
   }
@@ -300,7 +537,7 @@ app.get('/api/users', (req, res) => {
     const users = readUsers();
     const requester = users.find(u => u.id === payload.id || normalizeEmail(u.email) === normalizeEmail(payload.email));
     if (!requester || !requester.isAdmin) return res.status(403).json({ error: 'Admin yetkisi gerekli' });
-    const out = users.map(u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, branch: u.branch || '', isAdmin: !!u.isAdmin }));
+    const out = users.map(u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, branch: u.branch || '', isAdmin: !!u.isAdmin, isUnlimitedAccess: hasUnlimitedAccess(u) }));
     return res.json({ users: out });
   } catch (e) {
     return res.status(401).json({ error: 'Token geçersiz' });
@@ -340,4 +577,186 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Auth server running on http://localhost:${PORT}`);
   ensureInitialAdmin();
+});
+
+app.post('/api/student-access/provision', async (req, res) => {
+  try {
+    if (!firebaseDb || !firebaseAuth) {
+      return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış. Sunucuda servis hesabı tanımlayın.' });
+    }
+
+    const { decoded, profile } = await resolveCoachIdentity(req);
+    const payload = req.body && typeof req.body === 'object' ? req.body : {};
+    const studentName = String(payload.studentName || '').trim();
+    if (!studentName) {
+      return res.status(400).json({ error: 'Öğrenci adı gerekli.' });
+    }
+
+    const studentUid = String(payload.studentUid || '').trim() || generateAccessUid('stu');
+    const parentUid = String(payload.parentUid || '').trim() || generateAccessUid('par');
+    const studentId = String(payload.studentId || studentUid).trim();
+    const branch = String(payload.branch || profile.branch || '').trim();
+    const classLevel = String(payload.classLevel || '').trim();
+    const parentDisplayName = String(payload.parentDisplayName || `${studentName} Velisi`).trim();
+
+    const studentLoginCode = generateAccessCode('OG');
+    const parentLoginCode = generateAccessCode('VL');
+    const nowIso = new Date().toISOString();
+
+    const batch = firebaseDb.batch();
+    batch.set(
+      firebaseDb.collection('users').doc(studentUid),
+      {
+        uid: studentUid,
+        role: 'student',
+        displayName: studentName,
+        loginCode: studentLoginCode,
+        studentId,
+        branch,
+        classLevel,
+        coachUid: decoded.uid,
+        linkedStudentIds: [studentUid],
+        parentUid,
+        authProvider: 'custom-token',
+        emailVerified: true,
+        updatedAtIso: nowIso,
+        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        createdAtIso: nowIso,
+        createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+    batch.set(
+      firebaseDb.collection('users').doc(parentUid),
+      {
+        uid: parentUid,
+        role: 'parent',
+        displayName: parentDisplayName,
+        loginCode: parentLoginCode,
+        studentId: studentUid,
+        branch,
+        classLevel,
+        coachUid: decoded.uid,
+        linkedStudentIds: [studentUid],
+        authProvider: 'custom-token',
+        emailVerified: true,
+        updatedAtIso: nowIso,
+        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        createdAtIso: nowIso,
+        createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+
+    await batch.commit();
+
+    await Promise.all([
+      storeAccessCodeRecord({
+        code: studentLoginCode,
+        uid: studentUid,
+        role: 'student',
+        coachUid: decoded.uid,
+        studentUid,
+        parentUid,
+        studentId,
+        classLevel,
+        branch,
+        displayName: studentName,
+        linkedStudentIds: [studentUid]
+      }),
+      storeAccessCodeRecord({
+        code: parentLoginCode,
+        uid: parentUid,
+        role: 'parent',
+        coachUid: decoded.uid,
+        studentUid,
+        parentUid,
+        studentId: studentUid,
+        classLevel,
+        branch,
+        displayName: parentDisplayName,
+        linkedStudentIds: [studentUid]
+      })
+    ]);
+
+    return res.json({
+      student: {
+        uid: studentUid,
+        loginCode: studentLoginCode,
+        displayName: studentName,
+        role: 'student',
+        linkedStudentIds: [studentUid],
+        studentId,
+        branch,
+        classLevel
+      },
+      parent: {
+        uid: parentUid,
+        loginCode: parentLoginCode,
+        displayName: parentDisplayName,
+        role: 'parent',
+        linkedStudentIds: [studentUid],
+        studentId: studentUid,
+        branch,
+        classLevel
+      }
+    });
+  } catch (error) {
+    const status = Number(error && error.status) || 500;
+    const message = error && error.message ? error.message : 'Öğrenci/veli erişim kodları oluşturulamadı.';
+    return res.status(status).json({ error: message });
+  }
+});
+
+app.post('/api/student-access/exchange', async (req, res) => {
+  try {
+    if (!firebaseDb || !firebaseAuth) {
+      return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış.' });
+    }
+
+    const code = normalizeAccessCode(req.body && req.body.code);
+    if (!code) {
+      return res.status(400).json({ error: 'Giriş kodu gerekli.' });
+    }
+
+    const codeHash = hashAccessCode(code);
+    const codeDoc = await firebaseDb.collection('accessCodes').doc(codeHash).get();
+    if (!codeDoc.exists) {
+      return res.status(401).json({ error: 'Kod geçersiz.' });
+    }
+
+    const codeData = codeDoc.data() || {};
+    if (codeData.isActive === false) {
+      return res.status(403).json({ error: 'Kod pasif durumda.' });
+    }
+
+    const uid = String(codeData.uid || '').trim();
+    const role = String(codeData.role || '').trim();
+    if (!uid || !role) {
+      return res.status(500).json({ error: 'Kod kaydı bozuk.' });
+    }
+
+    const customClaims = {
+      role,
+      coachUid: String(codeData.coachUid || ''),
+      studentUid: String(codeData.studentUid || ''),
+      parentUid: String(codeData.parentUid || ''),
+      linkedStudentIds: Array.isArray(codeData.linkedStudentIds) ? codeData.linkedStudentIds : []
+    };
+
+    const token = await firebaseAuth.createCustomToken(uid, customClaims);
+    return res.json({
+      token,
+      uid,
+      role,
+      profile: {
+        displayName: String(codeData.displayName || ''),
+        classLevel: String(codeData.classLevel || ''),
+        branch: String(codeData.branch || ''),
+        linkedStudentIds: customClaims.linkedStudentIds
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Kod doğrulanamadı.' });
+  }
 });

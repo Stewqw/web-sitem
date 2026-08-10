@@ -22,6 +22,8 @@ let currentUserName = null;
 let currentUserBranch = null;
 let currentUserPlan = '';
 let currentUserStudentLimit = null;
+let currentUserCreatedAtIso = '';
+let currentUserUnlimitedAccess = false;
 let savedResourceSuggestions = [];
 let registerFormOpenedAt = Date.now();
 let studentStorageHydrated = false;
@@ -30,6 +32,8 @@ let studentStorageHydratingPromise = null;
 const REGISTER_MIN_SUBMIT_MS = 2500;
 const REGISTER_MAX_TEXT_LEN = 120;
 const GENERATED_LOGIN_DOMAIN = 'parabol.kocluk';
+const EXPLORE_DEMO_DAYS = 3;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 function getFirebaseServices() {
   return window.firebaseServices || null;
@@ -58,15 +62,72 @@ function shouldUseFirestoreForms() {
 }
 
 function isExplorePlan() {
-  return !['mini', 'baslangic', 'profesyonel', 'ekip'].includes(String(currentUserPlan || '').toLocaleLowerCase('tr-TR'));
+  const normalizedPlan = String(currentUserPlan || '').trim().toLocaleLowerCase('tr-TR');
+  if (!normalizedPlan) return false;
+  return ['explore', 'kesfet'].includes(normalizedPlan);
+}
+
+function hasUnlimitedAccess() {
+  return !!currentUserUnlimitedAccess;
+}
+
+function parseDateMs(value) {
+  if (!value) return null;
+  const timestamp = Date.parse(String(value));
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function getExploreDemoAnchorStorageKey() {
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  return `explore_demo_anchor_${email}`;
+}
+
+function getExploreDemoStartMs() {
+  const profileCreatedAtMs = parseDateMs(currentUserCreatedAtIso);
+  if (profileCreatedAtMs) return profileCreatedAtMs;
+  if (!isExplorePlan()) return null;
+
+  const key = getExploreDemoAnchorStorageKey();
+  const storedMs = parseDateMs(localStorage.getItem(key));
+  if (storedMs) return storedMs;
+
+  const nowMs = Date.now();
+  localStorage.setItem(key, new Date(nowMs).toISOString());
+  return nowMs;
+}
+
+function getExploreDemoEndMs() {
+  const startMs = getExploreDemoStartMs();
+  if (!startMs) return null;
+  return startMs + (EXPLORE_DEMO_DAYS * ONE_DAY_MS);
+}
+
+function getExploreDemoDaysLeft() {
+  const endMs = getExploreDemoEndMs();
+  if (!endMs) return 0;
+  const remainingMs = endMs - Date.now();
+  if (remainingMs <= 0) return 0;
+  return Math.ceil(remainingMs / ONE_DAY_MS);
+}
+
+function hasExploreDemoAccess() {
+  if (!isExplorePlan()) return false;
+  const endMs = getExploreDemoEndMs();
+  if (!endMs) return true;
+  return Date.now() < endMs;
+}
+
+function isPlanUpgradeRequired() {
+  if (hasUnlimitedAccess()) return false;
+  return isExplorePlan() && !hasExploreDemoAccess();
 }
 
 function shouldShowDefaultCurriculumContent() {
-  return !isExplorePlan();
+  return !isPlanUpgradeRequired();
 }
 
 function canAddStudent() {
-  return !isExplorePlan() || getStoredOgrenciler().length < Number(currentUserStudentLimit || 1);
+  return !isPlanUpgradeRequired();
 }
 
 let isSignUpSubmitting = false;
@@ -440,7 +501,14 @@ function modalKapat(id) {
 function openPlanUpgradeModal(featureName = 'Bu özellik') {
   const descriptionEl = document.getElementById('planUpgradeDescription');
   if (descriptionEl) {
-    descriptionEl.textContent = `${featureName}, Keşfet modunda görüntülenebilir ancak kullanıma açık değildir. Devam etmek için paketinizi seçin.`;
+    if (isPlanUpgradeRequired()) {
+      descriptionEl.textContent = `${featureName} için demo süreniz doldu. Verileriniz korunuyor; öğrencilerinizle devam etmek için paketinizi seçin.`;
+    } else if (isExplorePlan()) {
+      const daysLeft = getExploreDemoDaysLeft();
+      descriptionEl.textContent = `${featureName}, demo süresinde kullanılabilir. Demo sonunda (${daysLeft} gün kaldı) öğrencilerinizle devam etmek için paketinizi seçmeniz gerekir.`;
+    } else {
+      descriptionEl.textContent = `${featureName} için paket yükseltmesi gerekiyor.`;
+    }
   }
   modalAc('planUpgradeModal');
 }
@@ -452,7 +520,7 @@ function openPlanPricingFromDashboard() {
 }
 
 function requirePaidPlan(featureName) {
-  if (!isExplorePlan()) return true;
+  if (!isPlanUpgradeRequired()) return true;
   openPlanUpgradeModal(featureName);
   return false;
 }
@@ -1071,6 +1139,8 @@ async function paneleGirisYap(nereden) {
       currentUserBranch = session && session.branch ? session.branch : currentUserBranch;
       currentUserPlan = session && session.plan ? session.plan : '';
       currentUserStudentLimit = session && typeof session.studentLimit === 'number' ? session.studentLimit : null;
+      currentUserCreatedAtIso = session && session.createdAtIso ? session.createdAtIso : '';
+      currentUserUnlimitedAccess = !!(session && session.isUnlimitedAccess);
       loadSavedResourceSuggestions();
       await syncStudentStorageFromCloud();
       await syncWorkspaceSettingsFromCloud();
@@ -1117,6 +1187,10 @@ async function paneleGirisYap(nereden) {
     currentUserEmail = userEmail;
     currentUserName = data.user && data.user.name ? data.user.name : currentUserName;
     currentUserBranch = data.user && data.user.branch ? data.user.branch : currentUserBranch;
+    currentUserPlan = data.user && data.user.plan ? data.user.plan : '';
+    currentUserStudentLimit = data.user && typeof data.user.studentLimit === 'number' ? data.user.studentLimit : null;
+    currentUserCreatedAtIso = data.user && data.user.createdAtIso ? data.user.createdAtIso : '';
+    currentUserUnlimitedAccess = !!(data.user && data.user.isUnlimitedAccess);
     loadSavedResourceSuggestions();
     await syncStudentStorageFromCloud();
     await syncWorkspaceSettingsFromCloud();
@@ -1162,6 +1236,8 @@ async function attemptAutoLogin() {
         currentUserBranch = session.branch || currentUserBranch;
         currentUserPlan = session.plan || '';
         currentUserStudentLimit = typeof session.studentLimit === 'number' ? session.studentLimit : null;
+        currentUserCreatedAtIso = session.createdAtIso || '';
+        currentUserUnlimitedAccess = !!session.isUnlimitedAccess;
         loadSavedResourceSuggestions();
         await syncStudentStorageFromCloud();
         await syncWorkspaceSettingsFromCloud();
@@ -1199,6 +1275,10 @@ async function attemptAutoLogin() {
         currentUserEmail = email;
         currentUserName = data.user.name || currentUserName;
         currentUserBranch = data.user.branch || currentUserBranch;
+        currentUserPlan = data.user.plan || '';
+        currentUserStudentLimit = typeof data.user.studentLimit === 'number' ? data.user.studentLimit : null;
+        currentUserCreatedAtIso = data.user.createdAtIso || '';
+        currentUserUnlimitedAccess = !!data.user.isUnlimitedAccess;
         loadSavedResourceSuggestions();
         await syncStudentStorageFromCloud();
         await syncWorkspaceSettingsFromCloud();
@@ -2632,6 +2712,8 @@ async function cikisYap() {
   currentUserBranch = null;
   currentUserPlan = '';
   currentUserStudentLimit = null;
+  currentUserCreatedAtIso = '';
+  currentUserUnlimitedAccess = false;
   ekranıGoster('promoPage');
   updatePageHistory('promoPage', 'replace');
 }
@@ -4435,7 +4517,7 @@ function renderStudentAccessCredentials(student) {
   const parentCodeEl = document.getElementById('parentAccessCode');
   const createBtn = document.getElementById('studentAccessCreateBtn');
 
-  if (isExplorePlan()) {
+  if (isPlanUpgradeRequired()) {
     if (studentCodeEl) studentCodeEl.value = '';
     if (parentCodeEl) parentCodeEl.value = '';
     if (createBtn) createBtn.style.display = 'inline-flex';
@@ -4507,7 +4589,8 @@ async function createStudentAccessCredentials(studentId) {
 
   try {
     const result = await services.provisionStudentAccounts({
-      studentId: String(student.firebaseUid || student.id),
+      studentId: String(student.id),
+      studentUid: String(student.firebaseUid || '').trim(),
       studentName: student.name || '',
       branch: currentUserBranch || '',
       classLevel: student.classLevel || '',
@@ -4530,7 +4613,11 @@ async function createStudentAccessCredentials(studentId) {
   } catch (error) {
     console.error('Öğrenci ve veli giriş kodları oluşturulamadı:', error);
     const errorCode = error && (error.code || error.message) ? String(error.code || error.message) : 'BILINMEYEN_HATA';
-    alert(`${getFirebaseAuthErrorMessage(error, 'Giriş kodları oluşturulamadı. Firebase bağlantısını ve ayarlarını kontrol edip tekrar deneyin.')}\n\nHata kodu: ${errorCode}`);
+    const networkError = errorCode.toLocaleLowerCase('tr-TR').includes('failed to fetch') || errorCode.toLocaleLowerCase('tr-TR').includes('networkerror');
+    const fallbackMessage = networkError
+      ? 'Giriş kodları oluşturulamadı. Sunucuya bağlanılamadı. Backend servisinin çalıştığını ve http://127.0.0.1:3000 adresine erişilebildiğini kontrol edin.'
+      : 'Giriş kodları oluşturulamadı. Firebase bağlantısını ve ayarlarını kontrol edip tekrar deneyin.';
+    alert(`${getFirebaseAuthErrorMessage(error, fallbackMessage)}\n\nHata kodu: ${errorCode}`);
   } finally {
     setSubmitButtonLoading(createButton, false);
   }
