@@ -168,6 +168,20 @@
     return role === "admin" || role === "owner";
   }
 
+  function resolveProfileDemoFlag(profile) {
+    if (!profile || typeof profile !== "object") return false;
+    if (typeof profile.isDemoAccount === "boolean") return profile.isDemoAccount;
+    if (typeof profile.isDemo === "boolean") return profile.isDemo;
+    if (typeof profile.demo === "boolean") return profile.demo;
+    if (typeof profile.isExploreDemo === "boolean") return profile.isExploreDemo;
+    return false;
+  }
+
+  function isExplorePlanValue(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    return normalized === "explore" || normalized === "kesfet";
+  }
+
   function getStudentCollection(uid) {
     return db.collection("users").doc(uid).collection("students");
   }
@@ -385,6 +399,7 @@
       branch: payload.branch || "",
       role: "coach",
       plan: "explore",
+      isDemoAccount: true,
       studentLimit: 1,
       createdAtIso: nowIso,
       updatedAtIso: nowIso
@@ -517,7 +532,8 @@
     }
 
     const role = profile && profile.role ? String(profile.role) : "";
-    const requiresVerification = role !== "student" && role !== "parent";
+    const isStudentOrParent = role === "student" || role === "parent";
+    const requiresVerification = !isStudentOrParent;
 
     if (requiresVerification && !credential.user.emailVerified) {
       try {
@@ -537,17 +553,24 @@
       throw err;
     }
 
+    const resolvedPlan = (profile && profile.plan) || (isStudentOrParent ? "" : "explore");
+    const resolvedStudentLimit = profile && typeof profile.studentLimit === "number"
+      ? profile.studentLimit
+      : (isExplorePlanValue(resolvedPlan) ? 1 : null);
+    const isDemoAccount = resolveProfileDemoFlag(profile);
+
     return {
       uid: credential.user.uid,
       email: credential.user.email || email,
       name: (profile && (profile.displayName || profile.name)) || credential.user.displayName || "Kullanici",
       branch: (profile && profile.branch) || "",
       role,
-      plan: (profile && profile.plan) || "",
-      studentLimit: profile && typeof profile.studentLimit === "number" ? profile.studentLimit : null,
+      plan: resolvedPlan,
+      studentLimit: resolvedStudentLimit,
       createdAtIso: resolveProfileCreatedAtIso(profile),
       isUnlimitedAccess: hasProfileUnlimitedAccess(profile, role),
       linkedStudentIds: (profile && profile.linkedStudentIds) || [],
+      isDemoAccount,
     };
   };
 
@@ -643,16 +666,24 @@
     }
 
     const profile = await getProfileByUid(user.uid);
+    const role = profile && profile.role ? String(profile.role) : "";
+    const isStudentOrParent = role === "student" || role === "parent";
+    const resolvedPlan = (profile && profile.plan) || (isStudentOrParent ? "" : "explore");
+    const resolvedStudentLimit = profile && typeof profile.studentLimit === "number"
+      ? profile.studentLimit
+      : (isExplorePlanValue(resolvedPlan) ? 1 : null);
+    const isDemoAccount = resolveProfileDemoFlag(profile);
 
     return {
       uid: user.uid,
       email: user.email || "",
       name: (profile && profile.name) || user.displayName || "Kullanici",
       branch: (profile && profile.branch) || "",
-      plan: (profile && profile.plan) || "",
-      studentLimit: profile && typeof profile.studentLimit === "number" ? profile.studentLimit : null,
+      plan: resolvedPlan,
+      studentLimit: resolvedStudentLimit,
       createdAtIso: resolveProfileCreatedAtIso(profile),
-      isUnlimitedAccess: hasProfileUnlimitedAccess(profile, String((profile && profile.role) || ""))
+      isUnlimitedAccess: hasProfileUnlimitedAccess(profile, role),
+      isDemoAccount
     };
   };
 

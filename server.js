@@ -439,6 +439,7 @@ app.post('/api/register', registerRateLimiter, async (req, res) => {
       branch: String(branch || '').trim(),
       isAdmin: false,
       plan: 'explore',
+      isDemoAccount: true,
       studentLimit: 1,
       createdAtIso
     };
@@ -479,6 +480,7 @@ app.post('/api/login', loginRateLimiter, loginIdentityRateLimiter, async (req, r
         phone: user.phone,
         branch: user.branch || '',
         plan: user.plan || '',
+        isDemoAccount: user.isDemoAccount === true,
         studentLimit,
         createdAtIso,
         isUnlimitedAccess
@@ -617,6 +619,7 @@ app.get('/api/me', (req, res) => {
         branch: user.branch || '',
         isAdmin: !!user.isAdmin,
         plan: user.plan || '',
+        isDemoAccount: user.isDemoAccount === true,
         studentLimit,
         createdAtIso,
         isUnlimitedAccess

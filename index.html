@@ -2202,9 +2202,9 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="planUpgradeModal" style="display:none;" onclick="if(event.target === this) modalKapat('planUpgradeModal')">
+  <div class="modal-overlay" id="planUpgradeModal" style="display:none;" onclick="if(event.target === this) closePlanUpgradeModal()">
     <div class="modal-card" style="max-width:720px;">
-      <button class="modal-close" onclick="modalKapat('planUpgradeModal')">✕</button>
+      <button id="planUpgradeCloseBtn" class="modal-close" onclick="closePlanUpgradeModal()">✕</button>
       <h3 style="margin:0; color:var(--color-dark-teal);">Paketi Seçerek Devam Edin</h3>
       <p id="planUpgradeDescription" style="margin:10px 0 0; color:#64748b; font-size:0.9rem; line-height:1.55;">Bu özellik Keşfet modunda kullanıma açık değildir.</p>
       <div class="plan-upgrade-grid">
@@ -2225,7 +2225,7 @@
         </div>
       </div>
       <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:18px; flex-wrap:wrap;">
-        <button type="button" class="btn-nav-outline" onclick="modalKapat('planUpgradeModal')">Daha Sonra</button>
+        <button id="planUpgradeLaterBtn" type="button" class="btn-nav-outline" onclick="closePlanUpgradeModal()">Daha Sonra</button>
         <button type="button" class="btn-action btn-coral" style="padding:10px 18px;" onclick="openPlanPricingFromDashboard()">Paketleri İncele</button>
       </div>
     </div>
@@ -2350,6 +2350,7 @@
               <span class="welcome-user-branch" id="kokpitWelcomeBranch">Branş seçilmedi</span>
               <span class="welcome-user-email" id="kokpitWelcomeEmail">E-posta yok</span>
             </div>
+            <p id="kokpitDemoStatus" style="display:none; margin:8px 0 0; padding:8px 10px; border-radius:10px; background:#ecfeff; border:1px solid #a5f3fc; color:#0f766e; font-size:0.82rem; font-weight:700;"></p>
             <p id="dateBox"></p>
           </div>
           <div class="header-badges">
@@ -3650,6 +3651,17 @@
       <div id="quickStartSteps" class="quick-start-steps"></div>
       <div style="display:flex; justify-content:flex-end; margin-top:16px;">
         <button type="button" class="btn-nav-outline" onclick="closeQuickStart()">Daha sonra</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="exploreDemoNoticeModal" style="display:none;" onclick="if(event.target === this) closeExploreDemoNoticeModal()">
+    <div class="modal-card" style="max-width:560px; border-color:#d9c7a3;">
+      <button type="button" class="modal-close" onclick="closeExploreDemoNoticeModal()" aria-label="Kapat">x</button>
+      <h3 style="margin:0; color:var(--color-dark-teal);">Keşfet Demo Bilgisi</h3>
+      <p id="exploreDemoNoticeMessage" style="margin:10px 0 0; color:#475569; line-height:1.6;"></p>
+      <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+        <button type="button" class="btn-action btn-coral" onclick="closeExploreDemoNoticeModal()">Anladım</button>
       </div>
     </div>
   </div>

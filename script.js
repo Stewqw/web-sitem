@@ -32,8 +32,11 @@ let currentUserPlan = '';
 let currentUserStudentLimit = null;
 let currentUserCreatedAtIso = '';
 let currentUserUnlimitedAccess = false;
+let currentUserIsDemoAccount = null;
 let pendingStudentDeleteId = null;
 let pendingStudentDeleteStep = 1;
+let hasShownExploreDemoNotice = false;
+let pendingQuickStartAfterDemoNotice = false;
 let savedResourceSuggestions = [];
 let registerFormOpenedAt = Date.now();
 let studentStorageHydrated = false;
@@ -43,6 +46,7 @@ const REGISTER_MIN_SUBMIT_MS = 2500;
 const REGISTER_MAX_TEXT_LEN = 120;
 const GENERATED_LOGIN_DOMAIN = 'parabol.kocluk';
 const EXPLORE_DEMO_DAYS = 3;
+const EXPLORE_DEMO_STUDENT_LIMIT = 3;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const STUDENT_ACCESS_RETRY_DELAY_MS = 12000;
 
@@ -99,6 +103,19 @@ function isExplorePlan() {
   return ['explore', 'kesfet'].includes(normalizedPlan);
 }
 
+function resolveUserDemoFlag(userData) {
+  if (!userData || typeof userData !== 'object') return null;
+  if (typeof userData.isDemoAccount === 'boolean') return userData.isDemoAccount;
+  if (typeof userData.isDemo === 'boolean') return userData.isDemo;
+  if (typeof userData.demo === 'boolean') return userData.demo;
+  if (typeof userData.isExploreDemo === 'boolean') return userData.isExploreDemo;
+  return null;
+}
+
+function isExploreDemoAccount() {
+  return currentUserIsDemoAccount === true;
+}
+
 function hasUnlimitedAccess() {
   return !!currentUserUnlimitedAccess;
 }
@@ -117,7 +134,7 @@ function getExploreDemoAnchorStorageKey() {
 function getExploreDemoStartMs() {
   const profileCreatedAtMs = parseDateMs(currentUserCreatedAtIso);
   if (profileCreatedAtMs) return profileCreatedAtMs;
-  if (!isExplorePlan()) return null;
+  if (!isExploreDemoAccount()) return null;
 
   const key = getExploreDemoAnchorStorageKey();
   const storedMs = parseDateMs(localStorage.getItem(key));
@@ -143,7 +160,7 @@ function getExploreDemoDaysLeft() {
 }
 
 function hasExploreDemoAccess() {
-  if (!isExplorePlan()) return false;
+  if (!isExploreDemoAccount()) return false;
   const endMs = getExploreDemoEndMs();
   if (!endMs) return true;
   return Date.now() < endMs;
@@ -151,7 +168,7 @@ function hasExploreDemoAccess() {
 
 function isPlanUpgradeRequired() {
   if (hasUnlimitedAccess()) return false;
-  return isExplorePlan() && !hasExploreDemoAccess();
+  return isExploreDemoAccount() && !hasExploreDemoAccess();
 }
 
 function shouldShowDefaultCurriculumContent() {
@@ -159,7 +176,59 @@ function shouldShowDefaultCurriculumContent() {
 }
 
 function canAddStudent() {
-  return !isPlanUpgradeRequired();
+  return canAddStudentsByCount(1);
+}
+
+function getActiveStudentLimit() {
+  if (isPlanUpgradeRequired()) return 0;
+  if (hasUnlimitedAccess()) return Infinity;
+  if (isExploreDemoAccount() && hasExploreDemoAccess()) return EXPLORE_DEMO_STUDENT_LIMIT;
+  return Infinity;
+}
+
+function getRemainingStudentSlots() {
+  const limit = getActiveStudentLimit();
+  if (limit === Infinity) return Infinity;
+  const students = getStoredOgrenciler();
+  return Math.max(0, limit - students.length);
+}
+
+function canAddStudentsByCount(count) {
+  const nextCount = Number.isFinite(Number(count)) ? Math.max(1, Number(count)) : 1;
+  const remaining = getRemainingStudentSlots();
+  if (remaining === Infinity) return true;
+  return remaining >= nextCount;
+}
+
+function shouldShowExploreDemoNotice() {
+  return isExploreDemoAccount() && hasExploreDemoAccess();
+}
+
+function openExploreDemoNoticeModal() {
+  const modal = document.getElementById('exploreDemoNoticeModal');
+  const messageEl = document.getElementById('exploreDemoNoticeMessage');
+  if (!modal || !messageEl) return;
+
+  const daysLeft = getExploreDemoDaysLeft();
+  const demoLabel = daysLeft > 1 ? `${daysLeft} gün` : 'son gün';
+  messageEl.textContent = `Keşfet demo süreniz aktif. ${demoLabel} boyunca tüm temel özellikleri deneyebilirsiniz. Süre sonunda öğrencilerinizle devam etmek için paket seçmeniz gerekir.`;
+  modal.style.display = 'flex';
+}
+
+function closeExploreDemoNoticeModal() {
+  modalKapat('exploreDemoNoticeModal');
+  if (pendingQuickStartAfterDemoNotice) {
+    pendingQuickStartAfterDemoNotice = false;
+    showQuickStartOnFirstVisit();
+  }
+}
+
+function showExploreDemoNoticeIfNeeded() {
+  if (hasShownExploreDemoNotice) return false;
+  if (!shouldShowExploreDemoNotice()) return false;
+  hasShownExploreDemoNotice = true;
+  window.setTimeout(openExploreDemoNoticeModal, 180);
+  return true;
 }
 
 let isSignUpSubmitting = false;
@@ -530,10 +599,22 @@ function modalKapat(id) {
   document.getElementById(id).style.display = 'none';
 }
 
+function closePlanUpgradeModal() {
+  if (isPlanUpgradeRequired()) return;
+  modalKapat('planUpgradeModal');
+}
+
 function openPlanUpgradeModal(featureName = 'Bu özellik') {
   const descriptionEl = document.getElementById('planUpgradeDescription');
+  const closeBtn = document.getElementById('planUpgradeCloseBtn');
+  const laterBtn = document.getElementById('planUpgradeLaterBtn');
+  const locked = isPlanUpgradeRequired();
+
+  if (closeBtn) closeBtn.style.display = locked ? 'none' : 'inline-flex';
+  if (laterBtn) laterBtn.style.display = locked ? 'none' : 'inline-flex';
+
   if (descriptionEl) {
-    if (isPlanUpgradeRequired()) {
+    if (locked) {
       descriptionEl.textContent = `${featureName} için demo süreniz doldu. Verileriniz korunuyor; öğrencilerinizle devam etmek için paketinizi seçin.`;
     } else if (isExplorePlan()) {
       const daysLeft = getExploreDemoDaysLeft();
@@ -1173,6 +1254,7 @@ async function paneleGirisYap(nereden) {
       currentUserStudentLimit = session && typeof session.studentLimit === 'number' ? session.studentLimit : null;
       currentUserCreatedAtIso = session && session.createdAtIso ? session.createdAtIso : '';
       currentUserUnlimitedAccess = !!(session && session.isUnlimitedAccess);
+      currentUserIsDemoAccount = resolveUserDemoFlag(session);
       loadSavedResourceSuggestions();
       await syncStudentStorageFromCloud();
       await syncWorkspaceSettingsFromCloud();
@@ -1223,6 +1305,7 @@ async function paneleGirisYap(nereden) {
     currentUserStudentLimit = data.user && typeof data.user.studentLimit === 'number' ? data.user.studentLimit : null;
     currentUserCreatedAtIso = data.user && data.user.createdAtIso ? data.user.createdAtIso : '';
     currentUserUnlimitedAccess = !!(data.user && data.user.isUnlimitedAccess);
+    currentUserIsDemoAccount = resolveUserDemoFlag(data.user);
     loadSavedResourceSuggestions();
     await syncStudentStorageFromCloud();
     await syncWorkspaceSettingsFromCloud();
@@ -1270,6 +1353,7 @@ async function attemptAutoLogin() {
         currentUserStudentLimit = typeof session.studentLimit === 'number' ? session.studentLimit : null;
         currentUserCreatedAtIso = session.createdAtIso || '';
         currentUserUnlimitedAccess = !!session.isUnlimitedAccess;
+        currentUserIsDemoAccount = resolveUserDemoFlag(session);
         loadSavedResourceSuggestions();
         await syncStudentStorageFromCloud();
         await syncWorkspaceSettingsFromCloud();
@@ -1311,6 +1395,7 @@ async function attemptAutoLogin() {
         currentUserStudentLimit = typeof data.user.studentLimit === 'number' ? data.user.studentLimit : null;
         currentUserCreatedAtIso = data.user.createdAtIso || '';
         currentUserUnlimitedAccess = !!data.user.isUnlimitedAccess;
+        currentUserIsDemoAccount = resolveUserDemoFlag(data.user);
         loadSavedResourceSuggestions();
         await syncStudentStorageFromCloud();
         await syncWorkspaceSettingsFromCloud();
@@ -1347,6 +1432,11 @@ function restoreLastDashboardSection() {
 }
 
 function sekmeAcs(sekmeAd) {
+  if (isPlanUpgradeRequired() && sekmeAd !== 'kokpit') {
+    openPlanUpgradeModal('Bu alana erişim');
+    return;
+  }
+
   document.getElementById('tabKokpit').style.display = 'none';
   document.getElementById('tabOgrenci').style.display = 'none';
   const raporlamaEl = document.getElementById('tabRaporlama');
@@ -2746,6 +2836,9 @@ async function cikisYap() {
   currentUserStudentLimit = null;
   currentUserCreatedAtIso = '';
   currentUserUnlimitedAccess = false;
+  currentUserIsDemoAccount = null;
+  hasShownExploreDemoNotice = false;
+  pendingQuickStartAfterDemoNotice = false;
   ekranıGoster('promoPage');
   updatePageHistory('promoPage', 'replace');
 }
@@ -2754,6 +2847,7 @@ function renderKokpitUserCard() {
   const nameEl = document.getElementById('kokpitWelcomeName');
   const emailEl = document.getElementById('kokpitWelcomeEmail');
   const branchEl = document.getElementById('kokpitWelcomeBranch');
+  const demoStatusEl = document.getElementById('kokpitDemoStatus');
   if (!nameEl || !emailEl || !branchEl) return;
 
   const name = currentUserName || 'Kullanıcı Adı';
@@ -2763,6 +2857,28 @@ function renderKokpitUserCard() {
   nameEl.textContent = name;
   emailEl.textContent = email;
   branchEl.textContent = branch;
+
+  if (demoStatusEl) {
+    if (isExploreDemoAccount()) {
+      if (hasExploreDemoAccess()) {
+        const daysLeft = getExploreDemoDaysLeft();
+        const dayLabel = daysLeft > 1 ? `${daysLeft} gün` : 'son gün';
+        demoStatusEl.textContent = `Şu an Keşfet demo hesabı kullanıyorsunuz. Demo bitimine ${dayLabel} kaldı.`;
+        demoStatusEl.style.display = 'block';
+      } else {
+        demoStatusEl.textContent = 'Keşfet demo süreniz doldu. Öğrencilerinizle devam etmek için paket seçmeniz gerekiyor.';
+        demoStatusEl.style.display = 'block';
+      }
+    } else {
+      demoStatusEl.style.display = 'none';
+      demoStatusEl.textContent = '';
+    }
+  }
+
+  if (isPlanUpgradeRequired()) {
+    openPlanUpgradeModal('Panel erişimi');
+  }
+
   loadKokpitNotebookNotes();
   renderKokpitTodoDate();
   loadKokpitAgendaEvents();
@@ -2770,6 +2886,10 @@ function renderKokpitUserCard() {
   loadKokpitCardCollapsePreferences();
   renderKokpitAgenda();
   renderQuickStart();
+  if (showExploreDemoNoticeIfNeeded()) {
+    pendingQuickStartAfterDemoNotice = true;
+    return;
+  }
   showQuickStartOnFirstVisit();
 }
 
@@ -4512,6 +4632,11 @@ function closeUsersModal() {
 
 function ogrenciEkle() {
   if (!canAddStudent()) {
+    if (!isPlanUpgradeRequired()) {
+      openPlanUpgradeModal('Öğrenci ekleme limiti');
+      alert(`Demo hesapta en fazla ${EXPLORE_DEMO_STUDENT_LIMIT} öğrenci ekleyebilirsiniz.`);
+      return;
+    }
     openPlanUpgradeModal('Birden fazla öğrenci ekleme');
     return;
   }
@@ -8955,11 +9080,19 @@ function ogrencileriYukle() {
     return;
   }
 
+  if (isPlanUpgradeRequired()) {
+    openPlanUpgradeModal('Öğrenci ekleme limiti');
+    return;
+  }
+
   const lines = value.split(/\r?\n/).map(l => l.trim()).filter(l => l);
   const students = getStoredOgrenciler();
+  const remainingSlots = getRemainingStudentSlots();
+  const linesToProcess = remainingSlots === Infinity ? lines : lines.slice(0, remainingSlots);
+  const skippedCount = lines.length - linesToProcess.length;
   let added = 0;
 
-  lines.forEach(line => {
+  linesToProcess.forEach(line => {
     const parts = line.split(',').map(p => p.trim());
     if (!parts[0]) return;
     const [name, email, password, phone] = parts;
@@ -8980,8 +9113,16 @@ function ogrencileriYukle() {
 
   setStoredOgrenciler(students);
   renderStoredOgrenciler();
+  updateUserCountLabel();
   textarea.value = '';
   modalKapat('topluEkleModal');
+
+  if (skippedCount > 0) {
+    alert(`${added} öğrenci eklendi. Demo limiti nedeniyle ${skippedCount} satır eklenmedi (maksimum ${EXPLORE_DEMO_STUDENT_LIMIT} öğrenci).`);
+    openPlanUpgradeModal('Öğrenci ekleme limiti');
+    return;
+  }
+
   alert(added + ' öğrenci eklendi.');
 }
 
