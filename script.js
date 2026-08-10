@@ -1,4 +1,4 @@
-function resolveApiBaseUrl() {
+﻿function resolveApiBaseUrl() {
   const defaultProductionApiUrl = 'https://parabol-kocluk-api.onrender.com';
   const runtimeOverride = String(window.__KOCLUK_API_BASE_URL__ || localStorage.getItem('koclukApiBaseUrl') || '').trim();
   if (runtimeOverride) return runtimeOverride.replace(/\/$/, '');
@@ -128,7 +128,7 @@ function parseDateMs(value) {
 }
 
 function getExploreDemoAnchorStorageKey() {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = getStorageOwnerEmail();
   return `explore_demo_anchor_${email}`;
 }
 
@@ -363,7 +363,7 @@ function compareClassLevels(leftValue, rightValue) {
 }
 
 function getCustomClassStorageKey() {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = getStorageOwnerEmail();
   return `custom_class_levels_${email}`;
 }
 
@@ -1428,7 +1428,7 @@ async function attemptAutoLogin() {
 const SAVED_DASHBOARD_SECTIONS = new Set(['kokpit', 'ogrenci', 'raporlama', 'yazili-hazirlama', 'muhasebe', 'kaynak', 'unite-konu']);
 
 function getDashboardSectionStorageKey() {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = getStorageOwnerEmail();
   return `last_dashboard_section_${email}`;
 }
 
@@ -1691,7 +1691,7 @@ function getTodayTrDate() {
 }
 
 function getBransExamStorageKey() {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = getStorageOwnerEmail();
   const studentKey = activeStudentId ? String(activeStudentId) : 'none';
   return `brans_exam_${email}_${studentKey}`;
 }
@@ -2329,7 +2329,7 @@ function kaydetBransDenemesi() {
 const GENEL_LESSON_KEYS = ['Mat', 'Fen', 'Tur', 'Ink', 'Ing', 'Din'];
 
 function getGenelExamStorageKey() {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = getStorageOwnerEmail();
   const studentKey = activeStudentId ? String(activeStudentId) : 'none';
   return `genel_exam_${email}_${studentKey}`;
 }
@@ -2900,7 +2900,7 @@ function renderKokpitUserCard() {
 }
 
 function getQuickStartStorageKey() {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = getStorageOwnerEmail();
   return `quick_start_completed_${email}`;
 }
 
@@ -4052,7 +4052,10 @@ document.addEventListener('DOMContentLoaded', () => {
     populateClassSelect(document.getElementById('editStudentClass'), document.getElementById('editStudentClass')?.value || '8');
     refreshCustomClassNavigation();
     if (!auto) {
-      const initialPage = currentPageFromHash();
+      let initialPage = currentPageFromHash();
+      if (initialPage === 'dashboardApp') {
+        initialPage = 'promoPage';
+      }
       ekranıGoster(initialPage);
       if (initialPage === 'promoPage') {
         updatePageHistory('promoPage', 'replace');
@@ -4114,7 +4117,7 @@ let kokpitAgendaDragScale = 1;
 let kokpitAgendaResizeSession = null;
 
 function getKokpitNotebookStorageKey() {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = getStorageOwnerEmail();
   return `kokpit_notebook_${email}`;
 }
 
@@ -4190,17 +4193,17 @@ function onKokpitNotebookInput() {
 }
 
 function getKokpitAgendaStorageKey() {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = getStorageOwnerEmail();
   return `kokpit_agenda_${email}`;
 }
 
 function getKokpitAgendaDragScaleStorageKey() {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = getStorageOwnerEmail();
   return `kokpit_agenda_drag_scale_${email}`;
 }
 
 function getKokpitCardCollapseStorageKey() {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = getStorageOwnerEmail();
   return `kokpit_card_collapse_${email}`;
 }
 
@@ -5133,7 +5136,7 @@ let kaynakIlerlemeState = {
 const KAYNAK_DURUM_OPTIONS = ['Konu Bitti', 'Çalışıyor', 'Konu Anlaşılmadı', 'Daha Sonra Yapılacak', 'Konuya Gelinmedi'];
 
 function getKaynakIlerlemeStorageKey(lesson) {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = getStorageOwnerEmail();
   const studentKey = activeStudentId ? String(activeStudentId) : 'none';
   return `kaynak_ilerleme_${email}_${studentKey}_${lesson || 'none'}`;
 }
@@ -7278,7 +7281,7 @@ let customUnitTopicCache = null;
 let customUnitTopicCacheKey = '';
 
 function getUnitTopicStorageKey() {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = getStorageOwnerEmail();
   return `unit_topic_overrides_${email}`;
 }
 
@@ -8096,8 +8099,7 @@ function saveTaskFromModal() {
 }
 
 function getUserStorageKey() {
-  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail');
-  return email ? `ogrenciler_${email}` : 'ogrenciler_default';
+  return `ogrenciler_${getStorageOwnerEmail()}`;
 }
 
 function readLocalStudentRecords() {
@@ -8390,7 +8392,15 @@ function setStoredOgrenciler(students) {
 }
 
 function getStorageOwnerEmail() {
-  return currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || 'default';
+  const email = currentUserEmail || localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail');
+  if (email) return email;
+
+  let anonymousOwnerKey = sessionStorage.getItem('koclukAnonymousOwnerKey');
+  if (!anonymousOwnerKey) {
+    anonymousOwnerKey = `anon_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    sessionStorage.setItem('koclukAnonymousOwnerKey', anonymousOwnerKey);
+  }
+  return anonymousOwnerKey;
 }
 
 function safeJsonParse(value, fallbackValue) {
