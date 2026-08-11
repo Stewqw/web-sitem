@@ -8865,8 +8865,9 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     acc.question += Number(item?.questionCount || 0);
     acc.correct += Number(item?.correct || 0);
     acc.wrong += Number(item?.wrong || 0);
+    acc.blank += Number(item?.blank || 0);
     return acc;
-  }, { question: 0, correct: 0, wrong: 0 });
+  }, { question: 0, correct: 0, wrong: 0, blank: 0 });
 
   const filteredGenelSummary = filteredGenelRecords.reduce((acc, item) => {
     const lessons = item?.lessons || {};
@@ -8874,14 +8875,16 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
       acc.question += Number(lesson?.q || 0);
       acc.correct += Number(lesson?.d || 0);
       acc.wrong += Number(lesson?.y || 0);
+      acc.blank += Number(lesson?.b || 0);
     });
     return acc;
-  }, { question: 0, correct: 0, wrong: 0 });
+  }, { question: 0, correct: 0, wrong: 0, blank: 0 });
 
   const filteredOverallQuestionSummary = {
     question: filteredSolvedSummary.question + filteredBransSummary.question + filteredGenelSummary.question,
     correct: filteredSolvedSummary.correct + filteredBransSummary.correct + filteredGenelSummary.correct,
-    wrong: filteredSolvedSummary.wrong + filteredBransSummary.wrong + filteredGenelSummary.wrong
+    wrong: filteredSolvedSummary.wrong + filteredBransSummary.wrong + filteredGenelSummary.wrong,
+    blank: filteredSolvedSummary.blank + filteredBransSummary.blank + filteredGenelSummary.blank
   };
 
   const filteredKaynakSummary = filteredKonuDetails.reduce((acc, item) => {
@@ -9145,12 +9148,26 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
   doc.text(pdfSafeText(reportTitle), margin + 92, y + 26);
   doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
   doc.setFontSize(11);
-  doc.text(pdfSafeText(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`), margin + 92, y + 46);
-  doc.text(pdfSafeText(`Öğrenci: ${student.name || '-'}`), pageWidth - 240, y + 46);
+  const reportDateText = `Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`;
+  const reportDateX = margin + 92;
+  const reportDateY = y + 46;
+  const studentX = pageWidth - 240;
+
+  doc.text(pdfSafeText(reportDateText), reportDateX, reportDateY);
+
   if (!dateFilter || !dateFilter.allTime) {
-    doc.text(pdfSafeText(`Tarih Aralığı: ${formatExamDate(dateFilter.startDate)} - ${formatExamDate(dateFilter.endDate)}`), margin + 92, y + 62);
+    const rangeText = ` - Dönem: ${formatExamDate(dateFilter.startDate)} - ${formatExamDate(dateFilter.endDate)}`;
+    const rangeX = reportDateX + doc.getTextWidth(pdfSafeText(reportDateText)) + 6;
+    const maxRangeWidth = Math.max(70, studentX - rangeX - 10);
+    const rangeLines = doc.splitTextToSize(pdfSafeText(rangeText), maxRangeWidth);
+    const rangeLine = rangeLines.length > 0 ? rangeLines[0] : '';
+    doc.setFontSize(10);
+    doc.text(rangeLine, rangeX, reportDateY);
+    doc.setFontSize(11);
   }
-  y += (!dateFilter || !dateFilter.allTime) ? 96 : 84;
+
+  doc.text(pdfSafeText(`Öğrenci: ${student.name || '-'}`), studentX, reportDateY);
+  y += 84;
 
   if (isGeneralOnly) {
     const totalNet = filteredGenelRecords.reduce((sum, item) => sum + Number(item.totalNet || 0), 0).toFixed(2);
@@ -9370,28 +9387,55 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     { label: 'BİTİRİLEN KAYNAK', value: filteredKaynakSummary.finishedResourceCount }
   ]);
 
-  const bransRows = filteredBransRecords.map((item) => ({
-    examDate: formatExamDate(item.examDate || ''),
-    examName: item.examName || 'Brans Denemesi',
-    lesson: item.lesson || '-',
-    unit: item.unit || '-',
-    questionCount: Number(item.questionCount || 0),
-    correct: Number(item.correct || 0),
-    wrong: Number(item.wrong || 0),
-    blank: Number(item.blank || 0),
-    net: Number(item.net || 0).toFixed(2)
-  }));
+  const bransByLesson = new Map();
+  filteredBransRecords.forEach((item) => {
+    const lesson = String(item.lesson || '-').trim() || '-';
+    if (!bransByLesson.has(lesson)) {
+      bransByLesson.set(lesson, {
+        lesson,
+        examCount: 0,
+        unitSet: new Set(),
+        totalQuestion: 0,
+        totalCorrect: 0,
+        totalWrong: 0,
+        totalBlank: 0,
+        totalNet: 0
+      });
+    }
 
-  drawTable('2. BRANŞ DENEMELERİ', [
-    { key: 'examDate', label: 'TARİH', width: 74, align: 'center' },
-    { key: 'examName', label: 'DENEME ADI', width: 220, align: 'left', maxLines: 2 },
-    { key: 'lesson', label: 'DERS ADI', width: 100, align: 'left' },
-    { key: 'unit', label: 'KONU / ÜNİTE', width: 120, align: 'left', maxLines: 2 },
-    { key: 'questionCount', label: 'SORU SAYISI', width: 62, align: 'center' },
-    { key: 'correct', label: 'DOĞRU', width: 48, align: 'center' },
-    { key: 'wrong', label: 'YANLIŞ', width: 48, align: 'center' },
-    { key: 'blank', label: 'BOŞ', width: 48, align: 'center' },
-    { key: 'net', label: 'NET', width: 58, align: 'center' }
+    const target = bransByLesson.get(lesson);
+    target.examCount += 1;
+    const unit = String(item.unit || '').trim();
+    if (unit) target.unitSet.add(unit.toLocaleLowerCase('tr-TR'));
+    target.totalQuestion += Number(item.questionCount || 0);
+    target.totalCorrect += Number(item.correct || 0);
+    target.totalWrong += Number(item.wrong || 0);
+    target.totalBlank += Number(item.blank || 0);
+    target.totalNet += Number(item.net || 0);
+  });
+
+  const bransRows = Array.from(bransByLesson.values())
+    .sort((a, b) => a.lesson.localeCompare(b.lesson, 'tr', { sensitivity: 'base' }))
+    .map((item) => ({
+      lesson: item.lesson,
+      totalBransExam: item.examCount,
+      totalUnitTopic: item.unitSet.size,
+      totalQuestion: item.totalQuestion,
+      avgCorrect: (item.totalCorrect / item.examCount).toFixed(2),
+      avgWrong: (item.totalWrong / item.examCount).toFixed(2),
+      avgBlank: (item.totalBlank / item.examCount).toFixed(2),
+      avgNet: (item.totalNet / item.examCount).toFixed(2)
+    }));
+
+  drawTable('2. BRANŞ DENEME ÖZETİ', [
+    { key: 'lesson', label: 'DERS ADI', width: 168, align: 'left' },
+    { key: 'totalBransExam', label: 'TOPLAM BRANŞ DENEME', width: 148, align: 'center' },
+    { key: 'totalUnitTopic', label: 'TOPLAM ÜNİTE / KONU', width: 140, align: 'center' },
+    { key: 'totalQuestion', label: 'TOPLAM SORU SAYISI', width: 130, align: 'center' },
+    { key: 'avgCorrect', label: 'ORTALAMA DOĞRU', width: 110, align: 'center' },
+    { key: 'avgWrong', label: 'ORTALAMA YANLIŞ', width: 110, align: 'center' },
+    { key: 'avgBlank', label: 'ORTALAMA BOŞ', width: 110, align: 'center' },
+    { key: 'avgNet', label: 'ORTALAMA NET', width: 94, align: 'center' }
   ], bransRows, 'Kayitli brans denemesi bulunamadi.');
 
   const genelRows = filteredGenelRecords.map((item) => {
@@ -9419,45 +9463,351 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     { key: 'Din', label: 'DİN', width: 54, align: 'center' }
   ], genelRows, 'Kayitli genel deneme bulunamadi.');
 
-  const kaynakRows = filteredKaynakSummary.finishedTopicDetails.map((item) => ({
-    lesson: item.lesson || '-',
-    unit: item.unit || '-',
-    topic: item.topic || '-',
-    resources: item.resources && item.resources.length ? item.resources.join(', ') : '-',
-    finishedDate: item.finishedDate || '-'
-  }));
+  const kaynakByLesson = new Map();
+  filteredKaynakSummary.finishedTopicDetails.forEach((item) => {
+    const lesson = String(item.lesson || '-').trim() || '-';
+    if (!kaynakByLesson.has(lesson)) {
+      kaynakByLesson.set(lesson, {
+        lesson,
+        unitSet: new Set(),
+        topicSet: new Set(),
+        resourceSet: new Set()
+      });
+    }
 
-    drawTable('4. KAYNAK / KONU İLERLEMESİ', [
-    { key: 'lesson', label: 'DERS', width: 120, align: 'left' },
-      { key: 'unit', label: 'ÜNİTE', width: 148, align: 'left', maxLines: 2 },
-    { key: 'topic', label: 'KONU', width: 220, align: 'left', maxLines: 2 },
-      { key: 'resources', label: 'BİTEN KAYNAKLAR', width: 230, align: 'left', maxLines: 3 },
-      { key: 'finishedDate', label: 'BİTİŞ TARİHİ', width: 76, align: 'center' }
+    const target = kaynakByLesson.get(lesson);
+    const unit = String(item.unit || '').trim();
+    const topic = String(item.topic || '').trim();
+    if (unit) target.unitSet.add(unit.toLocaleLowerCase('tr-TR'));
+    if (topic) target.topicSet.add(topic.toLocaleLowerCase('tr-TR'));
+
+    if (Array.isArray(item.resources)) {
+      item.resources.forEach((resourceName) => {
+        const normalized = String(resourceName || '').trim().toLocaleLowerCase('tr-TR');
+        if (normalized) target.resourceSet.add(normalized);
+      });
+    }
+  });
+
+  const kaynakRows = Array.from(kaynakByLesson.values())
+    .sort((a, b) => a.lesson.localeCompare(b.lesson, 'tr', { sensitivity: 'base' }))
+    .map((item) => ({
+      lesson: item.lesson,
+      finishedUnitCount: item.unitSet.size,
+      finishedTopicCount: item.topicSet.size,
+      finishedResourceCount: item.resourceSet.size
+    }));
+
+  drawTable('4. KAYNAK / KONU İLERLEMESİ', [
+    { key: 'lesson', label: 'DERS', width: 250, align: 'left' },
+    { key: 'finishedUnitCount', label: 'BİTİRİLEN ÜNİTE SAYISI', width: 180, align: 'center' },
+    { key: 'finishedTopicCount', label: 'BİTİRİLEN KONU SAYISI', width: 180, align: 'center' },
+    { key: 'finishedResourceCount', label: 'BİTEN KAYNAK SAYISI', width: 180, align: 'center' }
   ], kaynakRows, 'Konu bitti statulu kayit bulunamadi.', { startOnNewPage: true, keepTogether: true });
 
-  const solvedRows = filteredSolvedBreakdown.map((item) => ({
-    lesson: item.lesson,
-    unit: item.unit,
-    topic: item.topic,
-    source: item.source,
-    examDate: item.examDate || '-',
-    question: item.question,
-    correct: item.correct,
-    wrong: item.wrong,
-    blank: item.blank
-  }));
+  const solvedByLesson = new Map();
+  filteredSolvedBreakdown.forEach((item) => {
+    const lesson = String(item.lesson || '-').trim() || '-';
+    if (!solvedByLesson.has(lesson)) {
+      solvedByLesson.set(lesson, {
+        lesson,
+        unitSet: new Set(),
+        topicSet: new Set(),
+        question: 0,
+        correct: 0,
+        wrong: 0,
+        blank: 0
+      });
+    }
 
-    drawTable('5. ÇÖZÜLEN SORU DETAYI', [
-    { key: 'lesson', label: 'DERS', width: 88, align: 'left' },
-      { key: 'unit', label: 'ÜNİTE', width: 132, align: 'left', maxLines: 2 },
-    { key: 'topic', label: 'KONU', width: 168, align: 'left', maxLines: 2 },
-    { key: 'source', label: 'KAYNAK', width: 176, align: 'left', maxLines: 2 },
-      { key: 'examDate', label: 'DENEME TARİHİ', width: 82, align: 'center' },
-    { key: 'question', label: 'SORU', width: 54, align: 'center' },
-    { key: 'correct', label: 'D', width: 38, align: 'center' },
-    { key: 'wrong', label: 'Y', width: 38, align: 'center' },
-      { key: 'blank', label: 'BOŞ', width: 38, align: 'center' }
+    const target = solvedByLesson.get(lesson);
+    const unit = String(item.unit || '').trim();
+    const topic = String(item.topic || '').trim();
+    if (unit) target.unitSet.add(unit.toLocaleLowerCase('tr-TR'));
+    if (topic) target.topicSet.add(topic.toLocaleLowerCase('tr-TR'));
+    target.question += Number(item.question || 0);
+    target.correct += Number(item.correct || 0);
+    target.wrong += Number(item.wrong || 0);
+    target.blank += Number(item.blank || 0);
+  });
+
+  const solvedRows = Array.from(solvedByLesson.values())
+    .sort((a, b) => a.lesson.localeCompare(b.lesson, 'tr', { sensitivity: 'base' }))
+    .map((item) => ({
+      lesson: item.lesson,
+      totalUnit: item.unitSet.size,
+      totalTopic: item.topicSet.size,
+      totalQuestion: item.question,
+      totalCorrect: item.correct,
+      totalWrong: item.wrong,
+      totalBlank: item.blank
+    }));
+
+  drawTable('5. ÇÖZÜLEN SORU ÖZETİ', [
+    { key: 'lesson', label: 'DERS', width: 192, align: 'left' },
+    { key: 'totalUnit', label: 'TOPLAM ÜNİTE', width: 120, align: 'center' },
+    { key: 'totalTopic', label: 'TOPLAM KONU', width: 120, align: 'center' },
+    { key: 'totalQuestion', label: 'TOPLAM SORU', width: 110, align: 'center' },
+    { key: 'totalCorrect', label: 'TOPLAM DOĞRU', width: 110, align: 'center' },
+    { key: 'totalWrong', label: 'TOPLAM YANLIŞ', width: 110, align: 'center' },
+    { key: 'totalBlank', label: 'TOPLAM BOŞ', width: 110, align: 'center' }
   ], solvedRows, 'Cozulen soru kaydi bulunamadi.');
+
+  const lessonPerformanceMap = new Map();
+  const upsertLessonPerformance = (lessonName, question, correct, wrong, blank) => {
+    const lesson = String(lessonName || '-').trim() || '-';
+    if (!lessonPerformanceMap.has(lesson)) {
+      lessonPerformanceMap.set(lesson, { lesson, question: 0, correct: 0, wrong: 0, blank: 0 });
+    }
+    const target = lessonPerformanceMap.get(lesson);
+    target.question += Number(question || 0);
+    target.correct += Number(correct || 0);
+    target.wrong += Number(wrong || 0);
+    target.blank += Number(blank || 0);
+  };
+
+  filteredBransRecords.forEach((item) => {
+    upsertLessonPerformance(item.lesson || '-', item.questionCount, item.correct, item.wrong, item.blank);
+  });
+
+  filteredSolvedBreakdown.forEach((item) => {
+    upsertLessonPerformance(item.lesson || '-', item.question, item.correct, item.wrong, item.blank);
+  });
+
+  const genelLessonDisplayMap = {
+    Mat: 'Matematik',
+    Fen: 'Fen',
+    Tur: 'Türkçe',
+    Ink: 'İnkılap',
+    Ing: 'İngilizce',
+    Din: 'Din'
+  };
+
+  filteredGenelRecords.forEach((item) => {
+    const lessons = item?.lessons || {};
+    Object.entries(lessons).forEach(([key, values]) => {
+      const label = genelLessonDisplayMap[key] || key;
+      upsertLessonPerformance(label, values?.q, values?.d, values?.y, values?.b);
+    });
+  });
+
+  const lessonCoachingRows = Array.from(lessonPerformanceMap.values())
+    .map((item) => {
+      const successRate = item.question > 0 ? (item.correct / item.question) * 100 : 0;
+      const wrongRate = item.question > 0 ? (item.wrong / item.question) * 100 : 0;
+      const blankRate = item.question > 0 ? (item.blank / item.question) * 100 : 0;
+      const priorityScore = item.question > 0
+        ? ((item.wrong * 1.2 + item.blank) / item.question) * 100
+        : 0;
+      const priorityLabel = priorityScore >= 55
+        ? 'Acil müdahale'
+        : priorityScore >= 35
+          ? 'Yakın takip'
+          : 'Stabil';
+      return {
+        ...item,
+        successRate,
+        wrongRate,
+        blankRate,
+        priorityScore,
+        priorityLabel
+      };
+    })
+    .filter((item) => item.question > 0)
+    .sort((a, b) => b.priorityScore - a.priorityScore)
+    .slice(0, 8);
+
+  doc.addPage();
+  y = margin;
+
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, 'PNG', margin, y, 64, 48, undefined, 'FAST');
+    } catch (error) {
+      // no-op
+    }
+  }
+
+  doc.setTextColor(18, 47, 92);
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.text(pdfSafeText('6. KOÇLUK MÜDAHALE SAYFASI'), margin + 78, y + 24);
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(71, 85, 105);
+  doc.text(pdfSafeText('Öncelikli dersler ve önerilen haftalık çalışma dağılımı'), margin + 78, y + 42);
+
+  const cardGap = 14;
+  const leftCardWidth = Math.floor((contentWidth * 0.62) - (cardGap / 2));
+  const rightCardWidth = contentWidth - leftCardWidth - cardGap;
+  const cardTop = y + 58;
+  const cardHeight = pageHeight - cardTop - marginBottom;
+  const leftCardX = margin;
+  const rightCardX = leftCardX + leftCardWidth + cardGap;
+
+  doc.setDrawColor(220, 228, 236);
+  doc.setFillColor(249, 251, 255);
+  doc.roundedRect(leftCardX, cardTop, leftCardWidth, cardHeight, 10, 10, 'FD');
+  doc.roundedRect(rightCardX, cardTop, rightCardWidth, cardHeight, 10, 10, 'FD');
+
+  doc.setTextColor(30, 41, 59);
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(pdfSafeText('DERS BAZLI MÜDAHALE ÖNCELİĞİ'), leftCardX + 14, cardTop + 20);
+
+  const chartTop = cardTop + 34;
+  const chartLeft = leftCardX + 18;
+  const chartRight = leftCardX + leftCardWidth - 18;
+  const chartBottom = cardTop + cardHeight - 18;
+  const chartWidth = chartRight - chartLeft;
+  const chartHeight = chartBottom - chartTop;
+
+  if (!lessonCoachingRows.length) {
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.setTextColor(100, 116, 139);
+    doc.text(pdfSafeText('Öncelik analizi için yeterli ders verisi bulunamadı.'), chartLeft, chartTop + 24);
+  } else {
+    const rowHeight = Math.min(56, Math.max(38, Math.floor(chartHeight / Math.max(lessonCoachingRows.length, 1))));
+    const blockHeight = rowHeight * lessonCoachingRows.length;
+    const rowsStartY = chartTop + Math.max(12, Math.floor((chartHeight - blockHeight) / 2));
+    const labelWidth = 130;
+    const percentWidth = 146;
+    const barLeft = chartLeft + labelWidth;
+    const barRight = chartRight - percentWidth;
+    const barMaxWidth = Math.max(80, barRight - barLeft);
+
+    lessonCoachingRows.forEach((item, idx) => {
+      const top = rowsStartY + (idx * rowHeight);
+      const centerY = top + Math.floor(rowHeight / 2);
+      const barHeight = Math.min(18, Math.max(12, rowHeight - 18));
+      const score = Math.max(0, Math.min(100, Number(item.priorityScore || 0)));
+      const barWidth = (score / 100) * barMaxWidth;
+
+      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(30, 41, 59);
+      doc.text(pdfSafeText(item.lesson), chartLeft, centerY + 3);
+
+      doc.setFillColor(230, 236, 244);
+      doc.roundedRect(barLeft, centerY - (barHeight / 2), barMaxWidth, barHeight, 6, 6, 'F');
+
+      const color = score >= 55 ? [220, 38, 38] : score >= 35 ? [245, 158, 11] : [24, 160, 88];
+      doc.setFillColor(color[0], color[1], color[2]);
+      doc.roundedRect(barLeft, centerY - (barHeight / 2), Math.max(2, barWidth), barHeight, 6, 6, 'F');
+
+      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(30, 41, 59);
+      doc.text(pdfSafeText(`${item.priorityLabel}  ${score.toFixed(0)}%`), barRight + 6, centerY + 3);
+    });
+
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
+    doc.setFontSize(8.8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(pdfSafeText('Skor = (Yanlış x 1.2 + Boş) / Soru x 100'), chartLeft, chartBottom - 2);
+  }
+
+  doc.setTextColor(30, 41, 59);
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(pdfSafeText('ÖNERİLEN HAFTALIK ÇALIŞMA DAĞILIMI'), rightCardX + 14, cardTop + 20);
+
+  const totalQuestionForDonut = Number(filteredOverallQuestionSummary.question || 0);
+  const totalCorrectForDonut = Number(filteredOverallQuestionSummary.correct || 0);
+  const totalWrongForDonut = Number(filteredOverallQuestionSummary.wrong || 0);
+  const totalBlankForDonut = Number(filteredOverallQuestionSummary.blank || 0);
+
+  const focusSegments = [
+    { label: 'Konu tekrarı', value: (totalWrongForDonut * 1.4), color: [220, 38, 38] },
+    { label: 'Soru pratiği', value: (totalBlankForDonut * 1.2), color: [245, 158, 11] },
+    { label: 'Koruma denemesi', value: (totalCorrectForDonut * 0.55), color: [24, 160, 88] }
+  ];
+  const totalFocusScore = focusSegments.reduce((sum, item) => sum + Number(item.value || 0), 0);
+
+  const donutCenterX = rightCardX + (rightCardWidth / 2);
+  const donutCenterY = cardTop + 142;
+  const donutOuterRadius = 78;
+  const donutInnerRadius = 48;
+
+  const drawDonutSegment = (startAngle, endAngle, color) => {
+    const step = Math.PI / 54;
+    doc.setFillColor(color[0], color[1], color[2]);
+    for (let angle = startAngle; angle < endAngle; angle += step) {
+      const next = Math.min(endAngle, angle + step);
+      const x1 = donutCenterX + (donutOuterRadius * Math.cos(angle));
+      const y1 = donutCenterY + (donutOuterRadius * Math.sin(angle));
+      const x2 = donutCenterX + (donutOuterRadius * Math.cos(next));
+      const y2 = donutCenterY + (donutOuterRadius * Math.sin(next));
+      doc.triangle(donutCenterX, donutCenterY, x1, y1, x2, y2, 'F');
+    }
+  };
+
+  if (totalFocusScore > 0) {
+    let currentAngle = -Math.PI / 2;
+    focusSegments.forEach((segment) => {
+      const ratio = segment.value / totalFocusScore;
+      const endAngle = currentAngle + (Math.PI * 2 * ratio);
+      drawDonutSegment(currentAngle, endAngle, segment.color);
+      currentAngle = endAngle;
+    });
+
+    doc.setFillColor(249, 251, 255);
+    doc.circle(donutCenterX, donutCenterY, donutInnerRadius, 'F');
+    doc.setTextColor(15, 23, 42);
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
+    doc.setFontSize(18);
+    const mainFocus = focusSegments.slice().sort((a, b) => Number(b.value || 0) - Number(a.value || 0))[0];
+    const mainPercent = mainFocus ? ((Number(mainFocus.value || 0) / totalFocusScore) * 100) : 0;
+    doc.text(pdfSafeText('%' + mainPercent.toFixed(0)), donutCenterX, donutCenterY - 2, { align: 'center' });
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    doc.text(pdfSafeText(mainFocus ? mainFocus.label : 'Odak alanı'), donutCenterX, donutCenterY + 14, { align: 'center' });
+  } else {
+    doc.setDrawColor(203, 213, 225);
+    doc.setFillColor(236, 242, 248);
+    doc.circle(donutCenterX, donutCenterY, donutOuterRadius, 'FD');
+    doc.setFillColor(249, 251, 255);
+    doc.circle(donutCenterX, donutCenterY, donutInnerRadius, 'F');
+    doc.setTextColor(100, 116, 139);
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(pdfSafeText('Veri yok'), donutCenterX, donutCenterY + 3, { align: 'center' });
+  }
+
+  let legendY = donutCenterY + 100;
+  focusSegments.forEach((segment) => {
+    const percent = totalFocusScore > 0 ? (segment.value / totalFocusScore) * 100 : 0;
+    doc.setFillColor(segment.color[0], segment.color[1], segment.color[2]);
+    doc.roundedRect(rightCardX + 24, legendY - 8, 10, 10, 2, 2, 'F');
+
+    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(30, 41, 59);
+    doc.text(pdfSafeText(`${segment.label}: %${percent.toFixed(0)}`), rightCardX + 40, legendY);
+    legendY += 20;
+  });
+
+  const topPriority = lessonCoachingRows[0];
+  const noteY = legendY + 10;
+  doc.setFillColor(241, 245, 249);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(rightCardX + 18, noteY, rightCardWidth - 36, 70, 8, 8, 'FD');
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(30, 41, 59);
+  doc.text(pdfSafeText('Koçluk Notu'), rightCardX + 28, noteY + 18);
+  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
+  doc.setFontSize(9.2);
+  doc.setTextColor(71, 85, 105);
+  const coachingNote = topPriority
+    ? `${topPriority.lesson} dersi öncelikli görünüyor. İlk etapta yanlış oranını düşürmeye ve boş bırakılan sorular için süre-antrenmanına odaklanın.`
+    : 'Yeterli veri oluştuğunda sistem otomatik koçluk notu üretir.';
+  const noteLines = doc.splitTextToSize(pdfSafeText(coachingNote), rightCardWidth - 56);
+  noteLines.slice(0, 3).forEach((line, idx) => {
+    doc.text(line, rightCardX + 28, noteY + 35 + (idx * 12));
+  });
 
   const safeStudent = normalizeFileName(student.name || 'ogrenci');
   doc.save(`${safeStudent}_performans_raporu.pdf`);
