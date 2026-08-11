@@ -335,6 +335,7 @@ function getClassDisplayLabel(value) {
   if (!classLevel) return 'Sınıf bilgisi yok';
   if (classLevel.startsWith('CUSTOM:')) return classLevel.slice('CUSTOM:'.length) || 'Özel sınıf';
   if (classLevel === '8') return 'LGS';
+  if (classLevel === '12') return 'YKS';
   if (classLevel === 'YKS') return 'YKS';
   return `${classLevel}. Sınıf`;
 }
@@ -362,6 +363,23 @@ function compareClassLevels(leftValue, rightValue) {
   return left.label.localeCompare(right.label, 'tr', { sensitivity: 'base' });
 }
 
+function resolveStandardClassLevelAlias(value) {
+  const cleanName = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!cleanName) return '';
+
+  const normalizedName = cleanName.toLocaleUpperCase('tr-TR');
+  if (normalizedName === 'LGS') return '8';
+  if (normalizedName === 'YKS') return 'YKS';
+
+  const numericMatch = normalizedName.match(/^(\d+)(?:\s*\.?\s*SINIF)?$/);
+  if (!numericMatch) return '';
+
+  const classNumber = Number(numericMatch[1]);
+  if (classNumber === 12) return 'YKS';
+  if (classNumber >= 4 && classNumber <= 11) return String(classNumber);
+  return '';
+}
+
 function getCustomClassStorageKey() {
   const email = getStorageOwnerEmail();
   return `custom_class_levels_${email}`;
@@ -372,7 +390,15 @@ function getCustomClassLevels() {
   const fromStudents = getStoredOgrenciler()
     .map((student) => normalizeClassLevel(student.classLevel))
     .filter(isCustomClassLevel);
-  return ensureUniqueList([].concat(Array.isArray(stored) ? stored : [], fromStudents)).filter(isCustomClassLevel);
+
+  return ensureUniqueList([].concat(Array.isArray(stored) ? stored : [], fromStudents))
+    .map((value) => {
+      const normalizedValue = normalizeClassLevel(value);
+      if (!isCustomClassLevel(normalizedValue)) return '';
+      const customName = normalizedValue.slice('CUSTOM:'.length).trim();
+      return resolveStandardClassLevelAlias(customName) ? '' : `CUSTOM:${customName}`;
+    })
+    .filter((value) => isCustomClassLevel(value));
 }
 
 function getHiddenClassLevels() {
@@ -416,6 +442,10 @@ function deleteCustomClassLevel(classLevel) {
 function createCustomClassLevel(name) {
   const cleanName = String(name || '').trim().replace(/\s+/g, ' ');
   if (!cleanName) return '';
+
+  const aliasedClassLevel = resolveStandardClassLevelAlias(cleanName);
+  if (aliasedClassLevel) return aliasedClassLevel;
+
   const classLevel = `CUSTOM:${cleanName}`.toUpperCase();
   const classes = getCustomClassLevels();
   if (!classes.includes(classLevel)) {
@@ -427,50 +457,82 @@ function createCustomClassLevel(name) {
 
 function populateClassSelect(selectEl, selectedValue) {
   if (!selectEl) return;
-  const standardOptions = [['4', '4'], ['5', '5'], ['6', '6'], ['7', '7'], ['8', 'LGS'], ['9', '9'], ['10', '10'], ['11', '11'], ['YKS', 'YKS']];
+  const selectedOrCurrent = selectedValue || selectEl.value || '8';
+  const activeValue = resolveStandardClassLevelAlias(selectedOrCurrent) || selectedOrCurrent;
+
+  const isEditSelect = selectEl.id === 'editStudentClass';
   const hiddenClassLevels = new Set(getHiddenClassLevels().map(normalizeClassLevel));
-  const activeValue = selectedValue || selectEl.value || '8';
-  const availableOptions = standardOptions
-    .concat(getCustomClassLevels().map((value) => [value, getClassDisplayLabel(value)]))
-    .filter(([value]) => !hiddenClassLevels.has(normalizeClassLevel(value)))
-    .sort(([leftValue], [rightValue]) => compareClassLevels(leftValue, rightValue));
+  const canShowCurrentClass = isEditSelect
+    && activeValue
+    && activeValue !== '__add_standard__'
+    && activeValue !== '__add_custom__'
+    && !hiddenClassLevels.has(normalizeClassLevel(activeValue));
+
   selectEl.innerHTML = '';
-  availableOptions.forEach(([value, label]) => {
+
+  if (canShowCurrentClass) {
     const option = document.createElement('option');
-    option.value = value;
-    option.textContent = label;
+    option.value = activeValue;
+    option.textContent = `${getClassDisplayLabel(activeValue)} (mevcut)`;
     selectEl.appendChild(option);
-  });
-  const customOption = document.createElement('option');
-  customOption.value = '__custom__';
-  customOption.textContent = '+ Özel sınıf / sınav ekle';
-  selectEl.appendChild(customOption);
-  const fallbackValue = availableOptions.length ? availableOptions[0][0] : '__custom__';
+  }
+
+  const addStandardOption = document.createElement('option');
+  addStandardOption.value = '__add_standard__';
+  addStandardOption.textContent = '+ Sınıf ekle';
+  selectEl.appendChild(addStandardOption);
+
+  const addCustomOption = document.createElement('option');
+  addCustomOption.value = '__add_custom__';
+  addCustomOption.textContent = '+ Özel sınıf ekle';
+  selectEl.appendChild(addCustomOption);
+
+  const fallbackValue = canShowCurrentClass ? activeValue : '__add_standard__';
   selectEl.value = Array.from(selectEl.options).some((option) => option.value === activeValue) ? activeValue : fallbackValue;
 }
 
-function toggleCustomClassNameInput(selectId, inputId) {
+function toggleClassAddInputs(selectId, customInputId, standardSelectId) {
   const selectEl = document.getElementById(selectId);
-  const inputEl = document.getElementById(inputId);
-  if (!selectEl || !inputEl) return;
-  const isCustom = selectEl.value === '__custom__';
-  inputEl.style.display = isCustom ? 'block' : 'none';
-  inputEl.required = isCustom;
-  if (!isCustom) inputEl.value = '';
-  if (isCustom) inputEl.focus();
+  const customInputEl = document.getElementById(customInputId);
+  const standardSelectEl = document.getElementById(standardSelectId);
+  if (!selectEl || !customInputEl || !standardSelectEl) return;
+
+  const isAddCustom = selectEl.value === '__add_custom__';
+  const isAddStandard = selectEl.value === '__add_standard__';
+
+  customInputEl.style.display = isAddCustom ? 'block' : 'none';
+  customInputEl.required = isAddCustom;
+  if (!isAddCustom) customInputEl.value = '';
+
+  standardSelectEl.style.display = isAddStandard ? 'block' : 'none';
+  standardSelectEl.required = isAddStandard;
+  if (!isAddStandard) standardSelectEl.value = '5';
+
+  if (isAddCustom) customInputEl.focus();
+  if (isAddStandard) standardSelectEl.focus();
 }
 
-function resolveSelectedClassLevel(selectId, inputId) {
+function resolveSelectedClassLevel(selectId, customInputId, standardSelectId) {
   const selectEl = document.getElementById(selectId);
   if (!selectEl) return '';
-  if (selectEl.value !== '__custom__') return selectEl.value;
-  const classLevel = createCustomClassLevel(document.getElementById(inputId)?.value);
-  if (!classLevel) return '';
+  if (selectEl.value === '__add_custom__') {
+    const classLevel = createCustomClassLevel(document.getElementById(customInputId)?.value);
+    if (!classLevel) return '';
 
-  refreshCustomClassNavigation();
-  populateClassSelect(document.getElementById('ogrenciSinifInput'), classLevel);
-  populateClassSelect(document.getElementById('editStudentClass'), classLevel);
-  return classLevel;
+    refreshCustomClassNavigation();
+    populateClassSelect(document.getElementById('ogrenciSinifInput'), classLevel);
+    populateClassSelect(document.getElementById('editStudentClass'), classLevel);
+    return classLevel;
+  }
+
+  if (selectEl.value === '__add_standard__') {
+    const standardSelectEl = document.getElementById(standardSelectId);
+    const chosen = resolveStandardClassLevelAlias(standardSelectEl?.value || '');
+    const allowed = new Set(['5', '6', '7', '8', '9', '10', '11', 'YKS']);
+    return chosen && allowed.has(chosen) ? chosen : '';
+  }
+
+  return selectEl.value;
 }
 
 const initialResourceSuggestions = [
@@ -2327,6 +2389,81 @@ function kaydetBransDenemesi() {
 }
 
 const GENEL_LESSON_KEYS = ['Mat', 'Fen', 'Tur', 'Ink', 'Ing', 'Din'];
+const GENEL_FIXED_QUESTION_COUNTS = {
+  Mat: 20,
+  Fen: 20,
+  Tur: 20,
+  Ing: 10,
+  Din: 10,
+  Ink: 10
+};
+
+function isFixedGenelQuestionClassLevel(classLevelValue) {
+  const normalized = normalizeClassLevel(classLevelValue);
+  if (!normalized) return false;
+  if (normalized === 'LGS') return true;
+
+  const className = normalized.startsWith('CUSTOM:')
+    ? normalized.slice('CUSTOM:'.length).trim()
+    : normalized;
+
+  const match = className.match(/^(\d+)(?:\s*\.?\s*SINIF)?$/);
+  if (!match) return false;
+
+  const classNumber = Number(match[1]);
+  return classNumber === 7 || classNumber === 8;
+}
+
+function isSosyalBilgilerClassLevel(classLevelValue) {
+  const normalized = normalizeClassLevel(classLevelValue);
+  if (!normalized) return false;
+
+  const className = normalized.startsWith('CUSTOM:')
+    ? normalized.slice('CUSTOM:'.length).trim()
+    : normalized;
+
+  const match = className.match(/^(\d+)(?:\s*\.?\s*SINIF)?$/);
+  if (!match) return false;
+
+  const classNumber = Number(match[1]);
+  return classNumber >= 5 && classNumber <= 7;
+}
+
+function getGenelInkLessonTitleByClassLevel(classLevelValue) {
+  return isSosyalBilgilerClassLevel(classLevelValue) ? 'Sosyal Bilgiler' : 'İnkılap Tarihi';
+}
+
+function getGenelInkLessonShortLabelByClassLevel(classLevelValue) {
+  return isSosyalBilgilerClassLevel(classLevelValue) ? 'Sos' : 'İnk';
+}
+
+function refreshGenelLessonTitlesForClassLevel(classLevelValue) {
+  const inkTitleEl = document.getElementById('genelInkLessonTitle');
+  if (inkTitleEl) inkTitleEl.textContent = getGenelInkLessonTitleByClassLevel(classLevelValue);
+}
+
+function applyGenelQuestionTemplateForActiveStudent() {
+  const classLevel = getActiveStudentClassLevel();
+  const shouldLockQuestions = isFixedGenelQuestionClassLevel(classLevel);
+
+  refreshGenelLessonTitlesForClassLevel(classLevel);
+
+  GENEL_LESSON_KEYS.forEach((key) => {
+    const qEl = document.getElementById('genel' + key + 'Q');
+    if (!qEl) return;
+
+    if (shouldLockQuestions) {
+      qEl.value = String(GENEL_FIXED_QUESTION_COUNTS[key] || 0);
+      qEl.readOnly = true;
+      qEl.setAttribute('readonly', 'readonly');
+    } else {
+      qEl.readOnly = false;
+      qEl.removeAttribute('readonly');
+    }
+
+    updateGenelLessonNet(key);
+  });
+}
 
 function getGenelExamStorageKey() {
   const email = getStorageOwnerEmail();
@@ -2399,6 +2536,8 @@ function clearGenelExamForm() {
 
   const totalEl = document.getElementById('genelTotalNet');
   if (totalEl) totalEl.textContent = '0.00';
+
+  applyGenelQuestionTemplateForActiveStudent();
 }
 
 function renderGenelExamHistory() {
@@ -2412,11 +2551,13 @@ function renderGenelExamHistory() {
   }
 
   listEl.innerHTML = records.map((item) => {
+    const activeClassLevel = getActiveStudentClassLevel();
+    const inkShortLabel = getGenelInkLessonShortLabelByClassLevel(activeClassLevel);
     const lessonBreakdown = [
       `Mat ${Number(item.lessons?.Mat?.net || 0).toFixed(2)}`,
       `Fen ${Number(item.lessons?.Fen?.net || 0).toFixed(2)}`,
       `Tür ${Number(item.lessons?.Tur?.net || 0).toFixed(2)}`,
-      `İnk ${Number(item.lessons?.Ink?.net || 0).toFixed(2)}`,
+      `${inkShortLabel} ${Number(item.lessons?.Ink?.net || 0).toFixed(2)}`,
       `İng ${Number(item.lessons?.Ing?.net || 0).toFixed(2)}`,
       `Din ${Number(item.lessons?.Din?.net || 0).toFixed(2)}`
     ].join(' · ');
@@ -2482,7 +2623,7 @@ async function indirGenelExamPdf(recordId) {
     { key: 'Mat', name: 'Matematik' },
     { key: 'Fen', name: 'Fen Bilimleri' },
     { key: 'Tur', name: 'Turkce' },
-    { key: 'Ink', name: 'Inkilap Tarihi' },
+    { key: 'Ink', name: pdfSafeText(getGenelInkLessonTitleByClassLevel(getActiveStudentClassLevel())) },
     { key: 'Ing', name: 'Ingilizce' },
     { key: 'Din', name: 'Din Kulturu' }
   ];
@@ -2725,6 +2866,8 @@ async function indirTumGenelDenemelerPdf() {
   doc.text(pdfSafeText(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`), marginLeft, y);
   y += 22;
 
+  const inkShortLabel = getGenelInkLessonShortLabelByClassLevel(getActiveStudentClassLevel());
+
   records.forEach((item, index) => {
     ensureSpace(130);
     doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
@@ -2741,7 +2884,7 @@ async function indirTumGenelDenemelerPdf() {
       `Mat: ${Number(item.lessons?.Mat?.net || 0).toFixed(2)}`,
       `Fen: ${Number(item.lessons?.Fen?.net || 0).toFixed(2)}`,
       `Türkçe: ${Number(item.lessons?.Tur?.net || 0).toFixed(2)}`,
-      `Ink: ${Number(item.lessons?.Ink?.net || 0).toFixed(2)}`,
+      `${inkShortLabel}: ${Number(item.lessons?.Ink?.net || 0).toFixed(2)}`,
       `İng: ${Number(item.lessons?.Ing?.net || 0).toFixed(2)}`,
       `Din: ${Number(item.lessons?.Din?.net || 0).toFixed(2)}`
     ].join('   |   ');
@@ -2791,6 +2934,8 @@ function kaydetGenelDeneme() {
     alert('Deneme tarihi GG.AA.YYYY formatında ve geçerli olmalı.');
     return;
   }
+
+  applyGenelQuestionTemplateForActiveStudent();
 
   const lessons = {};
   let totalNet = 0;
@@ -3050,6 +3195,15 @@ function renderQuickStart() {
 function startQuickStartStudentSetup() {
   closeQuickStart();
   sekmeAcs('ogrenci');
+  openOgrenciEkleModal();
+}
+
+function openOgrenciEkleModal() {
+  const classSelectEl = document.getElementById('ogrenciSinifInput');
+  if (classSelectEl && !classSelectEl.value) {
+    classSelectEl.value = '__add_standard__';
+  }
+  toggleClassAddInputs('ogrenciSinifInput', 'ogrenciCustomClassName', 'ogrenciStandardClassToAdd');
   modalAc('ogrenciEkleModal');
 }
 
@@ -4102,6 +4256,8 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshRegisterSpamGuards();
   populateClassSelect(document.getElementById('ogrenciSinifInput'), '8');
   populateClassSelect(document.getElementById('editStudentClass'), '8');
+  toggleClassAddInputs('ogrenciSinifInput', 'ogrenciCustomClassName', 'ogrenciStandardClassToAdd');
+  toggleClassAddInputs('editStudentClass', 'editStudentCustomClassName', 'editStandardClassToAdd');
   loadSavedResourceSuggestions();
   const resourceNameInput = document.getElementById('resourceNameInput');
   const resourceLessonSelect = document.getElementById('resourceLessonSelect');
@@ -4118,6 +4274,8 @@ document.addEventListener('DOMContentLoaded', () => {
   attemptAutoLogin().then(auto => {
     populateClassSelect(document.getElementById('ogrenciSinifInput'), document.getElementById('ogrenciSinifInput')?.value || '8');
     populateClassSelect(document.getElementById('editStudentClass'), document.getElementById('editStudentClass')?.value || '8');
+    toggleClassAddInputs('ogrenciSinifInput', 'ogrenciCustomClassName', 'ogrenciStandardClassToAdd');
+    toggleClassAddInputs('editStudentClass', 'editStudentCustomClassName', 'editStandardClassToAdd');
     refreshCustomClassNavigation();
     if (!auto) {
       let initialPage = currentPageFromHash();
@@ -4720,9 +4878,14 @@ function ogrenciEkle() {
   const name = document.getElementById('ogrenciAdiInput').value.trim();
   const email = document.getElementById('ogrenciEmailInput').value.trim();
   const phone = document.getElementById('ogrenciTelefonInput').value.trim();
-  const classLevel = resolveSelectedClassLevel('ogrenciSinifInput', 'ogrenciCustomClassName');
-  if (document.getElementById('ogrenciSinifInput')?.value === '__custom__' && !classLevel) {
+  const classLevel = resolveSelectedClassLevel('ogrenciSinifInput', 'ogrenciCustomClassName', 'ogrenciStandardClassToAdd');
+  const selectedClassAction = document.getElementById('ogrenciSinifInput')?.value;
+  if (selectedClassAction === '__add_custom__' && !classLevel) {
     alert('Özel sınıf veya sınav adı girin.');
+    return;
+  }
+  if (selectedClassAction === '__add_standard__' && !classLevel) {
+    alert('Lütfen eklenecek sınıfı seçin.');
     return;
   }
   if (!name) {
@@ -4753,9 +4916,11 @@ function ogrenciEkle() {
   document.getElementById('ogrenciEmailInput').value = '';
   document.getElementById('ogrenciTelefonInput').value = '';
   document.getElementById('ogrenciCustomClassName').value = '';
+  const standardClassToAddEl = document.getElementById('ogrenciStandardClassToAdd');
+  if (standardClassToAddEl) standardClassToAddEl.value = '5';
   const classInput = document.getElementById('ogrenciSinifInput');
-  if (classInput) classInput.value = '8';
-  toggleCustomClassNameInput('ogrenciSinifInput', 'ogrenciCustomClassName');
+  if (classInput) classInput.value = '__add_standard__';
+  toggleClassAddInputs('ogrenciSinifInput', 'ogrenciCustomClassName', 'ogrenciStandardClassToAdd');
   modalKapat('ogrenciEkleModal');
 }
 
@@ -4906,7 +5071,9 @@ function openStudentEditModal(studentId) {
   document.getElementById('editStudentEmail').value = student.email || '';
   document.getElementById('editStudentPhone').value = student.phone || '';
   populateClassSelect(document.getElementById('editStudentClass'), student.classLevel || '4');
-  toggleCustomClassNameInput('editStudentClass', 'editStudentCustomClassName');
+  const editStandardClassToAddEl = document.getElementById('editStandardClassToAdd');
+  if (editStandardClassToAddEl) editStandardClassToAddEl.value = '5';
+  toggleClassAddInputs('editStudentClass', 'editStudentCustomClassName', 'editStandardClassToAdd');
   renderStudentAccessCredentials(student);
 
   modalAc('ogrenciDuzenleModal');
@@ -4928,10 +5095,16 @@ function saveStudentEdits() {
   const name = document.getElementById('editStudentName').value.trim();
   const email = document.getElementById('editStudentEmail').value.trim();
   const phone = document.getElementById('editStudentPhone').value.trim();
-  const classLevel = resolveSelectedClassLevel('editStudentClass', 'editStudentCustomClassName');
+  const classLevel = resolveSelectedClassLevel('editStudentClass', 'editStudentCustomClassName', 'editStandardClassToAdd');
+  const selectedClassAction = document.getElementById('editStudentClass')?.value;
 
-  if (document.getElementById('editStudentClass')?.value === '__custom__' && !classLevel) {
+  if (selectedClassAction === '__add_custom__' && !classLevel) {
     alert('Özel sınıf veya sınav adı girin.');
+    return;
+  }
+
+  if (selectedClassAction === '__add_standard__' && !classLevel) {
+    alert('Lütfen eklenecek sınıfı seçin.');
     return;
   }
 
@@ -5191,6 +5364,7 @@ function openStudentGenelPage() {
   }
 
   setStudentDetailSection('genel');
+  applyGenelQuestionTemplateForActiveStudent();
   renderGenelExamHistory();
   updateGenelTotalNet();
 }
@@ -7823,6 +7997,8 @@ function applyWorkspaceSettings(settings) {
     refreshCustomClassNavigation();
     populateClassSelect(document.getElementById('ogrenciSinifInput'), document.getElementById('ogrenciSinifInput')?.value || '8');
     populateClassSelect(document.getElementById('editStudentClass'), document.getElementById('editStudentClass')?.value || '8');
+    toggleClassAddInputs('ogrenciSinifInput', 'ogrenciCustomClassName', 'ogrenciStandardClassToAdd');
+    toggleClassAddInputs('editStudentClass', 'editStudentCustomClassName', 'editStandardClassToAdd');
   } finally {
     workspaceSettingsApplying = false;
   }
@@ -8835,11 +9011,13 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
   const pageWidth = doc.internal.pageSize.getWidth();
   const contentWidth = pageWidth - margin * 2;
   const solvedBreakdown = getCozulenBreakdownForStudent(student);
+  const inkShortLabel = getGenelInkLessonShortLabelByClassLevel(student.classLevel);
+  const inkTitle = getGenelInkLessonTitleByClassLevel(student.classLevel);
   const genelLessonLabelMap = {
     Mat: 'Mat',
     Fen: 'Fen',
     Tur: 'Turkce',
-    Ink: 'Inkilap',
+    Ink: inkTitle,
     Ing: 'Ingilizce',
     Din: 'Din'
   };
@@ -9206,7 +9384,7 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
       { key: 'Mat', label: 'MAT', width: 58, align: 'center' },
       { key: 'Fen', label: 'FEN', width: 58, align: 'center' },
       { key: 'Tur', label: 'TÜRKÇE', width: 60, align: 'center' },
-      { key: 'Ink', label: 'İNK', width: 54, align: 'center' },
+      { key: 'Ink', label: inkShortLabel.toUpperCase('tr-TR'), width: 54, align: 'center' },
       { key: 'Ing', label: 'İNG', width: 54, align: 'center' },
       { key: 'Din', label: 'DİN', width: 54, align: 'center' }
     ], genelOnlyRows, 'Kayitli genel deneme bulunamadi.');
@@ -9438,6 +9616,42 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     { key: 'avgNet', label: 'ORTALAMA NET', width: 94, align: 'center' }
   ], bransRows, 'Kayitli brans denemesi bulunamadi.');
 
+  const genelSummaryTotals = filteredGenelRecords.reduce((acc, item) => {
+    const lessons = item?.lessons || {};
+    Object.values(lessons).forEach((lesson) => {
+      acc.question += Number(lesson?.q || 0);
+      acc.correct += Number(lesson?.d || 0);
+      acc.wrong += Number(lesson?.y || 0);
+      acc.blank += Number(lesson?.b || 0);
+    });
+    acc.net += Number(item?.totalNet || 0);
+    return acc;
+  }, { question: 0, correct: 0, wrong: 0, blank: 0, net: 0 });
+
+  const genelExamCount = filteredGenelRecords.length;
+  const genelSummaryAverages = {
+    question: genelExamCount ? (genelSummaryTotals.question / genelExamCount) : 0,
+    correct: genelExamCount ? (genelSummaryTotals.correct / genelExamCount) : 0,
+    wrong: genelExamCount ? (genelSummaryTotals.wrong / genelExamCount) : 0,
+    blank: genelExamCount ? (genelSummaryTotals.blank / genelExamCount) : 0,
+    net: genelExamCount ? (genelSummaryTotals.net / genelExamCount) : 0
+  };
+
+  if (y > margin + 2) {
+    doc.addPage();
+    y = margin;
+  }
+
+  writeSectionTitle('3. GENEL DENEMELER ÖZETİ');
+  drawSummaryGrid([
+    { label: 'TOPLAM DENEME SAYISI', value: genelExamCount },
+    { label: 'ORTALAMA SORU', value: genelSummaryAverages.question.toFixed(2) },
+    { label: 'ORTALAMA DOĞRU', value: genelSummaryAverages.correct.toFixed(2) },
+    { label: 'ORTALAMA YANLIŞ', value: genelSummaryAverages.wrong.toFixed(2) },
+    { label: 'ORTALAMA BOŞ', value: genelSummaryAverages.blank.toFixed(2) },
+    { label: 'ORTALAMA NET', value: genelSummaryAverages.net.toFixed(2) }
+  ]);
+
   const genelRows = filteredGenelRecords.map((item) => {
     const lessonValues = item.lessons || {};
     const row = {
@@ -9451,17 +9665,17 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     return row;
   });
 
-  drawTable('3. GENEL DENEMELER', [
+  drawTable('4. GENEL DENEMELER', [
     { key: 'examDate', label: 'TARİH', width: 74, align: 'center' },
     { key: 'examName', label: 'DENEME ADI', width: 236, align: 'left', maxLines: 2 },
     { key: 'totalNet', label: 'TOPLAM NET', width: 92, align: 'center' },
     { key: 'Mat', label: 'MAT', width: 58, align: 'center' },
     { key: 'Fen', label: 'FEN', width: 58, align: 'center' },
     { key: 'Tur', label: 'TÜRKÇE', width: 60, align: 'center' },
-    { key: 'Ink', label: 'İNK', width: 54, align: 'center' },
+    { key: 'Ink', label: inkShortLabel.toUpperCase('tr-TR'), width: 54, align: 'center' },
     { key: 'Ing', label: 'İNG', width: 54, align: 'center' },
     { key: 'Din', label: 'DİN', width: 54, align: 'center' }
-  ], genelRows, 'Kayitli genel deneme bulunamadi.');
+  ], genelRows, 'Kayitli genel deneme bulunamadi.', { keepTogether: true });
 
   const kaynakByLesson = new Map();
   filteredKaynakSummary.finishedTopicDetails.forEach((item) => {
@@ -9498,7 +9712,7 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
       finishedResourceCount: item.resourceSet.size
     }));
 
-  drawTable('4. KAYNAK / KONU İLERLEMESİ', [
+  drawTable('5. KAYNAK / KONU İLERLEMESİ', [
     { key: 'lesson', label: 'DERS', width: 250, align: 'left' },
     { key: 'finishedUnitCount', label: 'BİTİRİLEN ÜNİTE SAYISI', width: 180, align: 'center' },
     { key: 'finishedTopicCount', label: 'BİTİRİLEN KONU SAYISI', width: 180, align: 'center' },
@@ -9543,7 +9757,7 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
       totalBlank: item.blank
     }));
 
-  drawTable('5. ÇÖZÜLEN SORU ÖZETİ', [
+  drawTable('6. ÇÖZÜLEN SORU ÖZETİ', [
     { key: 'lesson', label: 'DERS', width: 192, align: 'left' },
     { key: 'totalUnit', label: 'TOPLAM ÜNİTE', width: 120, align: 'center' },
     { key: 'totalTopic', label: 'TOPLAM KONU', width: 120, align: 'center' },
@@ -9578,7 +9792,7 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     Mat: 'Matematik',
     Fen: 'Fen',
     Tur: 'Türkçe',
-    Ink: 'İnkılap',
+    Ink: getGenelInkLessonTitleByClassLevel(student.classLevel),
     Ing: 'İngilizce',
     Din: 'Din'
   };

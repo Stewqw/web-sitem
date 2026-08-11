@@ -2413,7 +2413,7 @@
               </div>
               <div style="display: flex; gap: 10px;">
                 <button class="btn-nav-outline" onclick="modalAc('topluEkleModal')">📑 Toplu Ekle (CSV)</button>
-                <button class="btn-action btn-coral" style="padding: 8px 18px; font-size: 0.85rem;" onclick="modalAc('ogrenciEkleModal')">+ Öğrenci Ekle</button>
+                <button class="btn-action btn-coral" style="padding: 8px 18px; font-size: 0.85rem;" onclick="openOgrenciEkleModal()">+ Öğrenci Ekle</button>
               </div>
             </div>
 
@@ -2793,7 +2793,7 @@
                 <div class="genel-lesson-net">Net: <span id="genelTurNet">0.00</span></div>
               </div>
               <div class="genel-lesson-card">
-                <div class="genel-lesson-title">İnkılap Tarihi</div>
+                <div id="genelInkLessonTitle" class="genel-lesson-title">İnkılap Tarihi</div>
                 <div class="genel-lesson-fields">
                   <input id="genelInkQ" class="input-field" type="number" min="0" placeholder="Soru" oninput="updateGenelLessonNet('Ink')">
                   <input id="genelInkD" class="input-field" type="number" min="0" placeholder="Doğru" oninput="updateGenelLessonNet('Ink')">
@@ -3320,17 +3320,19 @@
       </div>
       <div class="form-group">
         <label class="form-label">Sınıf</label>
-        <select id="ogrenciSinifInput" class="input-field" onchange="toggleCustomClassNameInput('ogrenciSinifInput', 'ogrenciCustomClassName')">
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="7">7</option>
-          <option value="8" selected>LGS</option>
-          <option value="9">9</option>
-          <option value="10">10</option>
-          <option value="11">11</option>
+        <select id="ogrenciSinifInput" class="input-field" onchange="toggleClassAddInputs('ogrenciSinifInput', 'ogrenciCustomClassName', 'ogrenciStandardClassToAdd')">
+          <option value="__add_standard__" selected>+ Sınıf ekle</option>
+          <option value="__add_custom__">+ Özel sınıf ekle</option>
+        </select>
+        <select id="ogrenciStandardClassToAdd" class="input-field" style="display:none; margin-top:10px;" aria-label="Eklenecek sınıf">
+          <option value="5">5. Sınıf</option>
+          <option value="6">6. Sınıf</option>
+          <option value="7">7. Sınıf</option>
+          <option value="8">LGS</option>
+          <option value="9">9. Sınıf</option>
+          <option value="10">10. Sınıf</option>
+          <option value="11">11. Sınıf</option>
           <option value="YKS">YKS</option>
-          <option value="__custom__">+ Özel sınıf / sınav ekle</option>
         </select>
         <input id="ogrenciCustomClassName" type="text" class="input-field" placeholder="Örn: KPSS" style="display:none; margin-top:10px;" maxlength="60">
       </div>
@@ -3393,17 +3395,19 @@
           <h4 style="font-size: 0.8rem; color: var(--color-dark-teal); margin-bottom: 8px;">SINIF BİLGİLERİ</h4>
           <div class="form-group">
             <label class="form-label">Sınıf</label>
-            <select id="editStudentClass" class="input-field" onchange="toggleCustomClassNameInput('editStudentClass', 'editStudentCustomClassName')">
-              <option value="4">4</option>
-              <option value="5">5</option>
-              <option value="6">6</option>
-              <option value="7">7</option>
+            <select id="editStudentClass" class="input-field" onchange="toggleClassAddInputs('editStudentClass', 'editStudentCustomClassName', 'editStandardClassToAdd')">
+              <option value="__add_standard__" selected>+ Sınıf ekle</option>
+              <option value="__add_custom__">+ Özel sınıf ekle</option>
+            </select>
+            <select id="editStandardClassToAdd" class="input-field" style="display:none; margin-top:10px;" aria-label="Eklenecek sınıf">
+              <option value="5">5. Sınıf</option>
+              <option value="6">6. Sınıf</option>
+              <option value="7">7. Sınıf</option>
               <option value="8">LGS</option>
-              <option value="9">9</option>
-              <option value="10">10</option>
-              <option value="11">11</option>
+              <option value="9">9. Sınıf</option>
+              <option value="10">10. Sınıf</option>
+              <option value="11">11. Sınıf</option>
               <option value="YKS">YKS</option>
-              <option value="__custom__">+ Özel sınıf / sınav ekle</option>
             </select>
             <input id="editStudentCustomClassName" type="text" class="input-field" placeholder="Örn: KPSS" style="display:none; margin-top:10px;" maxlength="60">
           </div>
