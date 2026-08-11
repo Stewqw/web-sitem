@@ -2823,68 +2823,25 @@
               </div>
             </div>
 
-            <div class="genel-grid">
-              <div class="genel-lesson-card">
-                <div class="genel-lesson-title">Matematik</div>
-                <div class="genel-lesson-fields">
-                  <input id="genelMatQ" class="input-field" type="number" min="0" placeholder="Soru" oninput="updateGenelLessonNet('Mat')">
-                  <input id="genelMatD" class="input-field" type="number" min="0" placeholder="Doğru" oninput="updateGenelLessonNet('Mat')">
-                  <input id="genelMatY" class="input-field" type="number" min="0" placeholder="Yanlış" oninput="updateGenelLessonNet('Mat')">
-                  <input id="genelMatB" class="input-field" type="number" min="0" placeholder="Boş" readonly>
-                </div>
-                <div class="genel-lesson-net">Net: <span id="genelMatNet">0.00</span></div>
+            <div class="form-row" style="margin-bottom:14px;" id="genelExamTypeRow">
+              <div class="form-group" id="genelExamStreamWrap" style="display:none;">
+                <label class="form-label">Deneme Türü</label>
+                <select id="genelExamStream" class="input-field" onchange="onGenelExamFormatChange()">
+                  <option value="TYT">TYT</option>
+                  <option value="AYT">AYT</option>
+                </select>
               </div>
-              <div class="genel-lesson-card">
-                <div class="genel-lesson-title">Fen Bilimleri</div>
-                <div class="genel-lesson-fields">
-                  <input id="genelFenQ" class="input-field" type="number" min="0" placeholder="Soru" oninput="updateGenelLessonNet('Fen')">
-                  <input id="genelFenD" class="input-field" type="number" min="0" placeholder="Doğru" oninput="updateGenelLessonNet('Fen')">
-                  <input id="genelFenY" class="input-field" type="number" min="0" placeholder="Yanlış" oninput="updateGenelLessonNet('Fen')">
-                  <input id="genelFenB" class="input-field" type="number" min="0" placeholder="Boş" readonly>
-                </div>
-                <div class="genel-lesson-net">Net: <span id="genelFenNet">0.00</span></div>
-              </div>
-              <div class="genel-lesson-card">
-                <div class="genel-lesson-title">Türkçe</div>
-                <div class="genel-lesson-fields">
-                  <input id="genelTurQ" class="input-field" type="number" min="0" placeholder="Soru" oninput="updateGenelLessonNet('Tur')">
-                  <input id="genelTurD" class="input-field" type="number" min="0" placeholder="Doğru" oninput="updateGenelLessonNet('Tur')">
-                  <input id="genelTurY" class="input-field" type="number" min="0" placeholder="Yanlış" oninput="updateGenelLessonNet('Tur')">
-                  <input id="genelTurB" class="input-field" type="number" min="0" placeholder="Boş" readonly>
-                </div>
-                <div class="genel-lesson-net">Net: <span id="genelTurNet">0.00</span></div>
-              </div>
-              <div class="genel-lesson-card">
-                <div id="genelInkLessonTitle" class="genel-lesson-title">İnkılap Tarihi</div>
-                <div class="genel-lesson-fields">
-                  <input id="genelInkQ" class="input-field" type="number" min="0" placeholder="Soru" oninput="updateGenelLessonNet('Ink')">
-                  <input id="genelInkD" class="input-field" type="number" min="0" placeholder="Doğru" oninput="updateGenelLessonNet('Ink')">
-                  <input id="genelInkY" class="input-field" type="number" min="0" placeholder="Yanlış" oninput="updateGenelLessonNet('Ink')">
-                  <input id="genelInkB" class="input-field" type="number" min="0" placeholder="Boş" readonly>
-                </div>
-                <div class="genel-lesson-net">Net: <span id="genelInkNet">0.00</span></div>
-              </div>
-              <div class="genel-lesson-card">
-                <div class="genel-lesson-title">İngilizce</div>
-                <div class="genel-lesson-fields">
-                  <input id="genelIngQ" class="input-field" type="number" min="0" placeholder="Soru" oninput="updateGenelLessonNet('Ing')">
-                  <input id="genelIngD" class="input-field" type="number" min="0" placeholder="Doğru" oninput="updateGenelLessonNet('Ing')">
-                  <input id="genelIngY" class="input-field" type="number" min="0" placeholder="Yanlış" oninput="updateGenelLessonNet('Ing')">
-                  <input id="genelIngB" class="input-field" type="number" min="0" placeholder="Boş" readonly>
-                </div>
-                <div class="genel-lesson-net">Net: <span id="genelIngNet">0.00</span></div>
-              </div>
-              <div class="genel-lesson-card">
-                <div class="genel-lesson-title">Din Kültürü</div>
-                <div class="genel-lesson-fields">
-                  <input id="genelDinQ" class="input-field" type="number" min="0" placeholder="Soru" oninput="updateGenelLessonNet('Din')">
-                  <input id="genelDinD" class="input-field" type="number" min="0" placeholder="Doğru" oninput="updateGenelLessonNet('Din')">
-                  <input id="genelDinY" class="input-field" type="number" min="0" placeholder="Yanlış" oninput="updateGenelLessonNet('Din')">
-                  <input id="genelDinB" class="input-field" type="number" min="0" placeholder="Boş" readonly>
-                </div>
-                <div class="genel-lesson-net">Net: <span id="genelDinNet">0.00</span></div>
+              <div class="form-group" id="genelExamAytTrackWrap" style="display:none;">
+                <label class="form-label">AYT Alanı</label>
+                <select id="genelExamAytTrack" class="input-field" onchange="onGenelExamFormatChange()">
+                  <option value="sayisal">Sayısal</option>
+                  <option value="ea">Eşit Ağırlık</option>
+                  <option value="sozel">Sözel</option>
+                </select>
               </div>
             </div>
+
+            <div id="genelLessonsGrid" class="genel-grid"></div>
 
             <div class="genel-summary">
               <div>

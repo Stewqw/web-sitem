@@ -2477,7 +2477,6 @@ function kaydetBransDenemesi() {
   if (netEl) netEl.textContent = '0.00';
 }
 
-const GENEL_LESSON_KEYS = ['Mat', 'Fen', 'Tur', 'Ink', 'Ing', 'Din'];
 const GENEL_FIXED_QUESTION_COUNTS = {
   Mat: 20,
   Fen: 20,
@@ -2487,34 +2486,69 @@ const GENEL_FIXED_QUESTION_COUNTS = {
   Ink: 10
 };
 
-function isFixedGenelQuestionClassLevel(classLevelValue) {
-  const normalized = normalizeClassLevel(classLevelValue);
-  if (!normalized) return false;
-  if (normalized === 'LGS') return true;
+const GENEL_HIGH_LESSON_SCHEMA = [
+  { key: 'Mat', label: 'Matematik' },
+  { key: 'Fiz', label: 'Fizik' },
+  { key: 'Kim', label: 'Kimya' },
+  { key: 'Biy', label: 'Biyoloji' },
+  { key: 'Tur', label: 'Türkçe' },
+  { key: 'Tar', label: 'Tarih' },
+  { key: 'Cog', label: 'Coğrafya' },
+  { key: 'Ing', label: 'İngilizce' }
+];
 
+const GENEL_AYT_TRACK_SCHEMAS = {
+  sayisal: [
+    { key: 'Mat', label: 'Matematik' },
+    { key: 'Fiz', label: 'Fizik' },
+    { key: 'Kim', label: 'Kimya' },
+    { key: 'Biy', label: 'Biyoloji' }
+  ],
+  ea: [
+    { key: 'Mat', label: 'Matematik' },
+    { key: 'Tde', label: 'Türk Dili ve Edebiyatı' },
+    { key: 'Tar', label: 'Tarih' },
+    { key: 'Cog', label: 'Coğrafya' }
+  ],
+  sozel: [
+    { key: 'Tde', label: 'Türk Dili ve Edebiyatı' },
+    { key: 'Tar', label: 'Tarih' },
+    { key: 'Cog', label: 'Coğrafya' },
+    { key: 'Fel', label: 'Felsefe' },
+    { key: 'Din', label: 'Din Kültürü' }
+  ]
+};
+
+function parseClassNumberFromLevel(classLevelValue) {
+  const normalized = normalizeClassLevel(classLevelValue);
+  if (!normalized) return null;
+  if (normalized === 'YKS') return 12;
   const className = normalized.startsWith('CUSTOM:')
     ? normalized.slice('CUSTOM:'.length).trim()
     : normalized;
-
   const match = className.match(/^(\d+)(?:\s*\.?\s*SINIF)?$/);
-  if (!match) return false;
+  return match ? Number(match[1]) : null;
+}
 
-  const classNumber = Number(match[1]);
+function isNineTenClassLevel(classLevelValue) {
+  const classNumber = parseClassNumberFromLevel(classLevelValue);
+  return classNumber === 9 || classNumber === 10;
+}
+
+function isTytAytClassLevel(classLevelValue) {
+  const classNumber = parseClassNumberFromLevel(classLevelValue);
+  return classNumber === 11 || classNumber === 12;
+}
+
+function isFixedGenelQuestionClassLevel(classLevelValue) {
+  const classNumber = parseClassNumberFromLevel(classLevelValue);
+  if (classNumber === null) return false;
   return classNumber === 7 || classNumber === 8;
 }
 
 function isSosyalBilgilerClassLevel(classLevelValue) {
-  const normalized = normalizeClassLevel(classLevelValue);
-  if (!normalized) return false;
-
-  const className = normalized.startsWith('CUSTOM:')
-    ? normalized.slice('CUSTOM:'.length).trim()
-    : normalized;
-
-  const match = className.match(/^(\d+)(?:\s*\.?\s*SINIF)?$/);
-  if (!match) return false;
-
-  const classNumber = Number(match[1]);
+  const classNumber = parseClassNumberFromLevel(classLevelValue);
+  if (classNumber === null) return false;
   return classNumber >= 5 && classNumber <= 7;
 }
 
@@ -2526,22 +2560,136 @@ function getGenelInkLessonShortLabelByClassLevel(classLevelValue) {
   return isSosyalBilgilerClassLevel(classLevelValue) ? 'Sos' : 'İnk';
 }
 
-function refreshGenelLessonTitlesForClassLevel(classLevelValue) {
-  const inkTitleEl = document.getElementById('genelInkLessonTitle');
-  if (inkTitleEl) inkTitleEl.textContent = getGenelInkLessonTitleByClassLevel(classLevelValue);
+function getMiddleGenelLessonSchema(classLevelValue) {
+  return [
+    { key: 'Mat', label: 'Matematik' },
+    { key: 'Fen', label: 'Fen Bilimleri' },
+    { key: 'Tur', label: 'Türkçe' },
+    { key: 'Ink', label: getGenelInkLessonTitleByClassLevel(classLevelValue) },
+    { key: 'Ing', label: 'İngilizce' },
+    { key: 'Din', label: 'Din Kültürü' }
+  ];
+}
+
+function getSelectedGenelExamStream() {
+  return String(document.getElementById('genelExamStream')?.value || 'TYT').toUpperCase();
+}
+
+function getSelectedGenelAytTrack() {
+  return String(document.getElementById('genelExamAytTrack')?.value || 'sayisal').toLowerCase();
+}
+
+function getActiveGenelLessonSchema() {
+  const classLevel = getActiveStudentClassLevel();
+  if (isNineTenClassLevel(classLevel)) {
+    return GENEL_HIGH_LESSON_SCHEMA.slice();
+  }
+  if (isTytAytClassLevel(classLevel)) {
+    const stream = getSelectedGenelExamStream();
+    if (stream === 'AYT') {
+      const track = getSelectedGenelAytTrack();
+      return (GENEL_AYT_TRACK_SCHEMAS[track] || GENEL_AYT_TRACK_SCHEMAS.sayisal).slice();
+    }
+    return GENEL_HIGH_LESSON_SCHEMA.slice();
+  }
+  return getMiddleGenelLessonSchema(classLevel);
+}
+
+function getActiveGenelLessonKeys() {
+  return getActiveGenelLessonSchema().map((item) => item.key);
+}
+
+function getGenelLessonSchemaFromRecord(item) {
+  if (item && Array.isArray(item.lessonOrder) && item.lessonOrder.length) {
+    return item.lessonOrder.map((key) => ({
+      key,
+      label: item.lessonLabels && item.lessonLabels[key] ? item.lessonLabels[key] : key
+    }));
+  }
+
+  const lessonValues = item && item.lessons && typeof item.lessons === 'object' ? item.lessons : {};
+  const recordKeys = Object.keys(lessonValues);
+  if (!recordKeys.length) {
+    return getMiddleGenelLessonSchema(item?.classLevel || getActiveStudentClassLevel());
+  }
+
+  const fallbackLabelMap = {
+    Mat: 'Matematik',
+    Fen: 'Fen Bilimleri',
+    Tur: 'Türkçe',
+    Ink: getGenelInkLessonTitleByClassLevel(item?.classLevel || getActiveStudentClassLevel()),
+    Ing: 'İngilizce',
+    Din: 'Din Kültürü',
+    Fiz: 'Fizik',
+    Kim: 'Kimya',
+    Biy: 'Biyoloji',
+    Tar: 'Tarih',
+    Cog: 'Coğrafya',
+    Tde: 'Türk Dili ve Edebiyatı',
+    Fel: 'Felsefe'
+  };
+
+  return recordKeys.map((key) => ({ key, label: fallbackLabelMap[key] || key }));
+}
+
+function getGenelLessonShortLabel(label) {
+  const words = String(label || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return '-';
+  if (words.length === 1) return words[0].slice(0, 3);
+  return words.slice(0, 2).map((w) => w.slice(0, 2)).join('');
+}
+
+function refreshGenelExamFormatControls() {
+  const classLevel = getActiveStudentClassLevel();
+  const streamWrap = document.getElementById('genelExamStreamWrap');
+  const aytWrap = document.getElementById('genelExamAytTrackWrap');
+  const streamSelect = document.getElementById('genelExamStream');
+
+  const showTytAyt = isTytAytClassLevel(classLevel);
+  if (streamWrap) streamWrap.style.display = showTytAyt ? 'block' : 'none';
+
+  const selectedStream = getSelectedGenelExamStream();
+  if (aytWrap) aytWrap.style.display = showTytAyt && selectedStream === 'AYT' ? 'block' : 'none';
+
+  if (showTytAyt && streamSelect && !streamSelect.value) {
+    streamSelect.value = 'TYT';
+  }
+}
+
+function renderGenelLessonInputs() {
+  const gridEl = document.getElementById('genelLessonsGrid');
+  if (!gridEl) return;
+
+  const schema = getActiveGenelLessonSchema();
+  gridEl.innerHTML = schema.map((lesson) => `
+    <div class="genel-lesson-card">
+      <div class="genel-lesson-title">${escapeHtml(lesson.label)}</div>
+      <div class="genel-lesson-fields">
+        <input id="genel${lesson.key}Q" class="input-field" type="number" min="0" placeholder="Soru" oninput="updateGenelLessonNet('${lesson.key}')">
+        <input id="genel${lesson.key}D" class="input-field" type="number" min="0" placeholder="Doğru" oninput="updateGenelLessonNet('${lesson.key}')">
+        <input id="genel${lesson.key}Y" class="input-field" type="number" min="0" placeholder="Yanlış" oninput="updateGenelLessonNet('${lesson.key}')">
+        <input id="genel${lesson.key}B" class="input-field" type="number" min="0" placeholder="Boş" readonly>
+      </div>
+      <div class="genel-lesson-net">Net: <span id="genel${lesson.key}Net">0.00</span></div>
+    </div>
+  `).join('');
+}
+
+function onGenelExamFormatChange() {
+  refreshGenelExamFormatControls();
+  renderGenelLessonInputs();
+  applyGenelQuestionTemplateForActiveStudent();
+  updateGenelTotalNet();
 }
 
 function applyGenelQuestionTemplateForActiveStudent() {
   const classLevel = getActiveStudentClassLevel();
   const shouldLockQuestions = isFixedGenelQuestionClassLevel(classLevel);
-
-  refreshGenelLessonTitlesForClassLevel(classLevel);
-
-  GENEL_LESSON_KEYS.forEach((key) => {
+  getActiveGenelLessonKeys().forEach((key) => {
     const qEl = document.getElementById('genel' + key + 'Q');
     if (!qEl) return;
 
-    if (shouldLockQuestions) {
+    if (shouldLockQuestions && Object.prototype.hasOwnProperty.call(GENEL_FIXED_QUESTION_COUNTS, key)) {
       qEl.value = String(GENEL_FIXED_QUESTION_COUNTS[key] || 0);
       qEl.readOnly = true;
       qEl.setAttribute('readonly', 'readonly');
@@ -2598,7 +2746,7 @@ function updateGenelTotalNet() {
   const totalEl = document.getElementById('genelTotalNet');
   if (!totalEl) return;
 
-  const total = GENEL_LESSON_KEYS.reduce((sum, key) => {
+  const total = getActiveGenelLessonKeys().reduce((sum, key) => {
     const values = getGenelLessonValues(key);
     return sum + values.net;
   }, 0);
@@ -2609,8 +2757,9 @@ function updateGenelTotalNet() {
 function clearGenelExamForm() {
   document.getElementById('genelExamName').value = '';
   document.getElementById('genelExamDate').value = '';
+  renderGenelLessonInputs();
 
-  GENEL_LESSON_KEYS.forEach((key) => {
+  getActiveGenelLessonKeys().forEach((key) => {
     const q = document.getElementById('genel' + key + 'Q');
     const d = document.getElementById('genel' + key + 'D');
     const y = document.getElementById('genel' + key + 'Y');
@@ -2640,22 +2789,20 @@ function renderGenelExamHistory() {
   }
 
   listEl.innerHTML = records.map((item) => {
-    const activeClassLevel = getActiveStudentClassLevel();
-    const inkShortLabel = getGenelInkLessonShortLabelByClassLevel(activeClassLevel);
-    const lessonBreakdown = [
-      `Mat ${Number(item.lessons?.Mat?.net || 0).toFixed(2)}`,
-      `Fen ${Number(item.lessons?.Fen?.net || 0).toFixed(2)}`,
-      `Tür ${Number(item.lessons?.Tur?.net || 0).toFixed(2)}`,
-      `${inkShortLabel} ${Number(item.lessons?.Ink?.net || 0).toFixed(2)}`,
-      `İng ${Number(item.lessons?.Ing?.net || 0).toFixed(2)}`,
-      `Din ${Number(item.lessons?.Din?.net || 0).toFixed(2)}`
-    ].join(' · ');
+    const schema = getGenelLessonSchemaFromRecord(item);
+    const lessonBreakdown = schema
+      .slice(0, 8)
+      .map((lesson) => `${getGenelLessonShortLabel(lesson.label)} ${Number(item.lessons?.[lesson.key]?.net || 0).toFixed(2)}`)
+      .join(' · ');
+    const typeMeta = item.examStream
+      ? `${item.examStream}${item.examStream === 'AYT' && item.aytTrack ? `/${String(item.aytTrack).toUpperCase()}` : ''}`
+      : '';
 
     return `
       <div class="exam-history-item">
         <div>
           <strong>${item.examName}</strong>
-          <div class="exam-history-meta">${formatExamDate(item.examDate)}</div>
+          <div class="exam-history-meta">${formatExamDate(item.examDate)}${typeMeta ? ' · ' + typeMeta : ''}</div>
           <div class="exam-history-actions">
             <button type="button" class="exam-delete-btn exam-pdf-btn" onclick="indirGenelExamPdf(${item.id})">PDF İndir</button>
             <button type="button" class="exam-delete-btn" onclick="deleteGenelExam(${item.id})">Sil</button>
@@ -2708,14 +2855,10 @@ async function indirGenelExamPdf(recordId) {
     }
   };
 
-  const lessons = [
-    { key: 'Mat', name: 'Matematik' },
-    { key: 'Fen', name: 'Fen Bilimleri' },
-    { key: 'Tur', name: 'Turkce' },
-    { key: 'Ink', name: pdfSafeText(getGenelInkLessonTitleByClassLevel(getActiveStudentClassLevel())) },
-    { key: 'Ing', name: 'Ingilizce' },
-    { key: 'Din', name: 'Din Kulturu' }
-  ];
+  const lessons = getGenelLessonSchemaFromRecord(item).map((lesson) => ({
+    key: lesson.key,
+    name: pdfSafeText(lesson.label)
+  }));
 
   const lessonRows = lessons.map((lesson) => {
     const values = item.lessons && item.lessons[lesson.key] ? item.lessons[lesson.key] : {};
@@ -2955,8 +3098,6 @@ async function indirTumGenelDenemelerPdf() {
   doc.text(pdfSafeText(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`), marginLeft, y);
   y += 22;
 
-  const inkShortLabel = getGenelInkLessonShortLabelByClassLevel(getActiveStudentClassLevel());
-
   records.forEach((item, index) => {
     ensureSpace(130);
     doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
@@ -2969,14 +3110,9 @@ async function indirTumGenelDenemelerPdf() {
     doc.text(pdfSafeText(`Tarih: ${formatExamDate(item.examDate)}`), marginLeft, y);
     y += 14;
 
-    const breakdown = [
-      `Mat: ${Number(item.lessons?.Mat?.net || 0).toFixed(2)}`,
-      `Fen: ${Number(item.lessons?.Fen?.net || 0).toFixed(2)}`,
-      `Türkçe: ${Number(item.lessons?.Tur?.net || 0).toFixed(2)}`,
-      `${inkShortLabel}: ${Number(item.lessons?.Ink?.net || 0).toFixed(2)}`,
-      `İng: ${Number(item.lessons?.Ing?.net || 0).toFixed(2)}`,
-      `Din: ${Number(item.lessons?.Din?.net || 0).toFixed(2)}`
-    ].join('   |   ');
+    const breakdown = getGenelLessonSchemaFromRecord(item)
+      .map((lesson) => `${lesson.label}: ${Number(item.lessons?.[lesson.key]?.net || 0).toFixed(2)}`)
+      .join('   |   ');
 
     const wrapped = doc.splitTextToSize(pdfSafeText(breakdown), 510);
     doc.text(wrapped, marginLeft, y);
@@ -3024,12 +3160,28 @@ function kaydetGenelDeneme() {
     return;
   }
 
+  const classLevel = getActiveStudentClassLevel();
+  const isTytAyt = isTytAytClassLevel(classLevel);
+  const examStream = isTytAyt ? getSelectedGenelExamStream() : '';
+  const aytTrack = examStream === 'AYT' ? getSelectedGenelAytTrack() : '';
+
+  if (isTytAyt && examStream === 'AYT' && !aytTrack) {
+    alert('AYT için alan seçmelisiniz.');
+    return;
+  }
+
   applyGenelQuestionTemplateForActiveStudent();
+
+  const lessonSchema = getActiveGenelLessonSchema();
+  const lessonLabels = lessonSchema.reduce((acc, item) => {
+    acc[item.key] = item.label;
+    return acc;
+  }, {});
 
   const lessons = {};
   let totalNet = 0;
 
-  for (const key of GENEL_LESSON_KEYS) {
+  for (const key of lessonSchema.map((item) => item.key)) {
     const values = getGenelLessonValues(key);
     if (values.q > 0 && (values.d + values.y + values.b > values.q)) {
       alert('Bazı derslerde doğru + yanlış + boş, soru sayısından büyük olamaz.');
@@ -3044,6 +3196,11 @@ function kaydetGenelDeneme() {
     id: Date.now(),
     examName,
     examDate,
+    classLevel,
+    examStream,
+    aytTrack,
+    lessonOrder: lessonSchema.map((item) => item.key),
+    lessonLabels,
     lessons,
     totalNet,
     savedAt: Date.now()
@@ -5455,6 +5612,8 @@ function openStudentGenelPage() {
   }
 
   setStudentDetailSection('genel');
+  refreshGenelExamFormatControls();
+  renderGenelLessonInputs();
   applyGenelQuestionTemplateForActiveStudent();
   renderGenelExamHistory();
   updateGenelTotalNet();
@@ -9102,15 +9261,25 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
   const pageWidth = doc.internal.pageSize.getWidth();
   const contentWidth = pageWidth - margin * 2;
   const solvedBreakdown = getCozulenBreakdownForStudent(student);
-  const inkShortLabel = getGenelInkLessonShortLabelByClassLevel(student.classLevel);
-  const inkTitle = getGenelInkLessonTitleByClassLevel(student.classLevel);
-  const genelLessonLabelMap = {
-    Mat: 'Mat',
-    Fen: 'Fen',
-    Tur: 'Turkce',
-    Ink: inkTitle,
-    Ing: 'Ingilizce',
-    Din: 'Din'
+  const getGenelLessonLabelForReport = (record, key) => {
+    if (record && record.lessonLabels && record.lessonLabels[key]) return record.lessonLabels[key];
+    const schema = getGenelLessonSchemaFromRecord(record);
+    const found = schema.find((item) => item.key === key);
+    return found ? found.label : key;
+  };
+
+  const getGenelLessonKeysForRecords = (records) => {
+    const ordered = [];
+    const seen = new Set();
+    records.forEach((record) => {
+      const schema = getGenelLessonSchemaFromRecord(record);
+      schema.forEach((item) => {
+        if (seen.has(item.key)) return;
+        seen.add(item.key);
+        ordered.push(item.key);
+      });
+    });
+    return ordered;
   };
   let y = margin;
 
@@ -9456,29 +9625,54 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     ]);
 
     const genelOnlyRows = filteredGenelRecords.map((item) => {
-      const lessonValues = item.lessons || {};
-      const row = {
+      const modeText = item.examStream
+        ? `${item.examStream}${item.examStream === 'AYT' && item.aytTrack ? `/${String(item.aytTrack).toUpperCase()}` : ''}`
+        : '-';
+      return {
         examDate: formatExamDate(item.examDate || ''),
         examName: item.examName || 'Genel Deneme',
+        examMode: modeText,
         totalNet: Number(item.totalNet || 0).toFixed(2)
       };
-      Object.keys(genelLessonLabelMap).forEach((key) => {
-        row[key] = Number(lessonValues[key]?.net || 0).toFixed(2);
-      });
-      return row;
     });
 
-    drawTable('2. GENEL DENEMELER', [
+    drawTable('2. GENEL DENEME LİSTESİ', [
       { key: 'examDate', label: 'TARİH', width: 74, align: 'center' },
-      { key: 'examName', label: 'DENEME ADI', width: 236, align: 'left', maxLines: 2 },
-      { key: 'totalNet', label: 'TOPLAM NET', width: 92, align: 'center' },
-      { key: 'Mat', label: 'MAT', width: 58, align: 'center' },
-      { key: 'Fen', label: 'FEN', width: 58, align: 'center' },
-      { key: 'Tur', label: 'TÜRKÇE', width: 60, align: 'center' },
-      { key: 'Ink', label: inkShortLabel.toUpperCase('tr-TR'), width: 54, align: 'center' },
-      { key: 'Ing', label: 'İNG', width: 54, align: 'center' },
-      { key: 'Din', label: 'DİN', width: 54, align: 'center' }
+      { key: 'examName', label: 'DENEME ADI', width: 340, align: 'left', maxLines: 2 },
+      { key: 'examMode', label: 'TÜR', width: 110, align: 'center' },
+      { key: 'totalNet', label: 'TOPLAM NET', width: 110, align: 'center' }
     ], genelOnlyRows, 'Kayitli genel deneme bulunamadi.');
+
+    const lessonKeys = getGenelLessonKeysForRecords(filteredGenelRecords);
+    const lessonAverageRows = lessonKeys.map((key) => {
+      const totals = filteredGenelRecords.reduce((acc, record) => {
+        const values = record?.lessons?.[key] || {};
+        acc.q += Number(values.q || 0);
+        acc.d += Number(values.d || 0);
+        acc.y += Number(values.y || 0);
+        acc.b += Number(values.b || 0);
+        acc.net += Number(values.net || 0);
+        return acc;
+      }, { q: 0, d: 0, y: 0, b: 0, net: 0 });
+      const divisor = filteredGenelRecords.length || 1;
+      return {
+        lesson: getGenelLessonLabelForReport(filteredGenelRecords.find((item) => item?.lessons?.[key]), key),
+        avgQuestion: (totals.q / divisor).toFixed(2),
+        avgCorrect: (totals.d / divisor).toFixed(2),
+        avgWrong: (totals.y / divisor).toFixed(2),
+        avgBlank: (totals.b / divisor).toFixed(2),
+        avgNet: (totals.net / divisor).toFixed(2)
+      };
+    });
+
+    drawTable('3. GENEL DENEME DERS ORTALAMALARI', [
+      { key: 'lesson', label: 'DERS', width: 250, align: 'left' },
+      { key: 'avgQuestion', label: 'ORTALAMA SORU', width: 150, align: 'center' },
+      { key: 'avgCorrect', label: 'ORTALAMA DOĞRU', width: 150, align: 'center' },
+      { key: 'avgWrong', label: 'ORTALAMA YANLIŞ', width: 150, align: 'center' },
+      { key: 'avgBlank', label: 'ORTALAMA BOŞ', width: 150, align: 'center' },
+      { key: 'avgNet', label: 'ORTALAMA NET', width: 150, align: 'center' }
+    ], lessonAverageRows, 'Ders bazlı ortalama hesaplanamadı.');
 
     const safeStudent = normalizeFileName(student.name || 'ogrenci');
     doc.save(`${safeStudent}_genel_deneme_raporu.pdf`);
@@ -9743,15 +9937,7 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     { label: 'ORTALAMA NET', value: genelSummaryAverages.net.toFixed(2) }
   ]);
 
-  const lessonOrder = ['Mat', 'Fen', 'Tur', 'Ink', 'Ing', 'Din'];
-  const lessonDisplayNames = {
-    Mat: 'Matematik',
-    Fen: 'Fen Bilimleri',
-    Tur: 'Türkçe',
-    Ink: getGenelInkLessonTitleByClassLevel(student.classLevel),
-    Ing: 'İngilizce',
-    Din: 'Din Kültürü'
-  };
+  const lessonOrder = getGenelLessonKeysForRecords(filteredGenelRecords);
 
   const genelLessonAverageRows = lessonOrder.map((lessonKey) => {
     const totals = filteredGenelRecords.reduce((acc, item) => {
@@ -9766,7 +9952,7 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
 
     const divisor = filteredGenelRecords.length || 1;
     return {
-      lesson: lessonDisplayNames[lessonKey] || lessonKey,
+      lesson: getGenelLessonLabelForReport(filteredGenelRecords.find((item) => item?.lessons?.[lessonKey]), lessonKey),
       avgQuestion: (totals.q / divisor).toFixed(2),
       avgCorrect: (totals.d / divisor).toFixed(2),
       avgWrong: (totals.y / divisor).toFixed(2),
@@ -9895,19 +10081,10 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     upsertLessonPerformance(item.lesson || '-', item.question, item.correct, item.wrong, item.blank);
   });
 
-  const genelLessonDisplayMap = {
-    Mat: 'Matematik',
-    Fen: 'Fen',
-    Tur: 'Türkçe',
-    Ink: getGenelInkLessonTitleByClassLevel(student.classLevel),
-    Ing: 'İngilizce',
-    Din: 'Din'
-  };
-
   filteredGenelRecords.forEach((item) => {
     const lessons = item?.lessons || {};
     Object.entries(lessons).forEach(([key, values]) => {
-      const label = genelLessonDisplayMap[key] || key;
+      const label = getGenelLessonLabelForReport(item, key);
       upsertLessonPerformance(label, values?.q, values?.d, values?.y, values?.b);
     });
   });
