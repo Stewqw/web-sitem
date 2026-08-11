@@ -8861,6 +8861,29 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     return acc;
   }, { recordCount: 0, question: 0, correct: 0, wrong: 0, blank: 0 });
 
+  const filteredBransSummary = filteredBransRecords.reduce((acc, item) => {
+    acc.question += Number(item?.questionCount || 0);
+    acc.correct += Number(item?.correct || 0);
+    acc.wrong += Number(item?.wrong || 0);
+    return acc;
+  }, { question: 0, correct: 0, wrong: 0 });
+
+  const filteredGenelSummary = filteredGenelRecords.reduce((acc, item) => {
+    const lessons = item?.lessons || {};
+    Object.values(lessons).forEach((lesson) => {
+      acc.question += Number(lesson?.q || 0);
+      acc.correct += Number(lesson?.d || 0);
+      acc.wrong += Number(lesson?.y || 0);
+    });
+    return acc;
+  }, { question: 0, correct: 0, wrong: 0 });
+
+  const filteredOverallQuestionSummary = {
+    question: filteredSolvedSummary.question + filteredBransSummary.question + filteredGenelSummary.question,
+    correct: filteredSolvedSummary.correct + filteredBransSummary.correct + filteredGenelSummary.correct,
+    wrong: filteredSolvedSummary.wrong + filteredBransSummary.wrong + filteredGenelSummary.wrong
+  };
+
   const filteredKaynakSummary = filteredKonuDetails.reduce((acc, item) => {
     acc.finishedTopicCount += 1;
     if (Array.isArray(item.resources)) {
@@ -9340,11 +9363,11 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     { label: 'SINIF', value: getClassDisplayLabel(student.classLevel) },
     { label: 'BRANŞ DENEME', value: filteredBransRecords.length },
     { label: 'GENEL DENEME', value: filteredGenelRecords.length },
-    { label: 'ÇÖZÜLEN KAYIT', value: filteredSolvedSummary.recordCount },
-    { label: 'TOPLAM SORU', value: filteredSolvedSummary.question },
     { label: 'BİTİRİLEN KONU', value: filteredKaynakSummary.finishedTopicCount },
-    { label: 'BİTİRİLEN KAYNAK', value: filteredKaynakSummary.finishedResourceCount },
-    { label: 'ÇÖZÜLEN DOĞRU', value: filteredSolvedSummary.correct }
+    { label: 'TOPLAM SORU', value: filteredOverallQuestionSummary.question },
+    { label: 'TOPLAM DOĞRU', value: filteredOverallQuestionSummary.correct },
+    { label: 'TOPLAM YANLIŞ', value: filteredOverallQuestionSummary.wrong },
+    { label: 'BİTİRİLEN KAYNAK', value: filteredKaynakSummary.finishedResourceCount }
   ]);
 
   const bransRows = filteredBransRecords.map((item) => ({
