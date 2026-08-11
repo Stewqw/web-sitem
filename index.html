@@ -593,6 +593,52 @@
     .menu-item.has-submenu { position: relative; display: block; padding: 0; }
     .menu-item.has-submenu .menu-main { display: flex; align-items: center; justify-content: flex-start; gap: 14px; width: 100%; padding: 10px 10px; }
     .menu-item.has-submenu .menu-title { width: auto; }
+    .menu-title-with-info { display: inline-flex; align-items: center; gap: 8px; position: relative; }
+    .menu-info-trigger {
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(226, 232, 240, 0.75);
+      background: rgba(255, 255, 255, 0.12);
+      color: #e2e8f0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.72rem;
+      font-weight: 800;
+      line-height: 1;
+      cursor: help;
+    }
+    .menu-info-trigger:hover,
+    .menu-info-trigger:focus-visible {
+      background: rgba(255, 255, 255, 0.22);
+      border-color: rgba(226, 232, 240, 0.95);
+      outline: none;
+    }
+    .global-menu-tooltip {
+      position: fixed;
+      width: min(320px, calc(100vw - 24px));
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.38);
+      background: var(--color-coral);
+      color: #ffffff;
+      font-size: 0.79rem;
+      font-weight: 500;
+      line-height: 1.45;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.26);
+      z-index: 1200;
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-4px);
+      transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
+    }
+    .global-menu-tooltip.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
     .menu-item.has-submenu .submenu { display: none; width: 100%; margin-top: 6px; padding-left: 30px; }
     .menu-item.has-submenu.submenu-open .submenu { display: flex; flex-direction: column; gap: 4px; }
     .submenu-item { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,0.08); color: #e2e8f0; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
@@ -602,6 +648,19 @@
     .class-menu-item-with-delete { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
     .class-menu-delete { padding: 0; border: 0; background: transparent; color: #f87171; font-size: 1rem; font-weight: 800; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
     .class-menu-delete:hover { color: #fecaca; }
+    .unite-konu-lesson-block {
+      background: linear-gradient(180deg, #f8fbff 0%, #f6f9ff 100%);
+      border: 1px solid #d9e5f5;
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+    .unite-konu-divider {
+      height: 1px;
+      border: 0;
+      background: linear-gradient(90deg, rgba(30,64,175,0) 0%, rgba(30,64,175,0.28) 22%, rgba(249,115,22,0.42) 52%, rgba(30,64,175,0.28) 78%, rgba(30,64,175,0) 100%);
+      margin: 6px 0 14px;
+    }
 
     .worksheet-layout { display: grid; grid-template-columns: minmax(260px, 0.78fr) minmax(0, 1.5fr); gap: 18px; align-items: start; }
     .worksheet-tool-panel { border: 1px solid #dbe4ef; background: #f8fafc; padding: 16px; border-radius: 8px; }
@@ -2317,7 +2376,11 @@
             </div>
             <div class="menu-item has-submenu" id="menu-unite-konu">
               <div class="menu-main" onclick="sekmeAcs('unite-konu'); toggleUniteKonuSubmenu(event)">
-                <span class="icon"></span><span class="menu-title">Ünite/Konu</span>
+                <span class="icon"></span>
+                <span class="menu-title menu-title-with-info">
+                  Ünite/Konu
+                  <span class="menu-info-trigger" role="button" tabindex="0" aria-label="Ünite/Konu bilgi" data-menu-tooltip="Ünite/Konu alanında sınıf bazlı dersleri ekleyebilir veya kaldırabilirsiniz. Burada yapılan güncellemeler, ilgili sınıfın ders bazlı seçim kullanan tüm modüllerine otomatik olarak yansır." onclick="event.stopPropagation();">i</span>
+                </span>
               </div>
               <div class="submenu">
                 <div class="submenu-item unite-konu-submenu-item" data-sinif="4" onclick="event.stopPropagation(); selectUniteKonuSinif('4', this);">4. Sınıf</div>
@@ -2562,11 +2625,6 @@
                 <label class="form-label">Ders Seçimi</label>
                 <select id="bransExamLesson" class="input-field" onchange="updateBransUnitOptions()">
                   <option value="">Ders seçin</option>
-                  <option>Matematik</option>
-                  <option>Fen Bilimleri</option>
-                  <option>Türkçe</option>
-                  <option>Sosyal Bilgiler</option>
-                  <option>İngilizce</option>
                 </select>
               </div>
               <div class="form-group">
@@ -2678,26 +2736,30 @@
             </div>
 
             <div style="background:#fff; border:1px solid #e2e8f0; border-radius:20px; padding:22px; box-shadow:0 12px 30px rgba(15,23,42,0.05); margin-bottom:16px;">
-              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
-                <div class="form-group" style="margin-bottom:0;">
-                  <label class="form-label">Sınıf</label>
-                  <input id="uniteKonuClassDisplay" class="input-field" type="text" readonly value="LGS" style="margin-bottom:0;">
-                </div>
-                <div class="form-group" style="margin-bottom:0;">
-                  <label class="form-label">Ders</label>
-                  <div style="display:flex; gap:8px; align-items:center;">
-                    <select id="uniteKonuLesson" class="input-field" onchange="onUniteKonuLessonChange()" style="margin-bottom:0;">
-                      <option value="">Ders seçin</option>
-                    </select>
-                    <button type="button" class="btn-nav-outline" onclick="openUniteKonuLessonModal()" style="padding:10px 12px; white-space:nowrap;">Ders Ekle</button>
+              <div class="unite-konu-lesson-block">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label">Sınıf</label>
+                    <input id="uniteKonuClassDisplay" class="input-field" type="text" readonly value="LGS" style="margin-bottom:0;">
                   </div>
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label">Ders</label>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                      <select id="uniteKonuLesson" class="input-field" onchange="onUniteKonuLessonChange()" style="margin-bottom:0;">
+                        <option value="">Ders seçin</option>
+                      </select>
+                      <button type="button" class="btn-nav-outline" onclick="openUniteKonuLessonModal()" style="padding:10px 12px; white-space:nowrap;">Ders Ekle</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Dersler</label>
+                  <div id="uniteKonuLessonList" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
                 </div>
               </div>
 
-              <div class="form-group" style="margin-bottom:12px;">
-                <label class="form-label">Dersler</label>
-                <div id="uniteKonuLessonList" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
-              </div>
+              <hr class="unite-konu-divider">
 
               <div style="display:grid; grid-template-columns: 1.2fr auto auto; gap:10px; margin-bottom:12px; align-items:center;">
                 <input id="uniteKonuUnitInput" type="text" class="input-field" placeholder="Yeni ünite adı" style="margin-bottom:0;">

@@ -1603,6 +1603,72 @@ function closeMobileSidebar() {
   if (toggleButton) toggleButton.setAttribute('aria-expanded', 'false');
 }
 
+let globalMenuTooltipEl = null;
+
+function ensureGlobalMenuTooltipElement() {
+  if (globalMenuTooltipEl && document.body.contains(globalMenuTooltipEl)) return globalMenuTooltipEl;
+  const tooltipEl = document.createElement('div');
+  tooltipEl.className = 'global-menu-tooltip';
+  document.body.appendChild(tooltipEl);
+  globalMenuTooltipEl = tooltipEl;
+  return globalMenuTooltipEl;
+}
+
+function hideGlobalMenuTooltip() {
+  const tooltipEl = ensureGlobalMenuTooltipElement();
+  tooltipEl.classList.remove('show');
+}
+
+function showGlobalMenuTooltip(targetEl) {
+  if (!targetEl) return;
+  const message = String(targetEl.dataset.menuTooltip || '').trim();
+  if (!message) return;
+
+  const tooltipEl = ensureGlobalMenuTooltipElement();
+  tooltipEl.textContent = message;
+
+  const rect = targetEl.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const gap = 12;
+
+  tooltipEl.style.left = '0px';
+  tooltipEl.style.top = '0px';
+  tooltipEl.classList.add('show');
+
+  const tooltipRect = tooltipEl.getBoundingClientRect();
+  let left = rect.right + gap;
+  if (left + tooltipRect.width > viewportWidth - 12) {
+    left = Math.max(12, rect.left - tooltipRect.width - gap);
+  }
+
+  let top = rect.top + (rect.height / 2) - (tooltipRect.height / 2);
+  if (top + tooltipRect.height > viewportHeight - 12) {
+    top = viewportHeight - tooltipRect.height - 12;
+  }
+  if (top < 12) top = 12;
+
+  tooltipEl.style.left = `${Math.round(left)}px`;
+  tooltipEl.style.top = `${Math.round(top)}px`;
+}
+
+function bindMenuInfoTooltips() {
+  const triggers = document.querySelectorAll('.menu-info-trigger[data-menu-tooltip]');
+  triggers.forEach((triggerEl) => {
+    if (triggerEl.dataset.tooltipBound === '1') return;
+
+    triggerEl.addEventListener('mouseenter', () => showGlobalMenuTooltip(triggerEl));
+    triggerEl.addEventListener('focus', () => showGlobalMenuTooltip(triggerEl));
+    triggerEl.addEventListener('mouseleave', hideGlobalMenuTooltip);
+    triggerEl.addEventListener('blur', hideGlobalMenuTooltip);
+    triggerEl.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') hideGlobalMenuTooltip();
+    });
+
+    triggerEl.dataset.tooltipBound = '1';
+  });
+}
+
 function updateBransExamNet() {
   const questionCount = Number(document.getElementById('bransExamQuestionCount')?.value) || 0;
   const correct = Number(document.getElementById('bransExamCorrect')?.value) || 0;
@@ -1616,6 +1682,29 @@ function updateBransExamNet() {
 }
 
 let bransTopicStats = {};
+
+function populateBransLessonOptions() {
+  const lessonSelect = document.getElementById('bransExamLesson');
+  if (!lessonSelect) return;
+
+  const classLevel = getActiveStudentClassLevel();
+  const lessonOptions = getLessonOptionsForClass(classLevel);
+  const currentValue = String(lessonSelect.value || '');
+
+  lessonSelect.innerHTML = '<option value="">Ders seçin</option>';
+  lessonOptions.forEach((lesson) => {
+    const opt = document.createElement('option');
+    opt.value = lesson;
+    opt.textContent = lesson;
+    lessonSelect.appendChild(opt);
+  });
+
+  if (currentValue && lessonOptions.includes(currentValue)) {
+    lessonSelect.value = currentValue;
+  } else {
+    lessonSelect.value = '';
+  }
+}
 
 function getActiveStudentClassLevel() {
   const students = getStoredOgrenciler();
@@ -4258,6 +4347,7 @@ document.addEventListener('DOMContentLoaded', () => {
   populateClassSelect(document.getElementById('editStudentClass'), '8');
   toggleClassAddInputs('ogrenciSinifInput', 'ogrenciCustomClassName', 'ogrenciStandardClassToAdd');
   toggleClassAddInputs('editStudentClass', 'editStudentCustomClassName', 'editStandardClassToAdd');
+  bindMenuInfoTooltips();
   loadSavedResourceSuggestions();
   const resourceNameInput = document.getElementById('resourceNameInput');
   const resourceLessonSelect = document.getElementById('resourceLessonSelect');
@@ -5351,6 +5441,7 @@ function openStudentBransPage() {
   if (classDisplayEl) {
     classDisplayEl.value = getClassDisplayLabel(student.classLevel || '8');
   }
+  populateBransLessonOptions();
   updateBransUnitOptions();
   renderBransExamHistory();
 }
