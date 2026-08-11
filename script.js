@@ -9652,30 +9652,46 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     { label: 'ORTALAMA NET', value: genelSummaryAverages.net.toFixed(2) }
   ]);
 
-  const genelRows = filteredGenelRecords.map((item) => {
-    const lessonValues = item.lessons || {};
-    const row = {
-      examDate: formatExamDate(item.examDate || ''),
-      examName: item.examName || 'Genel Deneme',
-      totalNet: Number(item.totalNet || 0).toFixed(2)
+  const lessonOrder = ['Mat', 'Fen', 'Tur', 'Ink', 'Ing', 'Din'];
+  const lessonDisplayNames = {
+    Mat: 'Matematik',
+    Fen: 'Fen Bilimleri',
+    Tur: 'Türkçe',
+    Ink: getGenelInkLessonTitleByClassLevel(student.classLevel),
+    Ing: 'İngilizce',
+    Din: 'Din Kültürü'
+  };
+
+  const genelLessonAverageRows = lessonOrder.map((lessonKey) => {
+    const totals = filteredGenelRecords.reduce((acc, item) => {
+      const values = item?.lessons?.[lessonKey] || {};
+      acc.q += Number(values.q || 0);
+      acc.d += Number(values.d || 0);
+      acc.y += Number(values.y || 0);
+      acc.b += Number(values.b || 0);
+      acc.net += Number(values.net || 0);
+      return acc;
+    }, { q: 0, d: 0, y: 0, b: 0, net: 0 });
+
+    const divisor = filteredGenelRecords.length || 1;
+    return {
+      lesson: lessonDisplayNames[lessonKey] || lessonKey,
+      avgQuestion: (totals.q / divisor).toFixed(2),
+      avgCorrect: (totals.d / divisor).toFixed(2),
+      avgWrong: (totals.y / divisor).toFixed(2),
+      avgBlank: (totals.b / divisor).toFixed(2),
+      avgNet: (totals.net / divisor).toFixed(2)
     };
-    Object.keys(genelLessonLabelMap).forEach((key) => {
-      row[key] = Number(lessonValues[key]?.net || 0).toFixed(2);
-    });
-    return row;
   });
 
   drawTable('4. GENEL DENEMELER', [
-    { key: 'examDate', label: 'TARİH', width: 74, align: 'center' },
-    { key: 'examName', label: 'DENEME ADI', width: 236, align: 'left', maxLines: 2 },
-    { key: 'totalNet', label: 'TOPLAM NET', width: 92, align: 'center' },
-    { key: 'Mat', label: 'MAT', width: 58, align: 'center' },
-    { key: 'Fen', label: 'FEN', width: 58, align: 'center' },
-    { key: 'Tur', label: 'TÜRKÇE', width: 60, align: 'center' },
-    { key: 'Ink', label: inkShortLabel.toUpperCase('tr-TR'), width: 54, align: 'center' },
-    { key: 'Ing', label: 'İNG', width: 54, align: 'center' },
-    { key: 'Din', label: 'DİN', width: 54, align: 'center' }
-  ], genelRows, 'Kayitli genel deneme bulunamadi.', { keepTogether: true });
+    { key: 'lesson', label: 'DERS', width: 250, align: 'left' },
+    { key: 'avgQuestion', label: 'ORTALAMA SORU', width: 150, align: 'center' },
+    { key: 'avgCorrect', label: 'ORTALAMA DOĞRU', width: 150, align: 'center' },
+    { key: 'avgWrong', label: 'ORTALAMA YANLIŞ', width: 150, align: 'center' },
+    { key: 'avgBlank', label: 'ORTALAMA BOŞ', width: 150, align: 'center' },
+    { key: 'avgNet', label: 'ORTALAMA NET', width: 150, align: 'center' }
+  ], filteredGenelRecords.length ? genelLessonAverageRows : [], 'Kayitli genel deneme bulunamadi.', { keepTogether: true });
 
   const kaynakByLesson = new Map();
   filteredKaynakSummary.finishedTopicDetails.forEach((item) => {
