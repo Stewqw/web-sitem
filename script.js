@@ -9423,6 +9423,8 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
   const drawTable = (sectionTitle, columns, rows, emptyMessage = 'Kayıt bulunamadı.', options = {}) => {
     const safeRows = Array.isArray(rows) ? rows : [];
     const opts = options || {};
+    const customCellRenderer = typeof opts.customCellRenderer === 'function' ? opts.customCellRenderer : null;
+    const minRowHeight = Math.max(24, Number(opts.minRowHeight || 24));
 
     const inputTotalWidth = columns.reduce((sum, col) => sum + Math.max(1, Number(col.width) || 0), 0);
     const fittedColumns = columns.map((col) => ({
@@ -9451,11 +9453,12 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
 
     const estimateRowHeight = (row) => {
       const lineCounts = fittedColumns.map((col) => {
-        const raw = row[col.key] == null ? '-' : String(row[col.key]);
+        const value = row[col.key];
+        const raw = value == null ? '-' : (typeof value === 'object' ? '' : String(value));
         const lines = getCellLines(raw, col);
         return Math.max(1, lines.length);
       });
-      return Math.max(24, (Math.max(...lineCounts) * 11) + 10);
+      return Math.max(minRowHeight, (Math.max(...lineCounts) * 11) + 10);
     };
 
     if (opts.startOnNewPage && y > margin + 2) {
@@ -9526,7 +9529,8 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
 
       let x = margin;
       fittedColumns.forEach((col, colIndex) => {
-        const raw = row[col.key] == null ? '-' : String(row[col.key]);
+        const value = row[col.key];
+        const raw = value == null ? '-' : (typeof value === 'object' ? '' : String(value));
         const lines = getCellLines(raw, col);
 
         doc.setDrawColor(226, 232, 240);
@@ -9540,6 +9544,11 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
         doc.setTextColor(30, 41, 59);
         doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
         doc.setFontSize(9);
+
+        if (customCellRenderer && customCellRenderer({ doc, row, col, x, y, rowHeight, hasUnicodeFont, pdfSafeText })) {
+          x += col.width;
+          return;
+        }
 
         const textYStart = y + 15;
         lines.forEach((line, idx) => {
@@ -9605,6 +9614,11 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
   }
 
   doc.text(pdfSafeText(`Öğrenci: ${student.name || '-'}`), studentX, reportDateY);
+  doc.setFontSize(10);
+  doc.setTextColor(71, 85, 105);
+  doc.text(pdfSafeText(`Sınıfı: ${getClassDisplayLabel(student.classLevel)}`), studentX, reportDateY + 15);
+  doc.setFontSize(11);
+  doc.setTextColor(18, 47, 92);
   y += 84;
 
   if (isGeneralOnly) {
@@ -9616,63 +9630,96 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
       return;
     }
 
+    const genelAverages = filteredGenelRecords.reduce((acc, item) => {
+      const lessons = item?.lessons || {};
+      Object.values(lessons).forEach((lesson) => {
+        acc.correct += Number(lesson?.d || 0);
+        acc.wrong += Number(lesson?.y || 0);
+        acc.blank += Number(lesson?.b || 0);
+      });
+      return acc;
+    }, { correct: 0, wrong: 0, blank: 0 });
+
+    const genelCount = filteredGenelRecords.length || 1;
+
     writeSectionTitle('1. GENEL DENEMELER ÖZETİ');
     drawSummaryGrid([
-      { label: 'GENEL DENEME', value: filteredGenelRecords.length },
-      { label: 'TOPLAM NET', value: totalNet },
-      { label: 'ORTALAMA NET', value: averageNet },
-      { label: 'SINIF', value: getClassDisplayLabel(student.classLevel) }
+      { label: 'TOPLAM GENEL DENEME', value: filteredGenelRecords.length },
+      { label: 'ORTALAMA DOĞRU', value: (genelAverages.correct / genelCount).toFixed(2) },
+      { label: 'ORTALAMA YANLIŞ', value: (genelAverages.wrong / genelCount).toFixed(2) },
+      { label: 'ORTALAMA BOŞ', value: (genelAverages.blank / genelCount).toFixed(2) },
+      { label: 'ORTALAMA NET', value: averageNet }
     ]);
 
     const genelOnlyRows = filteredGenelRecords.map((item) => {
-      const modeText = item.examStream
-        ? `${item.examStream}${item.examStream === 'AYT' && item.aytTrack ? `/${String(item.aytTrack).toUpperCase()}` : ''}`
-        : '-';
+      const lessonKeys = getGenelLessonKeysForRecords([item]);
+      const lessonCells = lessonKeys.reduce((acc, key) => {
+        const lesson = item?.lessons?.[key] || {};
+        acc[`lesson_${key}`] = {
+          d: Number(lesson.d || 0),
+          y: Number(lesson.y || 0),
+          b: Number(lesson.b || 0),
+          n: Number(lesson.net || 0)
+        };
+        return acc;
+      }, {});
       return {
         examDate: formatExamDate(item.examDate || ''),
         examName: item.examName || 'Genel Deneme',
-        examMode: modeText,
-        totalNet: Number(item.totalNet || 0).toFixed(2)
+        totalNet: Number(item.totalNet || 0).toFixed(2),
+        ...lessonCells
       };
     });
-
-    drawTable('2. GENEL DENEME LİSTESİ', [
-      { key: 'examDate', label: 'TARİH', width: 74, align: 'center' },
-      { key: 'examName', label: 'DENEME ADI', width: 340, align: 'left', maxLines: 2 },
-      { key: 'examMode', label: 'TÜR', width: 110, align: 'center' },
-      { key: 'totalNet', label: 'TOPLAM NET', width: 110, align: 'center' }
-    ], genelOnlyRows, 'Kayitli genel deneme bulunamadi.');
 
     const lessonKeys = getGenelLessonKeysForRecords(filteredGenelRecords);
-    const lessonAverageRows = lessonKeys.map((key) => {
-      const totals = filteredGenelRecords.reduce((acc, record) => {
-        const values = record?.lessons?.[key] || {};
-        acc.q += Number(values.q || 0);
-        acc.d += Number(values.d || 0);
-        acc.y += Number(values.y || 0);
-        acc.b += Number(values.b || 0);
-        acc.net += Number(values.net || 0);
-        return acc;
-      }, { q: 0, d: 0, y: 0, b: 0, net: 0 });
-      const divisor = filteredGenelRecords.length || 1;
-      return {
-        lesson: getGenelLessonLabelForReport(filteredGenelRecords.find((item) => item?.lessons?.[key]), key),
-        avgQuestion: (totals.q / divisor).toFixed(2),
-        avgCorrect: (totals.d / divisor).toFixed(2),
-        avgWrong: (totals.y / divisor).toFixed(2),
-        avgBlank: (totals.b / divisor).toFixed(2),
-        avgNet: (totals.net / divisor).toFixed(2)
-      };
-    });
+    const lessonColumns = lessonKeys.map((key) => ({
+      key: `lesson_${key}`,
+      label: key.toUpperCase(),
+      width: 118,
+      align: 'center'
+    }));
 
-    drawTable('3. GENEL DENEME DERS ORTALAMALARI', [
-      { key: 'lesson', label: 'DERS', width: 250, align: 'left' },
-      { key: 'avgQuestion', label: 'ORTALAMA SORU', width: 150, align: 'center' },
-      { key: 'avgCorrect', label: 'ORTALAMA DOĞRU', width: 150, align: 'center' },
-      { key: 'avgWrong', label: 'ORTALAMA YANLIŞ', width: 150, align: 'center' },
-      { key: 'avgBlank', label: 'ORTALAMA BOŞ', width: 150, align: 'center' },
-      { key: 'avgNet', label: 'ORTALAMA NET', width: 150, align: 'center' }
-    ], lessonAverageRows, 'Ders bazlı ortalama hesaplanamadı.');
+    drawTable('2. GENEL DENEMELER', [
+      { key: 'examDate', label: 'TARİH', width: 84, align: 'center' },
+      { key: 'examName', label: 'DENEME ADI', width: 274, align: 'left', maxLines: 2 },
+      { key: 'totalNet', label: 'TOPLAM NET', width: 106, align: 'center' },
+      ...lessonColumns
+    ], genelOnlyRows, 'Kayitli genel deneme bulunamadi.', {
+      minRowHeight: 36,
+      customCellRenderer: ({ row, col, x, y, rowHeight }) => {
+        if (!String(col.key || '').startsWith('lesson_')) return false;
+        const values = row[col.key];
+        if (!values || typeof values !== 'object') return false;
+
+        const labels = [
+          { key: 'd', text: 'D', color: [24, 160, 88] },
+          { key: 'y', text: 'Y', color: [220, 38, 38] },
+          { key: 'b', text: 'B', color: [107, 114, 128] },
+          { key: 'n', text: 'N', color: [24, 47, 92] }
+        ];
+
+        const colWidth = col.width / 4;
+        const headerY = y + 12;
+        const valueY = y + Math.min(rowHeight - 7, 26);
+
+        labels.forEach((item, index) => {
+          const centerX = x + (colWidth * index) + (colWidth / 2);
+          doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
+          doc.setFontSize(7.3);
+          doc.setTextColor(item.color[0], item.color[1], item.color[2]);
+          doc.text(item.text, centerX, headerY, { align: 'center' });
+
+          doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
+          doc.setFontSize(7.6);
+          doc.setTextColor(30, 41, 59);
+          const value = item.key === 'n'
+            ? Number(values[item.key] || 0).toFixed(2)
+            : String(Number(values[item.key] || 0));
+          doc.text(value, centerX, valueY, { align: 'center' });
+        });
+        return true;
+      }
+    });
 
     const safeStudent = normalizeFileName(student.name || 'ogrenci');
     doc.save(`${safeStudent}_genel_deneme_raporu.pdf`);
@@ -9697,6 +9744,57 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
       { label: 'ORTALAMA NET', value: averageNet }
     ]);
 
+    const bransByLesson = new Map();
+    filteredBransRecords.forEach((item) => {
+      const lesson = String(item.lesson || '-').trim() || '-';
+      if (!bransByLesson.has(lesson)) {
+        bransByLesson.set(lesson, {
+          lesson,
+          examCount: 0,
+          unitSet: new Set(),
+          totalQuestion: 0,
+          totalCorrect: 0,
+          totalWrong: 0,
+          totalBlank: 0,
+          totalNet: 0
+        });
+      }
+
+      const target = bransByLesson.get(lesson);
+      target.examCount += 1;
+      const unit = String(item.unit || '').trim();
+      if (unit) target.unitSet.add(unit.toLocaleLowerCase('tr-TR'));
+      target.totalQuestion += Number(item.questionCount || 0);
+      target.totalCorrect += Number(item.correct || 0);
+      target.totalWrong += Number(item.wrong || 0);
+      target.totalBlank += Number(item.blank || 0);
+      target.totalNet += Number(item.net || 0);
+    });
+
+    const bransSummaryRows = Array.from(bransByLesson.values())
+      .sort((a, b) => a.lesson.localeCompare(b.lesson, 'tr', { sensitivity: 'base' }))
+      .map((item) => ({
+        lesson: item.lesson,
+        totalBransExam: item.examCount,
+        totalUnitTopic: item.unitSet.size,
+        totalQuestion: item.totalQuestion,
+        avgCorrect: (item.totalCorrect / item.examCount).toFixed(2),
+        avgWrong: (item.totalWrong / item.examCount).toFixed(2),
+        avgBlank: (item.totalBlank / item.examCount).toFixed(2),
+        avgNet: (item.totalNet / item.examCount).toFixed(2)
+      }));
+
+    drawTable('2. BRANŞ DENEME ÖZETİ', [
+      { key: 'lesson', label: 'DERS ADI', width: 168, align: 'left' },
+      { key: 'totalBransExam', label: 'TOPLAM BRANŞ DENEME', width: 148, align: 'center' },
+      { key: 'totalUnitTopic', label: 'TOPLAM ÜNİTE / KONU', width: 140, align: 'center' },
+      { key: 'totalQuestion', label: 'TOPLAM SORU SAYISI', width: 130, align: 'center' },
+      { key: 'avgCorrect', label: 'ORTALAMA DOĞRU', width: 110, align: 'center' },
+      { key: 'avgWrong', label: 'ORTALAMA YANLIŞ', width: 110, align: 'center' },
+      { key: 'avgBlank', label: 'ORTALAMA BOŞ', width: 110, align: 'center' },
+      { key: 'avgNet', label: 'ORTALAMA NET', width: 94, align: 'center' }
+    ], bransSummaryRows, 'Kayitli brans denemesi bulunamadi.');
+
     const bransOnlyRows = filteredBransRecords.map((item) => ({
       examDate: formatExamDate(item.examDate || ''),
       examName: item.examName || 'Brans Denemesi',
@@ -9709,7 +9807,7 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
       net: Number(item.net || 0).toFixed(2)
     }));
 
-    drawTable('2. BRANŞ DENEMELERİ', [
+    drawTable('3. BRANŞ DENEMELERİ', [
       { key: 'examDate', label: 'TARİH', width: 74, align: 'center' },
       { key: 'examName', label: 'DENEME ADI', width: 220, align: 'left', maxLines: 2 },
       { key: 'lesson', label: 'DERS ADI', width: 100, align: 'left' },
@@ -9740,7 +9838,7 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
       });
     });
 
-    drawTable('3. BRANŞ DENEME KONU DAĞILIMI', [
+    drawTable('4. BRANŞ DENEME KONU DAĞILIMI', [
       { key: 'examDate', label: 'TARİH', width: 74, align: 'center' },
       { key: 'examName', label: 'DENEME ADI', width: 184, align: 'left', maxLines: 2 },
       { key: 'lesson', label: 'DERS', width: 90, align: 'left' },
@@ -9764,7 +9862,6 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     drawSummaryGrid([
       { label: 'BİTİRİLEN KONU', value: filteredKaynakSummary.finishedTopicCount },
       { label: 'BİTİRİLEN KAYNAK', value: filteredKaynakSummary.finishedResourceCount },
-      { label: 'SINIF', value: getClassDisplayLabel(student.classLevel) },
       { label: 'KAYIT', value: filteredKonuDetails.length }
     ]);
 
@@ -9840,14 +9937,14 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
 
   writeSectionTitle('1. ÖĞRENCİ ÖZETİ');
   drawSummaryGrid([
-    { label: 'SINIF', value: getClassDisplayLabel(student.classLevel) },
+    { label: 'BİTİRİLEN KAYNAK', value: filteredKaynakSummary.finishedResourceCount },
     { label: 'BRANŞ DENEME', value: filteredBransRecords.length },
     { label: 'GENEL DENEME', value: filteredGenelRecords.length },
     { label: 'BİTİRİLEN KONU', value: filteredKaynakSummary.finishedTopicCount },
     { label: 'TOPLAM SORU', value: filteredOverallQuestionSummary.question },
     { label: 'TOPLAM DOĞRU', value: filteredOverallQuestionSummary.correct },
     { label: 'TOPLAM YANLIŞ', value: filteredOverallQuestionSummary.wrong },
-    { label: 'BİTİRİLEN KAYNAK', value: filteredKaynakSummary.finishedResourceCount }
+    { label: 'TOPLAM BOŞ', value: filteredOverallQuestionSummary.blank }
   ]);
 
   const bransByLesson = new Map();
@@ -10059,253 +10156,6 @@ async function indirOgrenciGenelRaporPdf(studentId, dateFilter = { allTime: true
     { key: 'totalWrong', label: 'TOPLAM YANLIŞ', width: 110, align: 'center' },
     { key: 'totalBlank', label: 'TOPLAM BOŞ', width: 110, align: 'center' }
   ], solvedRows, 'Cozulen soru kaydi bulunamadi.');
-
-  const lessonPerformanceMap = new Map();
-  const upsertLessonPerformance = (lessonName, question, correct, wrong, blank) => {
-    const lesson = String(lessonName || '-').trim() || '-';
-    if (!lessonPerformanceMap.has(lesson)) {
-      lessonPerformanceMap.set(lesson, { lesson, question: 0, correct: 0, wrong: 0, blank: 0 });
-    }
-    const target = lessonPerformanceMap.get(lesson);
-    target.question += Number(question || 0);
-    target.correct += Number(correct || 0);
-    target.wrong += Number(wrong || 0);
-    target.blank += Number(blank || 0);
-  };
-
-  filteredBransRecords.forEach((item) => {
-    upsertLessonPerformance(item.lesson || '-', item.questionCount, item.correct, item.wrong, item.blank);
-  });
-
-  filteredSolvedBreakdown.forEach((item) => {
-    upsertLessonPerformance(item.lesson || '-', item.question, item.correct, item.wrong, item.blank);
-  });
-
-  filteredGenelRecords.forEach((item) => {
-    const lessons = item?.lessons || {};
-    Object.entries(lessons).forEach(([key, values]) => {
-      const label = getGenelLessonLabelForReport(item, key);
-      upsertLessonPerformance(label, values?.q, values?.d, values?.y, values?.b);
-    });
-  });
-
-  const lessonCoachingRows = Array.from(lessonPerformanceMap.values())
-    .map((item) => {
-      const successRate = item.question > 0 ? (item.correct / item.question) * 100 : 0;
-      const wrongRate = item.question > 0 ? (item.wrong / item.question) * 100 : 0;
-      const blankRate = item.question > 0 ? (item.blank / item.question) * 100 : 0;
-      const priorityScore = item.question > 0
-        ? ((item.wrong * 1.2 + item.blank) / item.question) * 100
-        : 0;
-      const priorityLabel = priorityScore >= 55
-        ? 'Acil müdahale'
-        : priorityScore >= 35
-          ? 'Yakın takip'
-          : 'Stabil';
-      return {
-        ...item,
-        successRate,
-        wrongRate,
-        blankRate,
-        priorityScore,
-        priorityLabel
-      };
-    })
-    .filter((item) => item.question > 0)
-    .sort((a, b) => b.priorityScore - a.priorityScore)
-    .slice(0, 8);
-
-  doc.addPage();
-  y = margin;
-
-  if (logoDataUrl) {
-    try {
-      doc.addImage(logoDataUrl, 'PNG', margin, y, 64, 48, undefined, 'FAST');
-    } catch (error) {
-      // no-op
-    }
-  }
-
-  doc.setTextColor(18, 47, 92);
-  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
-  doc.setFontSize(20);
-  doc.text(pdfSafeText('6. KOÇLUK MÜDAHALE SAYFASI'), margin + 78, y + 24);
-  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(71, 85, 105);
-  doc.text(pdfSafeText('Öncelikli dersler ve önerilen haftalık çalışma dağılımı'), margin + 78, y + 42);
-
-  const cardGap = 14;
-  const leftCardWidth = Math.floor((contentWidth * 0.62) - (cardGap / 2));
-  const rightCardWidth = contentWidth - leftCardWidth - cardGap;
-  const cardTop = y + 58;
-  const cardHeight = pageHeight - cardTop - marginBottom;
-  const leftCardX = margin;
-  const rightCardX = leftCardX + leftCardWidth + cardGap;
-
-  doc.setDrawColor(220, 228, 236);
-  doc.setFillColor(249, 251, 255);
-  doc.roundedRect(leftCardX, cardTop, leftCardWidth, cardHeight, 10, 10, 'FD');
-  doc.roundedRect(rightCardX, cardTop, rightCardWidth, cardHeight, 10, 10, 'FD');
-
-  doc.setTextColor(30, 41, 59);
-  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text(pdfSafeText('DERS BAZLI MÜDAHALE ÖNCELİĞİ'), leftCardX + 14, cardTop + 20);
-
-  const chartTop = cardTop + 34;
-  const chartLeft = leftCardX + 18;
-  const chartRight = leftCardX + leftCardWidth - 18;
-  const chartBottom = cardTop + cardHeight - 18;
-  const chartWidth = chartRight - chartLeft;
-  const chartHeight = chartBottom - chartTop;
-
-  if (!lessonCoachingRows.length) {
-    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.setTextColor(100, 116, 139);
-    doc.text(pdfSafeText('Öncelik analizi için yeterli ders verisi bulunamadı.'), chartLeft, chartTop + 24);
-  } else {
-    const rowHeight = Math.min(56, Math.max(38, Math.floor(chartHeight / Math.max(lessonCoachingRows.length, 1))));
-    const blockHeight = rowHeight * lessonCoachingRows.length;
-    const rowsStartY = chartTop + Math.max(12, Math.floor((chartHeight - blockHeight) / 2));
-    const labelWidth = 130;
-    const percentWidth = 146;
-    const barLeft = chartLeft + labelWidth;
-    const barRight = chartRight - percentWidth;
-    const barMaxWidth = Math.max(80, barRight - barLeft);
-
-    lessonCoachingRows.forEach((item, idx) => {
-      const top = rowsStartY + (idx * rowHeight);
-      const centerY = top + Math.floor(rowHeight / 2);
-      const barHeight = Math.min(18, Math.max(12, rowHeight - 18));
-      const score = Math.max(0, Math.min(100, Number(item.priorityScore || 0)));
-      const barWidth = (score / 100) * barMaxWidth;
-
-      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
-      doc.setFontSize(9.5);
-      doc.setTextColor(30, 41, 59);
-      doc.text(pdfSafeText(item.lesson), chartLeft, centerY + 3);
-
-      doc.setFillColor(230, 236, 244);
-      doc.roundedRect(barLeft, centerY - (barHeight / 2), barMaxWidth, barHeight, 6, 6, 'F');
-
-      const color = score >= 55 ? [220, 38, 38] : score >= 35 ? [245, 158, 11] : [24, 160, 88];
-      doc.setFillColor(color[0], color[1], color[2]);
-      doc.roundedRect(barLeft, centerY - (barHeight / 2), Math.max(2, barWidth), barHeight, 6, 6, 'F');
-
-      doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
-      doc.setFontSize(9.5);
-      doc.setTextColor(30, 41, 59);
-      doc.text(pdfSafeText(`${item.priorityLabel}  ${score.toFixed(0)}%`), barRight + 6, centerY + 3);
-    });
-
-    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
-    doc.setFontSize(8.8);
-    doc.setTextColor(100, 116, 139);
-    doc.text(pdfSafeText('Skor = (Yanlış x 1.2 + Boş) / Soru x 100'), chartLeft, chartBottom - 2);
-  }
-
-  doc.setTextColor(30, 41, 59);
-  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text(pdfSafeText('ÖNERİLEN HAFTALIK ÇALIŞMA DAĞILIMI'), rightCardX + 14, cardTop + 20);
-
-  const totalQuestionForDonut = Number(filteredOverallQuestionSummary.question || 0);
-  const totalCorrectForDonut = Number(filteredOverallQuestionSummary.correct || 0);
-  const totalWrongForDonut = Number(filteredOverallQuestionSummary.wrong || 0);
-  const totalBlankForDonut = Number(filteredOverallQuestionSummary.blank || 0);
-
-  const focusSegments = [
-    { label: 'Konu tekrarı', value: (totalWrongForDonut * 1.4), color: [220, 38, 38] },
-    { label: 'Soru pratiği', value: (totalBlankForDonut * 1.2), color: [245, 158, 11] },
-    { label: 'Koruma denemesi', value: (totalCorrectForDonut * 0.55), color: [24, 160, 88] }
-  ];
-  const totalFocusScore = focusSegments.reduce((sum, item) => sum + Number(item.value || 0), 0);
-
-  const donutCenterX = rightCardX + (rightCardWidth / 2);
-  const donutCenterY = cardTop + 142;
-  const donutOuterRadius = 78;
-  const donutInnerRadius = 48;
-
-  const drawDonutSegment = (startAngle, endAngle, color) => {
-    const step = Math.PI / 54;
-    doc.setFillColor(color[0], color[1], color[2]);
-    for (let angle = startAngle; angle < endAngle; angle += step) {
-      const next = Math.min(endAngle, angle + step);
-      const x1 = donutCenterX + (donutOuterRadius * Math.cos(angle));
-      const y1 = donutCenterY + (donutOuterRadius * Math.sin(angle));
-      const x2 = donutCenterX + (donutOuterRadius * Math.cos(next));
-      const y2 = donutCenterY + (donutOuterRadius * Math.sin(next));
-      doc.triangle(donutCenterX, donutCenterY, x1, y1, x2, y2, 'F');
-    }
-  };
-
-  if (totalFocusScore > 0) {
-    let currentAngle = -Math.PI / 2;
-    focusSegments.forEach((segment) => {
-      const ratio = segment.value / totalFocusScore;
-      const endAngle = currentAngle + (Math.PI * 2 * ratio);
-      drawDonutSegment(currentAngle, endAngle, segment.color);
-      currentAngle = endAngle;
-    });
-
-    doc.setFillColor(249, 251, 255);
-    doc.circle(donutCenterX, donutCenterY, donutInnerRadius, 'F');
-    doc.setTextColor(15, 23, 42);
-    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
-    doc.setFontSize(18);
-    const mainFocus = focusSegments.slice().sort((a, b) => Number(b.value || 0) - Number(a.value || 0))[0];
-    const mainPercent = mainFocus ? ((Number(mainFocus.value || 0) / totalFocusScore) * 100) : 0;
-    doc.text(pdfSafeText('%' + mainPercent.toFixed(0)), donutCenterX, donutCenterY - 2, { align: 'center' });
-    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(71, 85, 105);
-    doc.text(pdfSafeText(mainFocus ? mainFocus.label : 'Odak alanı'), donutCenterX, donutCenterY + 14, { align: 'center' });
-  } else {
-    doc.setDrawColor(203, 213, 225);
-    doc.setFillColor(236, 242, 248);
-    doc.circle(donutCenterX, donutCenterY, donutOuterRadius, 'FD');
-    doc.setFillColor(249, 251, 255);
-    doc.circle(donutCenterX, donutCenterY, donutInnerRadius, 'F');
-    doc.setTextColor(100, 116, 139);
-    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.text(pdfSafeText('Veri yok'), donutCenterX, donutCenterY + 3, { align: 'center' });
-  }
-
-  let legendY = donutCenterY + 100;
-  focusSegments.forEach((segment) => {
-    const percent = totalFocusScore > 0 ? (segment.value / totalFocusScore) * 100 : 0;
-    doc.setFillColor(segment.color[0], segment.color[1], segment.color[2]);
-    doc.roundedRect(rightCardX + 24, legendY - 8, 10, 10, 2, 2, 'F');
-
-    doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(30, 41, 59);
-    doc.text(pdfSafeText(`${segment.label}: %${percent.toFixed(0)}`), rightCardX + 40, legendY);
-    legendY += 20;
-  });
-
-  const topPriority = lessonCoachingRows[0];
-  const noteY = legendY + 10;
-  doc.setFillColor(241, 245, 249);
-  doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(rightCardX + 18, noteY, rightCardWidth - 36, 70, 8, 8, 'FD');
-  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(30, 41, 59);
-  doc.text(pdfSafeText('Koçluk Notu'), rightCardX + 28, noteY + 18);
-  doc.setFont(hasUnicodeFont ? 'NotoSans' : 'helvetica', 'normal');
-  doc.setFontSize(9.2);
-  doc.setTextColor(71, 85, 105);
-  const coachingNote = topPriority
-    ? `${topPriority.lesson} dersi öncelikli görünüyor. İlk etapta yanlış oranını düşürmeye ve boş bırakılan sorular için süre-antrenmanına odaklanın.`
-    : 'Yeterli veri oluştuğunda sistem otomatik koçluk notu üretir.';
-  const noteLines = doc.splitTextToSize(pdfSafeText(coachingNote), rightCardWidth - 56);
-  noteLines.slice(0, 3).forEach((line, idx) => {
-    doc.text(line, rightCardX + 28, noteY + 35 + (idx * 12));
-  });
 
   const safeStudent = normalizeFileName(student.name || 'ogrenci');
   doc.save(`${safeStudent}_performans_raporu.pdf`);
