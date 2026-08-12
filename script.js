@@ -1414,9 +1414,10 @@ async function attemptAutoLogin() {
     try {
       const services = getFirebaseServices();
       const session = await services.getCurrentUserSession();
-      if (session && session.email) {
-        const email = session.email.toLowerCase();
-        currentUserEmail = email;
+      if (session && (session.uid || session.email || session.name)) {
+        const fallbackStoredEmail = localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || '';
+        const email = String(session.email || fallbackStoredEmail).toLowerCase();
+        if (email) currentUserEmail = email;
         currentUserName = session.name || currentUserName;
         currentUserBranch = session.branch || currentUserBranch;
         currentUserPlan = session.plan || '';
@@ -1427,8 +1428,10 @@ async function attemptAutoLogin() {
         loadSavedResourceSuggestions();
         await syncStudentStorageFromCloud();
         await syncWorkspaceSettingsFromCloud();
-        localStorage.setItem('koclukUserEmail', email);
-        sessionStorage.removeItem('koclukUserEmail');
+        if (email) {
+          localStorage.setItem('koclukUserEmail', email);
+          sessionStorage.removeItem('koclukUserEmail');
+        }
 
         restoreLastDashboardSection();
         sayfaAcs('dashboardApp', false);

@@ -182,6 +182,19 @@
     return normalized === "explore" || normalized === "kesfet";
   }
 
+  function resolveProfileEmail(profile, fallback = "") {
+    if (!profile || typeof profile !== "object") return String(fallback || "");
+    const direct = String(profile.email || "").trim();
+    if (direct) return direct;
+
+    const loginCode = String(profile.loginCode || "").trim();
+    if (loginCode) {
+      return normalizeLoginIdentifier(loginCode);
+    }
+
+    return String(fallback || "");
+  }
+
   function getStudentCollection(uid) {
     return db.collection("users").doc(uid).collection("students");
   }
@@ -569,7 +582,7 @@
 
     return {
       uid: credential.user.uid,
-      email: credential.user.email || email,
+      email: resolveProfileEmail(profile, credential.user.email || email),
       name: (profile && (profile.displayName || profile.name)) || credential.user.displayName || "Kullanici",
       branch: (profile && profile.branch) || "",
       role,
@@ -620,7 +633,7 @@
     const role = (profile && profile.role) || (exchange && exchange.role) || "";
     return {
       uid: credential.user.uid,
-      email: credential.user.email || "",
+      email: resolveProfileEmail(profile, credential.user.email || ""),
       name: (profile && (profile.displayName || profile.name)) || credential.user.displayName || "Kullanici",
       branch: (profile && profile.branch) || "",
       role,
@@ -684,7 +697,7 @@
 
     return {
       uid: user.uid,
-      email: user.email || "",
+      email: resolveProfileEmail(profile, user.email || ""),
       name: (profile && (profile.displayName || profile.name)) || user.displayName || "Kullanici",
       branch: (profile && profile.branch) || "",
       plan: resolvedPlan,
