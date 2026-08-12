@@ -2486,34 +2486,79 @@ const GENEL_FIXED_QUESTION_COUNTS = {
   Ink: 10
 };
 
+const GENEL_TYT_FIXED_QUESTION_COUNTS = {
+  Tur: 40,
+  Tar: 5,
+  Cog: 5,
+  Fel: 5,
+  Din: 5,
+  Mat: 30,
+  Geo: 10,
+  Fiz: 7,
+  Kim: 7,
+  Biy: 6
+};
+
+const GENEL_AYT_FIXED_QUESTION_COUNTS = {
+  sayisal: {
+    Mat: 30,
+    Geo: 10,
+    Fiz: 14,
+    Kim: 13,
+    Biy: 13
+  },
+  ea: {
+    Mat: 30,
+    Geo: 10,
+    Tde: 24,
+    Tar1: 10,
+    Cog1: 6
+  },
+  sozel: {
+    Tde: 24,
+    Tar1: 10,
+    Cog1: 6,
+    Tar2: 11,
+    Cog2: 11,
+    Fel: 12,
+    Din: 6
+  }
+};
+
 const GENEL_HIGH_LESSON_SCHEMA = [
-  { key: 'Mat', label: 'Matematik' },
-  { key: 'Fiz', label: 'Fizik' },
-  { key: 'Kim', label: 'Kimya' },
-  { key: 'Biy', label: 'Biyoloji' },
   { key: 'Tur', label: 'Türkçe' },
   { key: 'Tar', label: 'Tarih' },
   { key: 'Cog', label: 'Coğrafya' },
-  { key: 'Ing', label: 'İngilizce' }
+  { key: 'Fel', label: 'Felsefe' },
+  { key: 'Din', label: 'Din Kültürü' },
+  { key: 'Mat', label: 'Matematik' },
+  { key: 'Geo', label: 'Geometri' },
+  { key: 'Fiz', label: 'Fizik' },
+  { key: 'Kim', label: 'Kimya' },
+  { key: 'Biy', label: 'Biyoloji' }
 ];
 
 const GENEL_AYT_TRACK_SCHEMAS = {
   sayisal: [
     { key: 'Mat', label: 'Matematik' },
+    { key: 'Geo', label: 'Geometri' },
     { key: 'Fiz', label: 'Fizik' },
     { key: 'Kim', label: 'Kimya' },
     { key: 'Biy', label: 'Biyoloji' }
   ],
   ea: [
     { key: 'Mat', label: 'Matematik' },
+    { key: 'Geo', label: 'Geometri' },
     { key: 'Tde', label: 'Türk Dili ve Edebiyatı' },
-    { key: 'Tar', label: 'Tarih' },
-    { key: 'Cog', label: 'Coğrafya' }
+    { key: 'Tar1', label: 'Tarih-1' },
+    { key: 'Cog1', label: 'Coğrafya-1' }
   ],
   sozel: [
     { key: 'Tde', label: 'Türk Dili ve Edebiyatı' },
-    { key: 'Tar', label: 'Tarih' },
-    { key: 'Cog', label: 'Coğrafya' },
+    { key: 'Tar1', label: 'Tarih-1' },
+    { key: 'Cog1', label: 'Coğrafya-1' },
+    { key: 'Tar2', label: 'Tarih-2' },
+    { key: 'Cog2', label: 'Coğrafya-2' },
     { key: 'Fel', label: 'Felsefe' },
     { key: 'Din', label: 'Din Kültürü' }
   ]
@@ -2625,6 +2670,11 @@ function getGenelLessonSchemaFromRecord(item) {
     Biy: 'Biyoloji',
     Tar: 'Tarih',
     Cog: 'Coğrafya',
+    Tar1: 'Tarih-1',
+    Cog1: 'Coğrafya-1',
+    Tar2: 'Tarih-2',
+    Cog2: 'Coğrafya-2',
+    Geo: 'Geometri',
     Tde: 'Türk Dili ve Edebiyatı',
     Fel: 'Felsefe'
   };
@@ -2684,13 +2734,29 @@ function onGenelExamFormatChange() {
 
 function applyGenelQuestionTemplateForActiveStudent() {
   const classLevel = getActiveStudentClassLevel();
-  const shouldLockQuestions = isFixedGenelQuestionClassLevel(classLevel);
+  const selectedStream = getSelectedGenelExamStream();
+  const selectedAytTrack = getSelectedGenelAytTrack();
+  const shouldLockMiddleQuestions = isFixedGenelQuestionClassLevel(classLevel);
+  const shouldLockTytQuestions = isTytAytClassLevel(classLevel) && selectedStream === 'TYT';
+  const shouldLockAytQuestions = isTytAytClassLevel(classLevel) && selectedStream === 'AYT';
+  const aytFixedTemplate = GENEL_AYT_FIXED_QUESTION_COUNTS[selectedAytTrack] || GENEL_AYT_FIXED_QUESTION_COUNTS.sayisal;
   getActiveGenelLessonKeys().forEach((key) => {
     const qEl = document.getElementById('genel' + key + 'Q');
     if (!qEl) return;
 
-    if (shouldLockQuestions && Object.prototype.hasOwnProperty.call(GENEL_FIXED_QUESTION_COUNTS, key)) {
-      qEl.value = String(GENEL_FIXED_QUESTION_COUNTS[key] || 0);
+    let fixedQuestionCount = null;
+    if (shouldLockMiddleQuestions && Object.prototype.hasOwnProperty.call(GENEL_FIXED_QUESTION_COUNTS, key)) {
+      fixedQuestionCount = GENEL_FIXED_QUESTION_COUNTS[key];
+    }
+    if (shouldLockTytQuestions && Object.prototype.hasOwnProperty.call(GENEL_TYT_FIXED_QUESTION_COUNTS, key)) {
+      fixedQuestionCount = GENEL_TYT_FIXED_QUESTION_COUNTS[key];
+    }
+    if (shouldLockAytQuestions && Object.prototype.hasOwnProperty.call(aytFixedTemplate, key)) {
+      fixedQuestionCount = aytFixedTemplate[key];
+    }
+
+    if (fixedQuestionCount !== null) {
+      qEl.value = String(fixedQuestionCount || 0);
       qEl.readOnly = true;
       qEl.setAttribute('readonly', 'readonly');
     } else {
