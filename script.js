@@ -115,127 +115,23 @@ function resolveUserDemoFlag(userData) {
   return null;
 }
 
-function getIdentityCacheBase(sessionLike) {
-  const uid = String(sessionLike && sessionLike.uid || '').trim();
-  const email = String(sessionLike && sessionLike.email || '').trim().toLowerCase();
-  if (uid) return `uid_${uid}`;
-  if (email) return `email_${email}`;
-  return '';
+function getProfileMetaStorageKey(fieldName, email) {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  if (!safeEmail) return '';
+  return `koclukProfileMeta_${fieldName}_${safeEmail}`;
 }
 
-function readIdentityCacheField(fieldName, sessionLike) {
-  const base = getIdentityCacheBase(sessionLike);
-  if (!base) return '';
-  const value = localStorage.getItem(`profile_identity_${fieldName}_${base}`) || '';
-  return String(value || '').trim();
-}
-
-function writeIdentityCacheField(fieldName, value, sessionLike) {
-  const base = getIdentityCacheBase(sessionLike);
+function saveProfileMeta(fieldName, email, value) {
+  const key = getProfileMetaStorageKey(fieldName, email);
   const safeValue = String(value || '').trim();
-  if (!base || !safeValue) return;
-  localStorage.setItem(`profile_identity_${fieldName}_${base}`, safeValue);
+  if (!key || !safeValue) return;
+  localStorage.setItem(key, safeValue);
 }
 
-function applyUserSessionIdentity(session) {
-  const safeSession = session && typeof session === 'object' ? session : {};
-  const fallbackStoredEmail = localStorage.getItem('koclukUserEmail') || sessionStorage.getItem('koclukUserEmail') || '';
-
-  const resolvedEmail = String(
-    safeSession.email
-    || readIdentityCacheField('email', safeSession)
-    || fallbackStoredEmail
-  ).trim().toLowerCase();
-
-  const resolvedName = String(
-    safeSession.name
-    || readIdentityCacheField('name', { uid: safeSession.uid, email: resolvedEmail })
-    || currentUserName
-    || ''
-  ).trim();
-
-  const resolvedBranch = String(
-    safeSession.branch
-    || readIdentityCacheField('branch', { uid: safeSession.uid, email: resolvedEmail })
-    || currentUserBranch
-    || ''
-  ).trim();
-
-  if (resolvedEmail) {
-    currentUserEmail = resolvedEmail;
-    writeIdentityCacheField('email', resolvedEmail, safeSession);
-  }
-  if (resolvedName) {
-    currentUserName = resolvedName;
-    writeIdentityCacheField('name', resolvedName, { uid: safeSession.uid, email: resolvedEmail });
-  }
-  if (resolvedBranch) {
-    currentUserBranch = resolvedBranch;
-    writeIdentityCacheField('branch', resolvedBranch, { uid: safeSession.uid, email: resolvedEmail });
-  }
-
-  return {
-    uid: String(safeSession.uid || '').trim(),
-    email: resolvedEmail,
-    name: resolvedName,
-    branch: resolvedBranch
-  };
-}
-
-function wasProfileRepairPromptShown(identity) {
-  const base = getIdentityCacheBase(identity);
-  if (!base) return false;
-  return sessionStorage.getItem(`profile_repair_prompted_${base}`) === '1';
-}
-
-function markProfileRepairPromptShown(identity) {
-  const base = getIdentityCacheBase(identity);
-  if (!base) return;
-  sessionStorage.setItem(`profile_repair_prompted_${base}`, '1');
-}
-
-async function ensureProfileIdentityAfterLogin(session) {
-  if (!shouldUseFirebaseAuth()) return;
-
-  const services = getFirebaseServices();
-  if (!services || typeof services.ensureCurrentUserProfile !== 'function') return;
-
-  const identity = applyUserSessionIdentity(session);
-  const missingName = !String(identity.name || '').trim();
-  const missingBranch = !String(identity.branch || '').trim();
-  if (!missingName && !missingBranch) return;
-  if (wasProfileRepairPromptShown(identity)) return;
-
-  markProfileRepairPromptShown(identity);
-
-  let nextName = String(identity.name || '').trim();
-  let nextBranch = String(identity.branch || '').trim();
-
-  if (!nextName) {
-    const promptedName = window.prompt('Profil adınız eksik görünüyor. Lütfen adınızı yazın:') || '';
-    nextName = String(promptedName).trim();
-  }
-  if (!nextBranch) {
-    const promptedBranch = window.prompt('Branş bilginiz eksik görünüyor. Lütfen branşınızı yazın:') || '';
-    nextBranch = String(promptedBranch).trim();
-  }
-
-  if (!nextName && !nextBranch) return;
-
-  try {
-    const repaired = await services.ensureCurrentUserProfile({
-      name: nextName,
-      branch: nextBranch
-    });
-    applyUserSessionIdentity({
-      uid: identity.uid,
-      email: identity.email,
-      name: (repaired && (repaired.displayName || repaired.name)) || nextName,
-      branch: (repaired && repaired.branch) || nextBranch
-    });
-  } catch (error) {
-    console.warn('Profil bilgileri onarilamadi:', error);
-  }
+function readProfileMeta(fieldName, email) {
+  const key = getProfileMetaStorageKey(fieldName, email);
+  if (!key) return '';
+  return String(localStorage.getItem(key) || '').trim();
 }
 
 function isExploreDemoAccount() {
@@ -1429,8 +1325,7 @@ async function paneleGirisYap(nereden) {
       const services = getFirebaseServices();
       const session = await services.loginWithEmail({ email: loginIdentifier, password: sifre });
 
-      const identity = applyUserSessionIdentity(session);
-      const userEmail = (identity.email || loginIdentifier).toLowerCase();
+      const userEmail = (session && session.email ? session.email : loginIdentifier).toLowerCase();
       localStorage.removeItem('koclukToken');
       sessionStorage.removeItem('koclukToken');
       if (remember) {
@@ -1441,12 +1336,16 @@ async function paneleGirisYap(nereden) {
         localStorage.removeItem('koclukUserEmail');
       }
 
+      currentUserEmail = userEmail;
+      currentUserName = session && session.name ? session.name : currentUserName;
+      currentUserBranch = session && session.branch ? session.branch : currentUserBranch;
+      saveProfileMeta('name', userEmail, currentUserName || '');
+      saveProfileMeta('branch', userEmail, currentUserBranch || '');
       currentUserPlan = session && session.plan ? session.plan : '';
       currentUserStudentLimit = session && typeof session.studentLimit === 'number' ? session.studentLimit : null;
       currentUserCreatedAtIso = session && session.createdAtIso ? session.createdAtIso : '';
       currentUserUnlimitedAccess = !!(session && session.isUnlimitedAccess);
       currentUserIsDemoAccount = resolveUserDemoFlag(session);
-      await ensureProfileIdentityAfterLogin(session);
       loadSavedResourceSuggestions();
       await syncStudentStorageFromCloud();
       await syncWorkspaceSettingsFromCloud();
@@ -1536,18 +1435,34 @@ async function attemptAutoLogin() {
     try {
       const services = getFirebaseServices();
       const session = await services.getCurrentUserSession();
-      if (session && (session.uid || session.email || session.name)) {
-        const identity = applyUserSessionIdentity(session);
-        const email = String(identity.email || '').toLowerCase();
+      if (session && (session.email || session.uid)) {
+        const email = String(
+          (session && session.email)
+          || localStorage.getItem('koclukUserEmail')
+          || sessionStorage.getItem('koclukUserEmail')
+          || ''
+        ).toLowerCase();
+        currentUserEmail = email;
+        currentUserName = session.name || readProfileMeta('name', email) || currentUserName;
+        currentUserBranch = session.branch || readProfileMeta('branch', email) || currentUserBranch;
+        saveProfileMeta('name', email, currentUserName || '');
+        saveProfileMeta('branch', email, currentUserBranch || '');
         currentUserPlan = session.plan || '';
         currentUserStudentLimit = typeof session.studentLimit === 'number' ? session.studentLimit : null;
         currentUserCreatedAtIso = session.createdAtIso || '';
         currentUserUnlimitedAccess = !!session.isUnlimitedAccess;
         currentUserIsDemoAccount = resolveUserDemoFlag(session);
-        await ensureProfileIdentityAfterLogin(session);
         loadSavedResourceSuggestions();
-        await syncStudentStorageFromCloud();
-        await syncWorkspaceSettingsFromCloud();
+        try {
+          await syncStudentStorageFromCloud();
+        } catch (error) {
+          console.warn('Otomatik giriste ogrenci senkronu atlandi:', error);
+        }
+        try {
+          await syncWorkspaceSettingsFromCloud();
+        } catch (error) {
+          console.warn('Otomatik giriste ayar senkronu atlandi:', error);
+        }
         if (email) {
           localStorage.setItem('koclukUserEmail', email);
           sessionStorage.removeItem('koclukUserEmail');

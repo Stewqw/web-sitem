@@ -8,6 +8,31 @@
   <meta name="keywords" content="parabol koçluk, öğrenci takip yazılımı, öğretmen yönetim paneli, eğitim koçu yazılımı, haftalık ders programı, deneme analizi, özel ders öğretmeni aracı">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://parabolkocluk.com/">
+  <script>
+    (function enforceCanonicalHost() {
+      const canonicalHost = 'parabolkocluk.com';
+      const currentHost = String(window.location.hostname || '').toLowerCase();
+      const isFirebaseHost = currentHost.endsWith('.web.app') || currentHost.endsWith('.firebaseapp.com');
+      if (!isFirebaseHost) return;
+      const nextUrl = `https://${canonicalHost}${window.location.pathname}${window.location.search}${window.location.hash}`;
+      window.location.replace(nextUrl);
+    })();
+  </script>
+  <script>
+    (function cleanupLegacyServiceWorker() {
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+        .catch(() => {});
+
+      if (!('caches' in window)) return;
+      caches.keys()
+        .then((keys) => Promise.all(keys
+          .filter((key) => String(key || '').toLowerCase().startsWith('kocluk-app-'))
+          .map((key) => caches.delete(key))))
+        .catch(() => {});
+    })();
+  </script>
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Parabol Koçluk">
@@ -3820,7 +3845,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-  <script src="firebase-init.js"></script>
-  <script src="script.js"></script>
+  <script src="firebase-init.js?v=20260812-1"></script>
+  <script src="script.js?v=20260812-1"></script>
 </body>
 </html>
