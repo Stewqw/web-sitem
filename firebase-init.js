@@ -187,7 +187,15 @@
   }
 
   function getStudentDocumentId(student) {
+    const explicitDocId = String((student && student.__docId) || "").trim();
+    if (explicitDocId) return explicitDocId;
     return encodeURIComponent(String(student && student.id));
+  }
+
+  function sanitizeStudentRecordForSave(student) {
+    if (!student || typeof student !== "object") return student;
+    const { __docId, ...rest } = student;
+    return rest;
   }
 
   function getStudentFingerprint(student) {
@@ -699,7 +707,15 @@
     );
 
     if (!studentsSnapshot.empty) {
-      const students = studentsSnapshot.docs.map((doc) => doc.data());
+      const students = studentsSnapshot.docs.map((doc) => {
+        const data = doc.data() || {};
+        const fallbackUid = decodeURIComponent(String(doc.id || "")).trim();
+        return {
+          ...data,
+          __docId: doc.id,
+          uid: String(data.uid || fallbackUid)
+        };
+      });
       replaceStudentRecordCache(students);
       return students;
     }
@@ -737,13 +753,14 @@
 
     safeStudents.forEach((student) => {
       const studentId = String(student && student.id);
+      const sanitizedStudent = sanitizeStudentRecordForSave(student);
       const fingerprint = getStudentFingerprint(student);
       nextFingerprints.set(studentId, fingerprint);
       if (studentRecordFingerprints.get(studentId) !== fingerprint) {
         operations.push({
           type: "set",
           ref: getStudentCollection(user.uid).doc(getStudentDocumentId(student)),
-          student
+          student: sanitizedStudent
         });
       }
     });

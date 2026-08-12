@@ -8712,6 +8712,36 @@ function normalizeStudentRecords(students) {
 
 const MOBILE_SOLVED_QUEUE_FIELDS = ['incomingSolvedRecords', 'mobileSolvedRecords', 'studentSolvedQueue'];
 
+function getStudentUid(student) {
+  if (!student || typeof student !== 'object') return '';
+  const uid = String(student.uid || student.studentUid || student.userUid || student.__docId || '').trim();
+  return uid;
+}
+
+function isQueueOnlyMirrorStudent(student) {
+  if (!student || typeof student !== 'object') return false;
+  const hasQueue = MOBILE_SOLVED_QUEUE_FIELDS.some((field) => Array.isArray(student[field]) && student[field].length > 0);
+  if (!hasQueue) return false;
+
+  const hasIdentityDetails = [
+    student.name,
+    student.adSoyad,
+    student.studentName,
+    student.classLevel,
+    student.sinif,
+    student.program,
+    student.sharedProgram,
+    student.cozulenSoruRecords,
+    student.studentNotifications
+  ].some((value) => {
+    if (Array.isArray(value)) return value.length > 0;
+    if (value && typeof value === 'object') return Object.keys(value).length > 0;
+    return String(value || '').trim().length > 0;
+  });
+
+  return !hasIdentityDetails;
+}
+
 function pickFirstNonEmptyValue(values) {
   if (!Array.isArray(values)) return '';
   for (let i = 0; i < values.length; i += 1) {
@@ -8785,8 +8815,39 @@ function ingestIncomingSolvedRecords(students) {
   let changed = false;
   const nextStudents = students.map((student) => {
     const safeStudent = normalizeStudentRecord(student);
+    const uid = getStudentUid(student) || getStudentUid(safeStudent);
+    if (uid && !safeStudent.uid) safeStudent.uid = uid;
+    return safeStudent;
+  });
+
+  const preferredIndexByUid = new Map();
+  nextStudents.forEach((student, index) => {
+    const uid = getStudentUid(student);
+    if (!uid) return;
+    const existingIndex = preferredIndexByUid.get(uid);
+    if (existingIndex === undefined) {
+      preferredIndexByUid.set(uid, index);
+      return;
+    }
+    const existing = nextStudents[existingIndex];
+    if (isQueueOnlyMirrorStudent(existing) && !isQueueOnlyMirrorStudent(student)) {
+      preferredIndexByUid.set(uid, index);
+    }
+  });
+
+  const removeIndexes = new Set();
+  nextStudents.forEach((safeStudent, index) => {
     const queueField = MOBILE_SOLVED_QUEUE_FIELDS.find((field) => Array.isArray(safeStudent[field]) && safeStudent[field].length > 0);
-    if (!queueField) return safeStudent;
+    if (!queueField) return;
+
+    const sourceUid = getStudentUid(safeStudent);
+    let targetStudent = safeStudent;
+    if (sourceUid && preferredIndexByUid.has(sourceUid)) {
+      const targetIndex = preferredIndexByUid.get(sourceUid);
+      if (typeof targetIndex === 'number' && targetIndex !== index) {
+        targetStudent = nextStudents[targetIndex];
+      }
+    }
 
     const incoming = safeStudent[queueField]
       .map(normalizeIncomingSolvedRecord)
@@ -8800,15 +8861,18 @@ function ingestIncomingSolvedRecords(students) {
 
     if (!incoming.length) {
       changed = true;
-      return safeStudent;
+      if (targetStudent !== safeStudent && isQueueOnlyMirrorStudent(safeStudent)) {
+        removeIndexes.add(index);
+      }
+      return;
     }
 
-    if (!Array.isArray(safeStudent.cozulenSoruRecords)) safeStudent.cozulenSoruRecords = [];
-    if (!Array.isArray(safeStudent.studentNotifications)) safeStudent.studentNotifications = [];
+    if (!Array.isArray(targetStudent.cozulenSoruRecords)) targetStudent.cozulenSoruRecords = [];
+    if (!Array.isArray(targetStudent.studentNotifications)) targetStudent.studentNotifications = [];
 
-    const existingSolvedKeys = new Set(safeStudent.cozulenSoruRecords.map(getSolvedRecordDedupKey));
+    const existingSolvedKeys = new Set(targetStudent.cozulenSoruRecords.map(getSolvedRecordDedupKey));
     const existingPendingKeys = new Set();
-    safeStudent.studentNotifications.forEach((notification) => {
+    targetStudent.studentNotifications.forEach((notification) => {
       if (!notification || notification.type !== 'cozulen-review') return;
       const pending = Array.isArray(notification.pendingSolvedRecords) ? notification.pendingSolvedRecords : [];
       pending.forEach((record) => {
@@ -8825,7 +8889,7 @@ function ingestIncomingSolvedRecords(students) {
     });
 
     if (pendingSolvedRecords.length > 0) {
-      safeStudent.studentNotifications.unshift({
+      targetStudent.studentNotifications.unshift({
         id: Date.now() + Math.floor(Math.random() * 1000),
         type: 'cozulen-review',
         status: 'pending',
@@ -8835,15 +8899,19 @@ function ingestIncomingSolvedRecords(students) {
         message: `Ogrenciden ${pendingSolvedRecords.length} yeni cozulen soru kaydi geldi.`,
         pendingSolvedRecords
       });
-      safeStudent.studentNotifications = safeStudent.studentNotifications.slice(0, 25);
-      safeStudent.updatedAt = Date.now();
+      targetStudent.studentNotifications = targetStudent.studentNotifications.slice(0, 25);
+      targetStudent.updatedAt = Date.now();
+    }
+
+    if (targetStudent !== safeStudent && isQueueOnlyMirrorStudent(safeStudent)) {
+      removeIndexes.add(index);
     }
 
     changed = true;
-    return safeStudent;
   });
 
-  return { students: nextStudents, changed };
+  const finalizedStudents = nextStudents.filter((_, index) => !removeIndexes.has(index));
+  return { students: finalizedStudents, changed };
 }
 
 function getUnreadStudentNotificationCount(student) {
