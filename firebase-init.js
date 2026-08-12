@@ -685,7 +685,7 @@
     return {
       uid: user.uid,
       email: user.email || "",
-      name: (profile && profile.name) || user.displayName || "Kullanici",
+      name: (profile && (profile.displayName || profile.name)) || user.displayName || "Kullanici",
       branch: (profile && profile.branch) || "",
       plan: resolvedPlan,
       studentLimit: resolvedStudentLimit,
@@ -915,27 +915,34 @@
   services.getCoachUserCount = async function getCoachUserCount() {
     if (!db) return null;
 
-    const coachQuery = db.collection("users").where("role", "==", "coach");
+    const roleValues = ["coach", "teacher"];
 
-    // Some compat SDK versions do not support aggregation count().
-    if (typeof coachQuery.count === "function") {
+    const countByRole = async (roleValue) => {
+      const roleQuery = db.collection("users").where("role", "==", roleValue);
+
+      // Some compat SDK versions do not support aggregation count().
+      if (typeof roleQuery.count === "function") {
+        const snapshot = await withTimeout(
+          roleQuery.count().get(),
+          10000,
+          "app/user-count-timeout",
+          "Kullanıcı sayısı okunurken zaman aşımı oluştu."
+        );
+        const data = snapshot.data();
+        return typeof data.count === "number" ? data.count : 0;
+      }
+
       const snapshot = await withTimeout(
-        coachQuery.count().get(),
+        roleQuery.get(),
         10000,
         "app/user-count-timeout",
         "Kullanıcı sayısı okunurken zaman aşımı oluştu."
       );
-      const data = snapshot.data();
-      return typeof data.count === "number" ? data.count : 0;
-    }
+      return typeof snapshot.size === "number" ? snapshot.size : 0;
+    };
 
-    const snapshot = await withTimeout(
-      coachQuery.get(),
-      10000,
-      "app/user-count-timeout",
-      "Kullanıcı sayısı okunurken zaman aşımı oluştu."
-    );
-    return typeof snapshot.size === "number" ? snapshot.size : 0;
+    const counts = await Promise.all(roleValues.map((roleValue) => countByRole(roleValue)));
+    return counts.reduce((sum, value) => sum + (Number(value) || 0), 0);
   };
 
   services.loadWorkspaceSettings = async function loadWorkspaceSettings() {

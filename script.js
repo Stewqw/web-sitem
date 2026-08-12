@@ -51,6 +51,7 @@ const EXPLORE_DEMO_STUDENT_LIMIT = 3;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const STUDENT_ACCESS_RETRY_DELAY_MS = 12000;
 const STUDENT_SYNC_POLL_INTERVAL_MS = 45000;
+const EXPLORE_DEMO_MODE_ENABLED = false;
 
 function waitForMs(ms) {
   return new Promise((resolve) => {
@@ -115,7 +116,7 @@ function resolveUserDemoFlag(userData) {
 }
 
 function isExploreDemoAccount() {
-  return currentUserIsDemoAccount === true;
+  return EXPLORE_DEMO_MODE_ENABLED && currentUserIsDemoAccount === true;
 }
 
 function hasUnlimitedAccess() {
