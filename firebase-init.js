@@ -75,6 +75,9 @@
     },
     async publishParentReport() {
       throw new Error("Firebase hazir degil");
+    },
+    async ensureCurrentUserProfile() {
+      return null;
     }
   };
 
@@ -193,6 +196,65 @@
     }
 
     return String(fallback || "");
+  }
+
+  async function ensureCurrentUserProfile(payload = {}) {
+    const user = await getAuthenticatedUser();
+    if (!user || !db || !fieldValue) return null;
+
+    const profile = (await getProfileByUid(user.uid)) || {};
+    const payloadName = String(payload && payload.name || "").trim();
+    const payloadBranch = String(payload && payload.branch || "").trim();
+
+    const currentName = String(profile.displayName || profile.name || "").trim();
+    const currentBranch = String(profile.branch || "").trim();
+    const currentEmail = String(profile.email || "").trim();
+
+    const resolvedEmail = resolveProfileEmail(profile, user.email || "");
+    const resolvedName = payloadName || currentName || String(user.displayName || "").trim();
+    const resolvedBranch = payloadBranch || currentBranch;
+
+    const patch = {
+      uid: user.uid,
+      updatedAtIso: new Date().toISOString(),
+      updatedAt: fieldValue.serverTimestamp()
+    };
+
+    let hasMissingFields = false;
+    if (!currentEmail && resolvedEmail) {
+      patch.email = resolvedEmail;
+      hasMissingFields = true;
+    }
+    if (!String(profile.displayName || "").trim() && resolvedName) {
+      patch.displayName = resolvedName;
+      hasMissingFields = true;
+    }
+    if (!String(profile.name || "").trim() && resolvedName) {
+      patch.name = resolvedName;
+      hasMissingFields = true;
+    }
+    if (!currentBranch && resolvedBranch) {
+      patch.branch = resolvedBranch;
+      hasMissingFields = true;
+    }
+
+    if (hasMissingFields) {
+      await withTimeout(
+        db.collection("users").doc(user.uid).set(patch, { merge: true }),
+        8000,
+        "app/profile-self-heal-timeout",
+        "Profil onarimi sirasinda zaman asimi olustu."
+      );
+    }
+
+    return {
+      ...profile,
+      uid: user.uid,
+      email: currentEmail || resolvedEmail,
+      displayName: String(profile.displayName || "").trim() || resolvedName,
+      name: String(profile.name || "").trim() || resolvedName,
+      branch: currentBranch || resolvedBranch
+    };
   }
 
   function getStudentCollection(uid) {
@@ -596,6 +658,14 @@
   };
 
   services.loginWithAccessCode = async function loginWithAccessCode(payload) {
+
+    if (!profile || !String((profile.displayName || profile.name || "")).trim() || !String(profile.email || "").trim()) {
+      try {
+        profile = await ensureCurrentUserProfile();
+      } catch (profileHealError) {
+        console.warn("Profil onarimi atlandi:", profileHealError);
+      }
+    }
     const code = String(payload && payload.code || "").trim().toUpperCase();
     if (!code) {
       throw new Error("Giriş kodu gerekli.");
@@ -643,6 +713,14 @@
   };
 
   services.resetPassword = async function resetPassword(email) {
+
+    if (!profile || !String((profile.displayName || profile.name || "")).trim() || !String(profile.email || "").trim()) {
+      try {
+        profile = await ensureCurrentUserProfile();
+      } catch (profileHealError) {
+        console.warn("Profil onarimi atlandi:", profileHealError);
+      }
+    }
     await auth.sendPasswordResetEmail(String(email || "").trim().toLowerCase());
   };
 
@@ -686,7 +764,14 @@
       return null;
     }
 
-    const profile = await getProfileByUid(user.uid);
+    let profile = await getProfileByUid(user.uid);
+    if (!profile || !String((profile.displayName || profile.name || "")).trim() || !String(profile.email || "").trim()) {
+      try {
+        profile = await ensureCurrentUserProfile();
+      } catch (profileHealError) {
+        console.warn("Profil onarimi atlandi:", profileHealError);
+      }
+    }
     const role = profile && profile.role ? String(profile.role) : "";
     const isStudentOrParent = role === "student" || role === "parent";
     const resolvedPlan = (profile && profile.plan) || (isStudentOrParent ? "" : "explore");
@@ -996,6 +1081,10 @@
       "Çalışma alanı ayarları kaydedilirken zaman aşımı oluştu."
     );
     return safeSettings;
+  };
+
+  services.ensureCurrentUserProfile = async function ensureCurrentUserProfileService(payload) {
+    return ensureCurrentUserProfile(payload);
   };
 
   services.isReady = true;
