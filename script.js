@@ -50,6 +50,7 @@ const EXPLORE_DEMO_DAYS = 3;
 const EXPLORE_DEMO_STUDENT_LIMIT = 3;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const STUDENT_ACCESS_RETRY_DELAY_MS = 12000;
+const STUDENT_SYNC_POLL_INTERVAL_MS = 45000;
 
 function waitForMs(ms) {
   return new Promise((resolve) => {
@@ -4625,6 +4626,20 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUserCountLabel();
       });
   });
+
+  window.setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (document.getElementById('dashboardApp')?.style.display !== 'block') return;
+    Promise.resolve(syncStudentStorageFromCloud())
+      .catch((error) => {
+        console.warn('Periyodik ogrenci verisi yenilenemedi:', error);
+      })
+      .finally(() => {
+        renderStoredOgrenciler();
+        renderQuickStart();
+        updateUserCountLabel();
+      });
+  }, STUDENT_SYNC_POLL_INTERVAL_MS);
 });
 
 // Canlı saat ve tarih güncellemesi
@@ -8697,14 +8712,39 @@ function normalizeStudentRecords(students) {
 
 const MOBILE_SOLVED_QUEUE_FIELDS = ['incomingSolvedRecords', 'mobileSolvedRecords', 'studentSolvedQueue'];
 
+function pickFirstNonEmptyValue(values) {
+  if (!Array.isArray(values)) return '';
+  for (let i = 0; i < values.length; i += 1) {
+    const value = String(values[i] || '').trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+function toSafeNonNegativeNumber(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) return 0;
+  return num;
+}
+
 function normalizeIncomingSolvedRecord(record) {
   const safe = record && typeof record === 'object' ? record : {};
-  const lesson = String(safe.lesson || '').trim();
-  const unit = String(safe.unit || '').trim();
-  const topic = String(safe.topic || '').trim();
-  const source = String(safe.source || '').trim();
+  const lesson = pickFirstNonEmptyValue([safe.lesson, safe.ders, safe.course, safe.subject]) || 'Ders belirtilmedi';
+  const unit = pickFirstNonEmptyValue([safe.unit, safe.unite, safe.chapter]);
+  const topic = pickFirstNonEmptyValue([safe.topic, safe.konu, safe.subTopic, safe.subtopic]) || 'Konu belirtilmedi';
+  const source = pickFirstNonEmptyValue([safe.source, safe.kaynak, safe.book]) || 'Kaynak belirtilmedi';
   const submittedAtIso = String(safe.submittedAtIso || safe.createdAtIso || new Date().toISOString()).trim();
-  const formattedDate = formatExamDate(String(safe.date || safe.examDate || getTodayTrDate()));
+  const formattedDate = formatExamDate(String(safe.date || safe.examDate || safe.tarih || getTodayTrDate()));
+  const resolvedDate = isValidTrDate(formattedDate) ? formattedDate : getTodayTrDate();
+  const questionCount = toSafeNonNegativeNumber(
+    safe.questionCount ?? safe.question ?? safe.questions ?? safe.totalQuestion ?? safe.totalQuestions ?? safe.soru
+  );
+  const correct = toSafeNonNegativeNumber(safe.correct ?? safe.dogru);
+  const wrong = toSafeNonNegativeNumber(safe.wrong ?? safe.yanlis);
+  const providedBlank = safe.blank ?? safe.bos;
+  const blank = Number.isFinite(Number(providedBlank))
+    ? toSafeNonNegativeNumber(providedBlank)
+    : Math.max(0, questionCount - correct - wrong);
 
   return {
     id: Number(safe.id || Date.now() + Math.floor(Math.random() * 1000)),
@@ -8712,11 +8752,11 @@ function normalizeIncomingSolvedRecord(record) {
     unit,
     topic,
     source,
-    date: formattedDate,
-    questionCount: Number(safe.questionCount || safe.question || 0),
-    correct: Number(safe.correct || 0),
-    wrong: Number(safe.wrong || 0),
-    blank: Number(safe.blank || 0),
+    date: resolvedDate,
+    questionCount,
+    correct,
+    wrong,
+    blank,
     submittedBy: String(safe.submittedBy || 'student').trim() || 'student',
     submittedAtIso,
     fromMobile: true
@@ -8750,7 +8790,7 @@ function ingestIncomingSolvedRecords(students) {
 
     const incoming = safeStudent[queueField]
       .map(normalizeIncomingSolvedRecord)
-      .filter((item) => item.lesson && item.topic && item.source && isValidTrDate(item.date));
+      .filter((item) => item.lesson && isValidTrDate(item.date));
 
     MOBILE_SOLVED_QUEUE_FIELDS.forEach((field) => {
       if (Array.isArray(safeStudent[field]) && safeStudent[field].length > 0) {
