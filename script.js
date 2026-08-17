@@ -5404,6 +5404,7 @@ async function createStudentAccessCredentials(studentId) {
     }
 
     student.firebaseUid = result.student.uid || student.firebaseUid;
+    if (result.student.uid) student.uid = result.student.uid;
     student.accessCredentials = {
       student: result.student,
       parent: result.parent
@@ -8733,6 +8734,18 @@ function writeLocalStudentRecords(students) {
 
 function normalizeStudentRecord(student) {
   const safeStudent = student && typeof student === 'object' ? { ...student } : {};
+  const resolvedUid = String(
+    safeStudent.uid
+    || safeStudent.firebaseUid
+    || safeStudent.studentUid
+    || safeStudent.userUid
+    || (safeStudent.accessCredentials && safeStudent.accessCredentials.student && safeStudent.accessCredentials.student.uid)
+    || ''
+  ).trim();
+  if (resolvedUid) {
+    safeStudent.uid = resolvedUid;
+    if (!safeStudent.firebaseUid) safeStudent.firebaseUid = resolvedUid;
+  }
   if (safeStudent.id === undefined || safeStudent.id === null || safeStudent.id === '') {
     safeStudent.id = Date.now() + Math.floor(Math.random() * 1000);
   }
@@ -8753,7 +8766,15 @@ const MOBILE_SOLVED_QUEUE_FIELDS = ['incomingSolvedRecords', 'mobileSolvedRecord
 
 function getStudentUid(student) {
   if (!student || typeof student !== 'object') return '';
-  const uid = String(student.uid || student.studentUid || student.userUid || student.__docId || '').trim();
+  const uid = String(
+    student.uid
+    || student.firebaseUid
+    || student.studentUid
+    || student.userUid
+    || (student.accessCredentials && student.accessCredentials.student && student.accessCredentials.student.uid)
+    || student.__docId
+    || ''
+  ).trim();
   return uid;
 }
 

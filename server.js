@@ -126,6 +126,12 @@ const accessExchangeRateLimiter = createRateLimiter({
   }
 });
 
+const accessLinkTeacherRateLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  maxRequests: 60,
+  bucketName: 'access-link-teacher'
+});
+
 const loginIdentityRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   maxRequests: 15,
@@ -918,5 +924,92 @@ app.post('/api/student-access/exchange', accessExchangeRateLimiter, async (req, 
     });
   } catch (error) {
     return res.status(500).json({ error: 'Kod doğrulanamadı.' });
+  }
+});
+
+app.post('/api/student-access/link-teacher', accessLinkTeacherRateLimiter, async (req, res) => {
+  try {
+    if (!firebaseDb || !firebaseAuth) {
+      return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış.' });
+    }
+
+    const decoded = await verifyFirebaseIdTokenFromRequest(req);
+    const requesterRole = String(decoded && decoded.role || '').trim().toLowerCase();
+
+    const studentUid = requesterRole === 'student'
+      ? String(decoded.uid || '').trim()
+      : String(decoded && (decoded.studentUid || decoded.uid) || '').trim();
+
+    const requestedStudentUid = String(req.body && req.body.studentUid || '').trim();
+    if (requestedStudentUid && requestedStudentUid !== studentUid) {
+      return res.status(403).json({ error: 'Öğrenci kimliği doğrulanamadı.' });
+    }
+
+    if (!studentUid) {
+      return res.status(400).json({ error: 'Öğrenci oturumu bulunamadı.' });
+    }
+
+    const code = normalizeAccessCode(req.body && req.body.code);
+    if (!code) {
+      return res.status(400).json({ error: 'Öğretmen kodu gerekli.' });
+    }
+
+    const codeHash = hashAccessCode(code);
+    const codeDoc = await firebaseDb.collection('accessCodes').doc(codeHash).get();
+    if (!codeDoc.exists) {
+      return res.status(404).json({ error: 'Öğretmen kodu bulunamadı.' });
+    }
+
+    const codeData = codeDoc.data() || {};
+    if (codeData.isActive === false) {
+      return res.status(403).json({ error: 'Kod pasif durumda.' });
+    }
+
+    if (String(codeData.role || '').trim().toLowerCase() !== 'student') {
+      return res.status(400).json({ error: 'Bu kod öğrenci kodu değil.' });
+    }
+
+    const coachUid = String(codeData.coachUid || '').trim();
+    if (!coachUid) {
+      return res.status(400).json({ error: 'Koda bağlı öğretmen bilgisi bulunamadı.' });
+    }
+
+    const teacherDoc = await firebaseDb.collection('users').doc(coachUid).get();
+    if (!teacherDoc.exists) {
+      return res.status(404).json({ error: 'Öğretmen profili bulunamadı.' });
+    }
+
+    const teacherProfile = teacherDoc.data() || {};
+    const teacherName = String(teacherProfile.displayName || teacherProfile.name || teacherProfile.email || '').trim();
+    const teacherBranch = String(teacherProfile.branch || '').trim();
+
+    await firebaseDb.collection('users').doc(studentUid).set({
+      teacherId: coachUid,
+      linkedTeacherIds: firebaseAdmin.firestore.FieldValue.arrayUnion(coachUid),
+      teachers: firebaseAdmin.firestore.FieldValue.arrayUnion({
+        uid: coachUid,
+        name: teacherName || 'Öğretmen',
+        branch: teacherBranch || 'Branş belirtilmedi'
+      }),
+      updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      updatedAtIso: new Date().toISOString()
+    }, { merge: true });
+
+    return res.json({
+      ok: true,
+      studentUid,
+      teacher: {
+        uid: coachUid,
+        displayName: teacherName,
+        name: teacherName,
+        email: String(teacherProfile.email || '').trim(),
+        branch: teacherBranch,
+        role: String(teacherProfile.role || '').trim()
+      }
+    });
+  } catch (error) {
+    const status = Number(error && error.status) || 500;
+    const message = error && error.message ? error.message : 'Öğretmen eşleştirme başarısız.';
+    return res.status(status).json({ error: message });
   }
 });
